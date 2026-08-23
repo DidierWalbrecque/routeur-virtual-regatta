@@ -1,0 +1,10 @@
+{
+  "editor.formatOnSave": true,
+  "[go]": {
+    "editor.defaultFormatter": "golang.go",
+    "editor.formatOnSave": true
+  },
+  "go.testFlags": [
+    "-v"
+  ]
+}

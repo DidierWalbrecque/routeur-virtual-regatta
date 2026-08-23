@@ -1,0 +1,16 @@
+# Détection automatique pour les fichiers texte.
+* text=auto
+
+# Fichiers utilisés sous Linux et dans Docker.
+*.go text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
+Dockerfile text eol=lf
+*.yaml text eol=lf
+*.yml text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+
+# Scripts Windows.
+*.ps1 text eol=crlf

@@ -1,0 +1,23 @@
+name: routeur-virtual-regatta
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: vr-router-backend:dev
+    ports:
+      - "8080:8080"
+    init: true
+    healthcheck:
+      test:
+        - CMD
+        - wget
+        - -q
+        - -O
+        - /dev/null
+        - http://localhost:8080/health
+      interval: 5s
+      timeout: 3s
+      retries: 3
+      start_period: 2s
