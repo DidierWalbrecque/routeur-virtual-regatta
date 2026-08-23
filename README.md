@@ -111,3 +111,9 @@ Réponse attendue :
 ```json
 {"status":"ok"}
 ```
+
+## État du projet
+
+Phase 1 terminée : environnement Go, tests, Docker Compose et Visual Studio Code opérationnels.
+
+Prochaine étape : phase 2 — définition du modèle métier.
