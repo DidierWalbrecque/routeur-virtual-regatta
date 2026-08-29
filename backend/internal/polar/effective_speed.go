@@ -3,8 +3,8 @@ package polar
 import "fmt"
 
 // SpeedOptions décrit les équipements qui modifient la vitesse brute.
-// Les foils seront ajoutés séparément car leur coefficient dépend du vent.
 type SpeedOptions struct {
+	Foils      bool
 	HullPolish bool
 }
 
@@ -28,6 +28,25 @@ func (polar *Polar) EffectiveSpeedAt(
 	)
 	if err != nil {
 		return 0, err
+	}
+
+	if options.Foils {
+		foilRatio, ratioErr := polar.Foil.RatioAt(windSpeed, windAngle)
+		if ratioErr != nil {
+			return 0, fmt.Errorf(
+				"polar: calcul du coefficient des foils impossible: %w",
+				ratioErr,
+			)
+		}
+
+		effectiveSpeed, err = applySpeedRatio(
+			effectiveSpeed,
+			foilRatio,
+			"foil.speedRatioAt",
+		)
+		if err != nil {
+			return 0, err
+		}
 	}
 
 	if options.HullPolish {
