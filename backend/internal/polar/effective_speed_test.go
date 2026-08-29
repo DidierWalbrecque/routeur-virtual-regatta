@@ -9,10 +9,10 @@ import (
 
 func TestEffectiveSpeedAt(t *testing.T) {
 	tests := []struct {
-		name       string
-		options    SpeedOptions
-		hullRatio  SpeedRatio
-		want       BoatSpeed
+		name      string
+		options   SpeedOptions
+		hullRatio SpeedRatio
+		want      BoatSpeed
 	}{
 		{
 			name:      "coefficient global uniquement",
@@ -21,10 +21,10 @@ func TestEffectiveSpeedAt(t *testing.T) {
 			want:      33.78375,
 		},
 		{
-			name:       "coefficient global et polish",
-			options:    SpeedOptions{HullPolish: true},
-			hullRatio:  1.003,
-			want:       33.88510125,
+			name:      "coefficient global et polish",
+			options:   SpeedOptions{HullPolish: true},
+			hullRatio: 1.003,
+			want:      33.88510125,
 		},
 		{
 			name:      "coefficient de polish absent mais désactivé",
