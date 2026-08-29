@@ -14,19 +14,19 @@ import (
 // Les types suffixés par File reproduisent le format JSON externe. Ils restent
 // privés afin que le reste du moteur dépende uniquement du modèle métier Polar.
 type polarFile struct {
-	ID                      int       `json:"_id"`
-	Label                   string    `json:"label"`
-	GlobalSpeedRatio        float64   `json:"globalSpeedRatio"`
-	IceSpeedRatio           float64   `json:"iceSpeedRatio"`
-	AutoSailChangeTolerance float64   `json:"autoSailChangeTolerance"`
-	BadSailTolerance        float64   `json:"badSailTolerance"`
-	MaxSpeed                float64   `json:"maxSpeed"`
-	UpdatedAt               time.Time `json:"_updatedAt"`
-	Foil                    foilFile  `json:"foil"`
-	Hull                    hullFile  `json:"hull"`
-	Winch                   winchFile `json:"winch"`
-	TWS                     []float64 `json:"tws"`
-	TWA                     []float64 `json:"twa"`
+	ID                      int        `json:"_id"`
+	Label                   string     `json:"label"`
+	GlobalSpeedRatio        float64    `json:"globalSpeedRatio"`
+	IceSpeedRatio           float64    `json:"iceSpeedRatio"`
+	AutoSailChangeTolerance float64    `json:"autoSailChangeTolerance"`
+	BadSailTolerance        float64    `json:"badSailTolerance"`
+	MaxSpeed                float64    `json:"maxSpeed"`
+	UpdatedAt               time.Time  `json:"_updatedAt"`
+	Foil                    foilFile   `json:"foil"`
+	Hull                    hullFile   `json:"hull"`
+	Winch                   winchFile  `json:"winch"`
+	TWS                     []float64  `json:"tws"`
+	TWA                     []float64  `json:"twa"`
 	Sails                   []sailFile `json:"sail"`
 }
 
@@ -59,12 +59,12 @@ type winchFile struct {
 }
 
 type maneuverFile struct {
-	StdTimerSec float64            `json:"stdTimerSec"`
-	StdRatio    float64            `json:"stdRatio"`
-	ProTimerSec float64            `json:"proTimerSec"`
-	ProRatio    float64            `json:"proRatio"`
-	Standard    *windPenaltyFile   `json:"std"`
-	Pro         *windPenaltyFile   `json:"pro"`
+	StdTimerSec float64          `json:"stdTimerSec"`
+	StdRatio    float64          `json:"stdRatio"`
+	ProTimerSec float64          `json:"proTimerSec"`
+	ProRatio    float64          `json:"proRatio"`
+	Standard    *windPenaltyFile `json:"std"`
+	Pro         *windPenaltyFile `json:"pro"`
 }
 
 type windPenaltyFile struct {
