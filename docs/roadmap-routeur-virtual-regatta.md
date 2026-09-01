@@ -49,13 +49,14 @@ Créer une application web de routage pour Virtual Regatta capable de :
   - winchs pro.
 - Avec six options binaires, le moteur peut tester au maximum 64 configurations.
 
-### Voiles gratuites annoncées
+### Correspondance des voiles
 
-- Génois léger/Gennaker ;
-- Jib/Gennaker lourd ;
-- Trinquette.
+- Voiles de base : `Jib` et `Spi`.
+- Option Light : `LightJib` et `LightGnk`.
+- Option Heavy : `Staysail` et `HeavyGnk`.
+- Option Code0 : `Code0`.
 
-La correspondance exacte avec les identifiants du fichier JSON reste à confirmer pour les options Light et Heavy.
+Cette correspondance est résolue par les noms de voiles présents dans chaque polaire, sans figer leurs identifiants numériques.
 
 ### Stamina et manœuvres
 
@@ -100,8 +101,8 @@ Réunir les données nécessaires et séparer les règles permanentes des règle
 - [x] Formaliser les coûts par catégorie de course.
 - [x] Définir le budget comme un plafond total saisi par course.
 - [x] Définir les deux modes de routage.
-- [ ] Confirmer la correspondance entre l'option Light et la voile du JSON.
-- [ ] Confirmer la correspondance entre l'option Heavy et la voile du JSON.
+- [x] Confirmer la correspondance entre l'option Light et les voiles du JSON.
+- [x] Confirmer la correspondance entre l'option Heavy et les voiles du JSON.
 - [ ] Compléter les coûts et effets des équipements manquants.
 - [ ] Transcrire précisément les courbes de stamina depuis les graphiques officiels.
 - [ ] Déterminer comment Virtual Regatta combine deux manœuvres simultanées.
