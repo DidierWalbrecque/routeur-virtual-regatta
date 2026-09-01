@@ -155,7 +155,7 @@ Créer les structures utilisées par tous les modules sans les lier à l'interfa
 
 - [ ] Définir `Position`, `Wind`, `Heading` et `TimeStep`.
 - [x] Définir `Polar`, `Sail`, `Foil`, `Hull` et `Winch`.
-- [ ] Définir `RaceConfiguration`, `RaceBudget` et `Equipment`.
+- [x] Définir `RaceConfiguration`, `RaceBudget` et `Equipment`.
 - [ ] Définir `BoatState`, `StaminaState` et `ManeuverState`.
 - [ ] Définir `RouteRequest`, `RouteNode` et `RouteResult`.
 - [ ] Définir les interfaces `WeatherProvider`, `PolarProvider`, `Constraint` et `Router`.
@@ -204,7 +204,7 @@ Le moteur retrouve les valeurs exactes du JSON sur les points connus et produit 
 
 ## Phase 4 — Optimiser les équipements et le budget
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
@@ -212,11 +212,11 @@ Comparer toutes les configurations d'équipement respectant le plafond saisi.
 
 ### Tâches
 
-- [ ] Modéliser les catégories de course de 6 à 1.
-- [ ] Implémenter le coefficient `7 - catégorie`.
-- [ ] Calculer le bonus de départ.
-- [ ] Enregistrer les coûts de base Light, Heavy, Code0, foils, polish et winchs pro.
-- [ ] Distinguer bonus utilisé et crédits personnels nécessaires.
+- [x] Modéliser les catégories de course de 6 à 1.
+- [x] Implémenter le coefficient `7 - catégorie`.
+- [x] Calculer le bonus de départ.
+- [x] Enregistrer les coûts de base Light, Heavy, Code0, foils, polish et winchs pro.
+- [x] Distinguer bonus utilisé et crédits personnels nécessaires.
 - [ ] Générer les 64 configurations possibles.
 - [ ] Éliminer les configurations dépassant le plafond.
 - [ ] Gérer les équipements déjà possédés lors d'un calcul en mer.
