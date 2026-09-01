@@ -114,6 +114,8 @@ Réponse attendue :
 
 ## État du projet
 
-Phase 1 terminée : environnement Go, tests, Docker Compose et Visual Studio Code opérationnels.
+Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
 
-Prochaine étape : phase 2 — définition du modèle métier.
+Phase 2 en cours : modèle métier construit progressivement avec les modules concernés.
+
+Travail actuel : phase 4 — optimisation des équipements et du budget.
