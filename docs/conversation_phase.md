@@ -476,9 +476,9 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 
 | Conversation | État | Décision ou résultat principal |
 | --- | --- | --- |
-| 00 — Cadrage et décisions | À démarrer | |
-| 01 — Environnement Go et Docker | À démarrer | |
-| 02 — Lecture et interpolation des polaires | À démarrer | |
+| 00 — Cadrage et décisions | En cours | Règles confirmées progressivement dans la roadmap. |
+| 01 — Environnement Go et Docker | Terminée | API Go, tests et environnement Docker opérationnels. |
+| 02 — Lecture et interpolation des polaires | Terminée | Chargement validé, interpolation bilinéaire, meilleure voile et équipements testés. |
 | 03 — Optimisation des équipements | À démarrer | |
 | 04 — Lecture des fichiers GRIB2 | À démarrer | |
 | 05 — Navigation, manœuvres et stamina | À démarrer | |
@@ -491,4 +491,4 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 
 ## Première action recommandée
 
-Commencer par la conversation **00 — Cadrage et décisions** pour identifier les règles encore manquantes. Enchaîner ensuite avec **01 — Environnement Go et Docker** afin de créer la structure technique du projet.
+Poursuivre avec la conversation **03 — Optimisation des équipements** afin de modéliser les coûts, le budget de course et les combinaisons d'options.
