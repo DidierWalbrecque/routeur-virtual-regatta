@@ -67,3 +67,38 @@ func (polar *Polar) BestSailAt(
 
 	return best, nil
 }
+
+// BestEffectiveSailAt retourne la voile disponible la plus rapide et sa vitesse
+// après application du coefficient global et des équipements activés.
+func (polar *Polar) BestEffectiveSailAt(
+	windSpeed WindSpeed,
+	windAngle TrueWindAngle,
+	availableSails []SailID,
+	options SpeedOptions,
+) (SailPerformance, error) {
+	best, err := polar.BestSailAt(windSpeed, windAngle, availableSails)
+	if err != nil {
+		return SailPerformance{}, fmt.Errorf(
+			"polar: sélection de la meilleure vitesse effective impossible: %w",
+			err,
+		)
+	}
+
+	effectiveSpeed, err := polar.EffectiveSpeedAt(
+		best.SailID,
+		windSpeed,
+		windAngle,
+		options,
+	)
+	if err != nil {
+		return SailPerformance{}, fmt.Errorf(
+			"polar: calcul de la vitesse effective de la voile %q (%d) impossible: %w",
+			best.SailName,
+			best.SailID,
+			err,
+		)
+	}
+
+	best.Speed = effectiveSpeed
+	return best, nil
+}
