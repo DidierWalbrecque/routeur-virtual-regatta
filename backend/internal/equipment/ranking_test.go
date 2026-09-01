@@ -183,13 +183,8 @@ func TestRankAffordableAtRejectsInvalidInputs(t *testing.T) {
 			errorPart: "catégorie",
 		},
 		{
-			name: "voiles requises absentes",
-			boatPolar: &polar.Polar{
-				Sails: []polar.Sail{
-					{ID: 1, Name: "Jib"},
-					{ID: 2, Name: "Spi"},
-				},
-			},
+			name:          "voiles requises absentes",
+			boatPolar:     baseOnlyRankingTestPolar(),
 			configuration: validConfiguration,
 			windSpeed:     20,
 			errorPart:     "absentes",
@@ -237,5 +232,35 @@ func assertRankingOrder(t *testing.T, ranked []RankedCombination) {
 				index,
 			)
 		}
+	}
+}
+
+func baseOnlyRankingTestPolar() *polar.Polar {
+	return &polar.Polar{
+		GlobalSpeedRatio: 1,
+		WindSpeeds:       []polar.WindSpeed{10, 20},
+		WindAngles:       []polar.TrueWindAngle{0, 180},
+		Sails: []polar.Sail{
+			{
+				ID:   1,
+				Name: "Jib",
+				Speeds: polar.SpeedGrid{
+					Values: [][]polar.BoatSpeed{
+						{10, 20},
+						{10, 20},
+					},
+				},
+			},
+			{
+				ID:   2,
+				Name: "Spi",
+				Speeds: polar.SpeedGrid{
+					Values: [][]polar.BoatSpeed{
+						{9, 18},
+						{9, 18},
+					},
+				},
+			},
+		},
 	}
 }
