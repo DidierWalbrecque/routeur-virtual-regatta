@@ -479,7 +479,7 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 | 00 — Cadrage et décisions | En cours | Règles confirmées progressivement dans la roadmap. |
 | 01 — Environnement Go et Docker | Terminée | API Go, tests et environnement Docker opérationnels. |
 | 02 — Lecture et interpolation des polaires | Terminée | Chargement validé, interpolation bilinéaire, meilleure voile et équipements testés. |
-| 03 — Optimisation des équipements | En cours | Tarifs validés, effets résolus et combinaisons filtrées par budget. |
+| 03 — Optimisation des équipements | En cours | Combinaisons abordables classées par performance instantanée et coût. |
 | 04 — Lecture des fichiers GRIB2 | À démarrer | |
 | 05 — Navigation, manœuvres et stamina | À démarrer | |
 | 06 — Moteur de routage | À démarrer | |
