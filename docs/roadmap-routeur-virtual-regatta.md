@@ -218,9 +218,9 @@ Comparer toutes les configurations d'équipement respectant le plafond saisi.
 - [x] Calculer le bonus de départ.
 - [x] Enregistrer les coûts de base Light, Heavy, Code0, foils, polish et winchs pro.
 - [x] Distinguer bonus utilisé et crédits personnels nécessaires.
-- [ ] Générer les 64 configurations possibles.
-- [ ] Éliminer les configurations dépassant le plafond.
-- [ ] Gérer les équipements déjà possédés lors d'un calcul en mer.
+- [x] Générer les 64 configurations possibles.
+- [x] Éliminer les configurations dépassant le plafond.
+- [x] Gérer les équipements déjà possédés lors d'un calcul en mer.
 - [ ] Gérer l'achat recommandé avant et pendant la course.
 - [ ] Classer les configurations selon l'heure d'arrivée théorique et pratique.
 - [ ] Afficher le gain marginal de chaque achat.
