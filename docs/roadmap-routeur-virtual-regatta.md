@@ -116,7 +116,7 @@ Une course peut être décrite sans modifier le code Go : catégorie, budget, vo
 
 ## Phase 1 — Préparer l'environnement Go et Docker
 
-**Statut : à faire**
+**Statut : terminée**
 
 ### Objectif
 
@@ -124,16 +124,16 @@ Obtenir un environnement reproductible sur Windows, chez les testeurs et sur le 
 
 ### Tâches
 
-- [ ] Installer ou vérifier Docker Desktop.
-- [ ] Installer les extensions VS Code Go, Container Tools et Dev Containers.
-- [ ] Créer le dépôt Git du projet.
-- [ ] Créer l'arborescence `backend`, `frontend`, `extension` et `data`.
-- [ ] Initialiser le module Go.
-- [ ] Créer le premier `Dockerfile` multi-stage.
-- [ ] Créer `compose.yaml`.
+- [x] Installer ou vérifier Docker Desktop.
+- [x] Installer les extensions VS Code Go, Container Tools et Dev Containers.
+- [x] Créer le dépôt Git du projet.
+- [x] Créer l'arborescence `backend`, `frontend`, `extension` et `data`.
+- [x] Initialiser le module Go.
+- [x] Créer le premier `Dockerfile` multi-stage.
+- [x] Créer `compose.yaml`.
 - [ ] Créer éventuellement `.devcontainer/devcontainer.json`.
-- [ ] Lancer un serveur HTTP Go minimal dans Docker.
-- [ ] Ajouter une première commande de test.
+- [x] Lancer un serveur HTTP Go minimal dans Docker.
+- [x] Ajouter une première commande de test.
 
 ### Livrable
 
@@ -145,7 +145,7 @@ La commande `docker compose up` démarre le serveur et une route `/health` répo
 
 ## Phase 2 — Définir le modèle métier
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
@@ -154,12 +154,12 @@ Créer les structures utilisées par tous les modules sans les lier à l'interfa
 ### Tâches
 
 - [ ] Définir `Position`, `Wind`, `Heading` et `TimeStep`.
-- [ ] Définir `Polar`, `Sail`, `Foil`, `Hull` et `Winch`.
+- [x] Définir `Polar`, `Sail`, `Foil`, `Hull` et `Winch`.
 - [ ] Définir `RaceConfiguration`, `RaceBudget` et `Equipment`.
 - [ ] Définir `BoatState`, `StaminaState` et `ManeuverState`.
 - [ ] Définir `RouteRequest`, `RouteNode` et `RouteResult`.
 - [ ] Définir les interfaces `WeatherProvider`, `PolarProvider`, `Constraint` et `Router`.
-- [ ] Définir les erreurs métier et les règles de validation.
+- [x] Définir les erreurs métier et les règles de validation des polaires.
 
 ### Livrable
 
@@ -171,7 +171,7 @@ Les données d'une course et l'état d'un bateau peuvent être représentés san
 
 ## Phase 3 — Charger et interpoler les polaires
 
-**Statut : à faire**
+**Statut : terminée**
 
 ### Objectif
 
@@ -179,23 +179,23 @@ Calculer la vitesse du bateau pour une force de vent, un angle et une liste de v
 
 ### Tâches
 
-- [ ] Créer les structures JSON correspondant à `ultim_bp_11.json`.
-- [ ] Charger et valider le fichier.
-- [ ] Vérifier l'ordre et les dimensions TWA/TWS.
-- [ ] Développer l'interpolation bilinéaire TWA/TWS.
-- [ ] Calculer la vitesse de chaque voile disponible.
-- [ ] Choisir la meilleure voile autorisée.
-- [ ] Appliquer le ratio global du bateau.
-- [ ] Appliquer le polish de coque.
-- [ ] Appliquer progressivement le bonus des foils.
-- [ ] Tester les valeurs exactes de la grille et les valeurs interpolées.
+- [x] Créer les structures JSON correspondant à `ultim_bp_11.json`.
+- [x] Charger et valider le fichier.
+- [x] Vérifier l'ordre et les dimensions TWA/TWS.
+- [x] Développer l'interpolation bilinéaire TWA/TWS.
+- [x] Calculer la vitesse de chaque voile disponible.
+- [x] Choisir la meilleure voile autorisée.
+- [x] Appliquer le ratio global du bateau.
+- [x] Appliquer le polish de coque.
+- [x] Appliquer progressivement le bonus des foils.
+- [x] Tester les valeurs exactes de la grille et les valeurs interpolées.
 
 ### Livrable
 
 Une fonction du type :
 
 ```go
-speed, sail := polar.BestSpeed(tws, twa, availableSails, equipment)
+performance, err := polar.BestEffectiveSailAt(tws, twa, availableSails, options)
 ```
 
 ### Critère de validation
