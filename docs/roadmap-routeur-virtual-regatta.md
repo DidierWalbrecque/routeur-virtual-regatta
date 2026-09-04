@@ -250,7 +250,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 - [x] Calculer une nouvelle position après un déplacement.
 - [x] Convertir nœuds, mètres par seconde, milles nautiques et secondes.
 - [x] Gérer le passage de l'antiméridien.
-- [ ] Gérer les longitudes NOAA de 0° à 359,75°.
+- [x] Gérer les longitudes NOAA de 0° à 359,75°.
 - [ ] Calculer la direction du vent à partir de U et V.
 - [ ] Calculer le TWA entre le cap et le vent.
 - [ ] Identifier l'amure du bateau.
