@@ -151,6 +151,11 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 
 	fmt.Fprintf(
 		stdout,
+		"Position initiale VR : %s\n",
+		formatVirtualRegattaPosition(from),
+	)
+	fmt.Fprintf(
+		stdout,
 		"Position initiale : %.6f°, %.6f°\n",
 		from.Latitude,
 		from.Longitude,
@@ -159,6 +164,11 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "Vitesse constante : %.6f nd\n", *speed)
 	fmt.Fprintf(stdout, "Durée : %.2f min\n", *minutes)
 	fmt.Fprintf(stdout, "Distance parcourue : %.6f NM\n", distance)
+	fmt.Fprintf(
+		stdout,
+		"Position théorique VR : %s\n",
+		formatVirtualRegattaPosition(to),
+	)
 	fmt.Fprintf(
 		stdout,
 		"Position théorique : %.6f°, %.6f°\n",
