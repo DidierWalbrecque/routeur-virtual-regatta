@@ -118,4 +118,4 @@ Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement 
 
 Phase 2 en cours : modèle métier construit progressivement avec les modules concernés.
 
-Travail actuel : phase 4 — optimisation des équipements et du budget.
+Travail actuel : phase 5 — calculs géographiques de navigation.
