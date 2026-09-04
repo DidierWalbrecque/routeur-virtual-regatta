@@ -160,7 +160,10 @@ Les paramètres correspondent à :
 - `-speed` : vitesse moyenne en nœuds ;
 - `-minutes` : durée du déplacement en minutes.
 
-La commande affiche la distance parcourue et la nouvelle position théorique.
+La commande affiche la distance parcourue et la nouvelle position théorique,
+à la fois au format Virtual Regatta et en degrés décimaux. Dans une valeur
+décimale comme `121.613088°`, `.613088` est une fraction de degré et non un
+nombre de minutes ; la sortie VR correspondante est `121°E 36'47"`.
 Pour comparer le résultat au jeu, relever la position au début puis à la fin de
 la période. Le calcul suppose un cap et une vitesse constants : il ne tient pas
 encore compte des variations de vent, des manœuvres ou de la stamina.
