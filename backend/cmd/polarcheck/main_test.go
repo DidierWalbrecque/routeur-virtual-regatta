@@ -36,8 +36,7 @@ func TestRunDisplaysCurrentPerformanceAndPurchases(t *testing.T) {
 		"gain +1.840000 nd",
 	} {
 		if !strings.Contains(output, expected) {
-			t.Errorf("sortie absente %q dans:
-%s", expected, output)
+			t.Errorf("sortie absente %q dans:\n%s", expected, output)
 		}
 	}
 	if stderr.Len() != 0 {
@@ -74,8 +73,7 @@ func TestRunUsesOwnedEquipment(t *testing.T) {
 		"gain +1.472000 nd",
 	} {
 		if !strings.Contains(output, expected) {
-			t.Errorf("sortie absente %q dans:
-%s", expected, output)
+			t.Errorf("sortie absente %q dans:\n%s", expected, output)
 		}
 	}
 }
