@@ -125,18 +125,16 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		)
 	}
 
-	if math.IsInf(*speed, 0) || *speed < 0 {
-		return errors.New(
-			"navigationcheck: la vitesse doit être un nombre fini positif ou nul",
+	distance, err := navigation.DistanceAtConstantSpeed(
+		navigation.Knots(*speed),
+		navigation.Seconds(*minutes*60),
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"navigationcheck: calcul de la distance impossible: %w",
+			err,
 		)
 	}
-	if math.IsInf(*minutes, 0) || *minutes < 0 {
-		return errors.New(
-			"navigationcheck: la durée doit être un nombre fini positif ou nul",
-		)
-	}
-
-	distance := navigation.NauticalMiles(*speed * *minutes / 60)
 	to, err := navigation.DestinationPosition(
 		from,
 		initialHeading,
