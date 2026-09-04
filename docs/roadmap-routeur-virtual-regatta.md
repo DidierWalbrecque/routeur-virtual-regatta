@@ -237,7 +237,7 @@ Le moteur ne dépasse jamais le plafond et retrouve les montants du tableau de r
 
 ## Phase 5 — Développer les calculs de navigation
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
@@ -245,7 +245,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 
 ### Tâches
 
-- [ ] Calculer la distance entre deux coordonnées.
+- [x] Calculer la distance entre deux coordonnées.
 - [ ] Calculer le cap initial vers une destination.
 - [ ] Calculer une nouvelle position après un déplacement.
 - [ ] Convertir nœuds, mètres par seconde, milles nautiques et secondes.
