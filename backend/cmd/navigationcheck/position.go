@@ -10,7 +10,7 @@ import (
 )
 
 var virtualRegattaPositionPattern = regexp.MustCompile(
-	`^\\s*([0-9]{1,2})°\\s*([NS])\\s+([0-9]{1,2})['′]\\s*([0-9]{1,2})["″]\\s*[-–—]\\s*([0-9]{1,3})°\\s*([EW])\\s+([0-9]{1,2})['′]\\s*([0-9]{1,2})["″]\\s*$`,
+	`^\s*([0-9]{1,2})°\s*([NS])\s+([0-9]{1,2})['′]\s*([0-9]{1,2})["″]\s*[-–—]\s*([0-9]{1,3})°\s*([EW])\s+([0-9]{1,2})['′]\s*([0-9]{1,2})["″]\s*$`,
 )
 
 func parseVirtualRegattaPosition(value string) (navigation.Position, error) {
