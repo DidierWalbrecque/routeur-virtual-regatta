@@ -59,12 +59,8 @@ func (position Position) Validate() error {
 		)
 	}
 
-	longitude := float64(position.Longitude)
-	if math.IsNaN(longitude) || math.IsInf(longitude, 0) ||
-		position.Longitude < -180 || position.Longitude > 180 {
-		return fmt.Errorf(
-			"navigation: la longitude doit être un nombre fini compris entre -180 et 180 degrés",
-		)
+	if err := position.Longitude.Validate(); err != nil {
+		return err
 	}
 
 	return nil
