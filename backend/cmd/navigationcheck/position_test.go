@@ -2,10 +2,10 @@ package main
 
 import (
 	"math"
-
-	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"strings"
 	"testing"
+
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 )
 
 func TestParseVirtualRegattaPosition(t *testing.T) {
