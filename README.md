@@ -112,6 +112,29 @@ Réponse attendue :
 {"status":"ok"}
 ```
 
+## Vérifier une situation de course
+
+La commande `polarcheck` compare une situation relevée manuellement dans
+Virtual Regatta avec la polaire locale.
+
+Depuis le dossier `backend` :
+
+```bash
+go run ./cmd/polarcheck -polar ../data/polars/ultim_bp_11.json -tws 20 -twa 90 -category 6 -budget 440
+```
+
+Pour déclarer des équipements déjà possédés :
+
+```bash
+go run ./cmd/polarcheck -polar ../data/polars/ultim_bp_11.json -tws 20 -twa 90 -category 6 -budget 780 -owned code0,foils
+```
+
+Valeurs acceptées par `-owned` : `light`, `heavy`, `code0`, `foils`,
+`hull_polish` et `pro_winches`.
+
+La commande affiche la meilleure voile, la vitesse attendue et les prochains
+achats abordables. Elle ne se connecte pas au site Virtual Regatta.
+
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
