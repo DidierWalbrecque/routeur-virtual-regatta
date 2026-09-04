@@ -237,7 +237,7 @@ Le moteur ne dépasse jamais le plafond et retrouve les montants du tableau de r
 
 ## Phase 5 — Développer les calculs de navigation
 
-**Statut : en cours**
+**Statut : terminée**
 
 ### Objectif
 
@@ -254,7 +254,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 - [x] Calculer la direction du vent à partir de U et V.
 - [x] Calculer le TWA entre le cap et le vent.
 - [x] Identifier l'amure du bateau.
-- [ ] Écrire des tests géographiques de référence.
+- [x] Écrire des tests géographiques de référence.
 
 ### Livrable
 
