@@ -51,11 +51,18 @@ func DestinationPosition(
 			math.Sin(fromLatitude)*math.Sin(destinationLatitude),
 	)
 
+	normalizedLongitude, err := NormalizeLongitude(
+		radiansToDegrees(destinationLongitude),
+	)
+	if err != nil {
+		return Position{}, fmt.Errorf(
+			"navigation: normalisation de la longitude impossible: %w",
+			err,
+		)
+	}
 	result := Position{
-		Latitude: Latitude(radiansToDegrees(destinationLatitude)),
-		Longitude: Longitude(normalizeLongitude(
-			radiansToDegrees(destinationLongitude),
-		)),
+		Latitude:  Latitude(radiansToDegrees(destinationLatitude)),
+		Longitude: normalizedLongitude,
 	}
 	if err := result.Validate(); err != nil {
 		return Position{}, fmt.Errorf(
@@ -64,12 +71,4 @@ func DestinationPosition(
 		)
 	}
 	return result, nil
-}
-
-func normalizeLongitude(longitude float64) float64 {
-	normalized := math.Mod(longitude+180, 360)
-	if normalized < 0 {
-		normalized += 360
-	}
-	return normalized - 180
 }
