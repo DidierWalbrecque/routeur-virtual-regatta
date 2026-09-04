@@ -253,7 +253,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 - [x] Gérer les longitudes NOAA de 0° à 359,75°.
 - [x] Calculer la direction du vent à partir de U et V.
 - [x] Calculer le TWA entre le cap et le vent.
-- [ ] Identifier l'amure du bateau.
+- [x] Identifier l'amure du bateau.
 - [ ] Écrire des tests géographiques de référence.
 
 ### Livrable
