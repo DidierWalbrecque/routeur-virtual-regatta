@@ -63,10 +63,12 @@ func TestRunAcceptsVirtualRegattaPosition(t *testing.T) {
 
 	output := stdout.String()
 	for _, expected := range []string{
+		"Position initiale VR : 13°N 04'08\" - 121°E 37'42\"",
 		"Position initiale : 13.068889°, 121.628333°",
 		"Cap constant : 346.00°",
 		"Vitesse constante : 5.800000 nd",
 		"Distance parcourue : 0.966667 NM",
+		"Position théorique VR : 13°N 05'04\" - 121°E 37'28\"",
 		"Position théorique : 13.084511°, 121.624335°",
 	} {
 		if !strings.Contains(output, expected) {
