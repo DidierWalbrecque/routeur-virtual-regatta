@@ -16,6 +16,21 @@ type Longitude float64
 // NauticalMiles représente une distance en milles nautiques.
 type NauticalMiles float64
 
+// Heading représente un cap en degrés depuis le nord, dans le sens horaire.
+type Heading float64
+
+// Validate vérifie que le cap est fini et appartient à [0, 360[.
+func (heading Heading) Validate() error {
+	numericHeading := float64(heading)
+	if math.IsNaN(numericHeading) || math.IsInf(numericHeading, 0) ||
+		heading < 0 || heading >= 360 {
+		return fmt.Errorf(
+			"navigation: le cap doit être un nombre fini compris entre 0 inclus et 360 degrés exclus",
+		)
+	}
+	return nil
+}
+
 // Position représente un point géographique en degrés décimaux.
 type Position struct {
 	Latitude  Latitude
