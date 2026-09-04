@@ -252,7 +252,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 - [x] Gérer le passage de l'antiméridien.
 - [x] Gérer les longitudes NOAA de 0° à 359,75°.
 - [x] Calculer la direction du vent à partir de U et V.
-- [ ] Calculer le TWA entre le cap et le vent.
+- [x] Calculer le TWA entre le cap et le vent.
 - [ ] Identifier l'amure du bateau.
 - [ ] Écrire des tests géographiques de référence.
 
