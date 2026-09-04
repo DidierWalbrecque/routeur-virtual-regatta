@@ -246,7 +246,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 ### Tâches
 
 - [x] Calculer la distance entre deux coordonnées.
-- [ ] Calculer le cap initial vers une destination.
+- [x] Calculer le cap initial vers une destination.
 - [ ] Calculer une nouvelle position après un déplacement.
 - [ ] Convertir nœuds, mètres par seconde, milles nautiques et secondes.
 - [ ] Gérer le passage de l'antiméridien.
