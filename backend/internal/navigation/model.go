@@ -16,6 +16,18 @@ type Longitude float64
 // NauticalMiles représente une distance en milles nautiques.
 type NauticalMiles float64
 
+// Validate vérifie que la distance est finie et positive ou nulle.
+func (distance NauticalMiles) Validate() error {
+	numericDistance := float64(distance)
+	if math.IsNaN(numericDistance) || math.IsInf(numericDistance, 0) ||
+		distance < 0 {
+		return fmt.Errorf(
+			"navigation: la distance doit être un nombre fini positif ou nul",
+		)
+	}
+	return nil
+}
+
 // Heading représente un cap en degrés depuis le nord, dans le sens horaire.
 type Heading float64
 
