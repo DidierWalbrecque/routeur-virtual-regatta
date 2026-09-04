@@ -135,6 +135,29 @@ Valeurs acceptées par `-owned` : `light`, `heavy`, `code0`, `foils`,
 La commande affiche la meilleure voile, la vitesse attendue et les prochains
 achats abordables. Elle ne se connecte pas au site Virtual Regatta.
 
+## Vérifier un déplacement pendant une course
+
+La commande `navigationcheck` calcule une position théorique à partir d'un
+relevé manuel effectué dans Virtual Regatta.
+
+Depuis le dossier `backend` :
+
+```bash
+go run ./cmd/navigationcheck -latitude 48.5 -longitude -5.2 -heading 240 -speed 35 -minutes 10
+```
+
+Les paramètres correspondent à :
+
+- `-latitude` et `-longitude` : position initiale en degrés décimaux ;
+- `-heading` : cap suivi, de 0° inclus à 360° exclus ;
+- `-speed` : vitesse moyenne en nœuds ;
+- `-minutes` : durée du déplacement en minutes.
+
+La commande affiche la distance parcourue et la nouvelle position théorique.
+Pour comparer le résultat au jeu, relever la position au début puis à la fin de
+la période. Le calcul suppose un cap et une vitesse constants : il ne tient pas
+encore compte des variations de vent, des manœuvres ou de la stamina.
+
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
