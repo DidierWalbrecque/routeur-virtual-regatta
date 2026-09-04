@@ -223,7 +223,7 @@ Comparer toutes les configurations d'équipement respectant le plafond saisi.
 - [x] Gérer les équipements déjà possédés lors d'un calcul en mer.
 - [ ] Gérer l'achat recommandé avant et pendant la course.
 - [ ] Classer les configurations selon l'heure d'arrivée théorique et pratique.
-- [ ] Afficher le gain marginal de chaque achat.
+- [x] Afficher le gain marginal instantané de chaque achat.
 
 ### Livrable
 
@@ -232,6 +232,8 @@ Une liste classée de configurations valides avec coût, contribution personnell
 ### Critère de validation
 
 Le moteur ne dépasse jamais le plafond et retrouve les montants du tableau de référence pour chaque catégorie.
+
+> Le classement actuel mesure la performance pour un vent donné. Le classement par heure d'arrivée restera à intégrer au moteur de routage.
 
 ## Phase 5 — Développer les calculs de navigation
 
