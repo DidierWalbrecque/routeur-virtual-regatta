@@ -15,9 +15,9 @@ func TestSpeedConversions(t *testing.T) {
 		float64(metersPerSecond) - 5.144444444444445,
 	); difference > 1e-12 {
 		t.Errorf(
-		"vitesse = %.15f m/s, attendue %.15f",
-		metersPerSecond,
-		5.144444444444445,
+			"vitesse = %.15f m/s, attendue %.15f",
+			metersPerSecond,
+			5.144444444444445,
 		)
 	}
 
@@ -29,9 +29,9 @@ func TestSpeedConversions(t *testing.T) {
 		float64(knots) - 19.438444924406046,
 	); difference > 1e-12 {
 		t.Errorf(
-		"vitesse = %.15f nd, attendue %.15f",
-		knots,
-		19.438444924406046,
+			"vitesse = %.15f nd, attendue %.15f",
+			knots,
+			19.438444924406046,
 		)
 	}
 }
@@ -52,9 +52,9 @@ func TestSpeedConversionRoundTrip(t *testing.T) {
 		float64(converted - original),
 	); difference > 1e-12 {
 		t.Errorf(
-		"aller-retour = %.15f nd, attendu %.15f",
-		converted,
-		original,
+			"aller-retour = %.15f nd, attendu %.15f",
+			converted,
+			original,
 		)
 	}
 }
