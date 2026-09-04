@@ -143,12 +143,19 @@ relevé manuel effectué dans Virtual Regatta.
 Depuis le dossier `backend` :
 
 ```bash
-go run ./cmd/navigationcheck -latitude 48.5 -longitude -5.2 -heading 240 -speed 35 -minutes 10
+go run ./cmd/navigationcheck -position "13°N 04'08\\" - 121°E 37'42\\"" -heading 346 -speed 5.8 -minutes 10
+```
+
+La position peut également être fournie en degrés décimaux :
+
+```bash
+go run ./cmd/navigationcheck -latitude 13.068889 -longitude 121.628333 -heading 346 -speed 5.8 -minutes 10
 ```
 
 Les paramètres correspondent à :
 
-- `-latitude` et `-longitude` : position initiale en degrés décimaux ;
+- `-position` : coordonnées au format affiché par Virtual Regatta ;
+- `-latitude` et `-longitude` : autre saisie possible en degrés décimaux ;
 - `-heading` : cap suivi, de 0° inclus à 360° exclus ;
 - `-speed` : vitesse moyenne en nœuds ;
 - `-minutes` : durée du déplacement en minutes.
