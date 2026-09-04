@@ -248,7 +248,7 @@ Simuler précisément le déplacement d'un bateau sur le globe.
 - [x] Calculer la distance entre deux coordonnées.
 - [x] Calculer le cap initial vers une destination.
 - [x] Calculer une nouvelle position après un déplacement.
-- [ ] Convertir nœuds, mètres par seconde, milles nautiques et secondes.
+- [x] Convertir nœuds, mètres par seconde, milles nautiques et secondes.
 - [ ] Gérer le passage de l'antiméridien.
 - [ ] Gérer les longitudes NOAA de 0° à 359,75°.
 - [ ] Calculer la direction du vent à partir de U et V.
