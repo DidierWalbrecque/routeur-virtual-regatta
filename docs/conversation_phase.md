@@ -481,7 +481,7 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 | 02 — Lecture et interpolation des polaires | Terminée | Chargement validé, interpolation bilinéaire, meilleure voile et équipements testés. |
 | 03 — Optimisation des équipements | En cours | Prochains achats abordables classés avec leur gain marginal instantané. |
 | 04 — Lecture des fichiers GRIB2 | À démarrer | |
-| 05 — Navigation, manœuvres et stamina | En cours | Distance, cap, projection et conversions d’unités de navigation en validation. |
+| 05 — Navigation, manœuvres et stamina | En cours | Distance, cap, projection, unités et franchissement de l’antiméridien en validation. |
 | 06 — Moteur de routage | À démarrer | |
 | 07 — API et interface cartographique | À démarrer | |
 | 08 — Tests et performances | À démarrer | |
