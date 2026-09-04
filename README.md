@@ -143,7 +143,7 @@ relevé manuel effectué dans Virtual Regatta.
 Depuis le dossier `backend` :
 
 ```bash
-go run ./cmd/navigationcheck -position "13°N 04'08\\" - 121°E 37'42\\"" -heading 346 -speed 5.8 -minutes 10
+go run ./cmd/navigationcheck -position "13°N 04'08\" - 121°E 37'42\"" -heading 346 -speed 5.8 -minutes 10
 ```
 
 La position peut également être fournie en degrés décimaux :
