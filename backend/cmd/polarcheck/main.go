@@ -125,25 +125,18 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		return fmt.Errorf("polarcheck: classement des achats impossible: %w", err)
 	}
 
-	fmt.Fprintf(stdout, "Bateau : %s
-", boatPolar.Label)
-	fmt.Fprintf(stdout, "Vent : TWS %.2f nd | TWA %.2f°
-", *windSpeed, *windAngle)
-	fmt.Fprintf(stdout, "Catégorie : %d | plafond total : %d crédits
-", *category, *budget)
-	fmt.Fprintf(stdout, "Équipements possédés : %s
-", formatEquipmentSet(ownedSet))
+	fmt.Fprintf(stdout, "Bateau : %s\n", boatPolar.Label)
+	fmt.Fprintf(stdout, "Vent : TWS %.2f nd | TWA %.2f°\n", *windSpeed, *windAngle)
+	fmt.Fprintf(stdout, "Catégorie : %d | plafond total : %d crédits\n", *category, *budget)
+	fmt.Fprintf(stdout, "Équipements possédés : %s\n", formatEquipmentSet(ownedSet))
 	fmt.Fprintf(
 		stdout,
-		"Coût actuel : %d crédits (%d crédits personnels)
-",
+		"Coût actuel : %d crédits (%d crédits personnels)\n",
 		currentCost.TotalCost,
 		currentCost.PersonalCredits,
 	)
-	fmt.Fprintf(stdout, "Meilleure voile : %s
-", current.SailName)
-	fmt.Fprintf(stdout, "Vitesse attendue : %.6f nd
-", current.Speed)
+	fmt.Fprintf(stdout, "Meilleure voile : %s\n", current.SailName)
+	fmt.Fprintf(stdout, "Vitesse attendue : %.6f nd\n", current.Speed)
 
 	if len(purchases) == 0 {
 		fmt.Fprintln(stdout, "Aucun nouvel équipement n'est abordable.")
@@ -154,8 +147,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 	for index, purchase := range purchases {
 		fmt.Fprintf(
 			stdout,
-			"%d. %s | achat %d | personnel +%d | voile %s | vitesse %.6f nd | gain %+.6f nd
-",
+			"%d. %s | achat %d | personnel +%d | voile %s | vitesse %.6f nd | gain %+.6f nd\n",
 			index+1,
 			purchase.Equipment.String(),
 			purchase.PurchaseCost,
