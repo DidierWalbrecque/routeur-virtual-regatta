@@ -2,6 +2,8 @@ package main
 
 import (
 	"math"
+
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"strings"
 	"testing"
 )
@@ -71,6 +73,39 @@ func TestParseVirtualRegattaPositionRejectsInvalidValues(t *testing.T) {
 			}
 			if strings.TrimSpace(err.Error()) == "" {
 				t.Fatal("l'erreur doit être explicite")
+			}
+		})
+	}
+}
+
+func TestFormatVirtualRegattaPosition(t *testing.T) {
+	tests := []struct {
+		name     string
+		position navigation.Position
+		want     string
+	}{
+		{
+			name:     "nord et est",
+			position: navigation.Position{Latitude: 13.068888888888889, Longitude: 121.62833333333333},
+			want:     "13°N 04'08\" - 121°E 37'42\"",
+		},
+		{
+			name:     "sud et ouest",
+			position: navigation.Position{Latitude: -33.86888888888889, Longitude: -151.20916666666668},
+			want:     "33°S 52'08\" - 151°W 12'33\"",
+		},
+		{
+			name:     "résultat décimal converti",
+			position: navigation.Position{Latitude: 13.087225, Longitude: 121.613088},
+			want:     "13°N 05'14\" - 121°E 36'47\"",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			got := formatVirtualRegattaPosition(test.position)
+			if got != test.want {
+				t.Errorf("format = %q, attendu %q", got, test.want)
 			}
 		})
 	}
