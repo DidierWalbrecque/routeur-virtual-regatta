@@ -70,7 +70,7 @@ func TestRunAcceptsVirtualRegattaPosition(t *testing.T) {
 		"Position théorique : 13.084511°, 121.624335°",
 	} {
 		if !strings.Contains(output, expected) {
-			t.Errorf("sortie absente %q dans:\\n%s", expected, output)
+			t.Errorf("sortie absente %q dans:\n%s", expected, output)
 		}
 	}
 	if stderr.Len() != 0 {
