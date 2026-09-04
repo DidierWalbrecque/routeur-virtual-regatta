@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"math"
 	"regexp"
 	"strconv"
 	"strings"
@@ -89,4 +90,36 @@ func parseDMSCoordinate(
 		coordinate = -coordinate
 	}
 	return coordinate, nil
+}
+
+func formatVirtualRegattaPosition(position navigation.Position) string {
+	return fmt.Sprintf(
+		"%s - %s",
+		formatDMSCoordinate(float64(position.Latitude), "N", "S"),
+		formatDMSCoordinate(float64(position.Longitude), "E", "W"),
+	)
+}
+
+func formatDMSCoordinate(
+	coordinate float64,
+	positiveHemisphere string,
+	negativeHemisphere string,
+) string {
+	hemisphere := positiveHemisphere
+	if coordinate < 0 {
+		hemisphere = negativeHemisphere
+	}
+
+	totalSeconds := int(math.Round(math.Abs(coordinate) * 3600))
+	degrees := totalSeconds / 3600
+	minutes := totalSeconds % 3600 / 60
+	seconds := totalSeconds % 60
+
+	return fmt.Sprintf(
+		"%d°%s %02d'%02d\"",
+		degrees,
+		hemisphere,
+		minutes,
+		seconds,
+	)
 }
