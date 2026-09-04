@@ -23,6 +23,11 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 	flags := flag.NewFlagSet("navigationcheck", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
+	positionText := flags.String(
+		"position",
+		"",
+		"position Virtual Regatta en degrés, minutes et secondes",
+	)
 	latitude := flags.Float64(
 		"latitude",
 		math.NaN(),
@@ -58,15 +63,36 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 			strings.Join(flags.Args(), " "),
 		)
 	}
-	if math.IsNaN(*latitude) {
-		return errors.New(
-			"navigationcheck: le paramètre -latitude est obligatoire",
-		)
-	}
-	if math.IsNaN(*longitude) {
-		return errors.New(
-			"navigationcheck: le paramètre -longitude est obligatoire",
-		)
+	var from navigation.Position
+	if strings.TrimSpace(*positionText) != "" {
+		if !math.IsNaN(*latitude) || !math.IsNaN(*longitude) {
+			return errors.New(
+				"navigationcheck: -position ne peut pas être combiné avec -latitude ou -longitude",
+			)
+		}
+		parsedPosition, err := parseVirtualRegattaPosition(*positionText)
+		if err != nil {
+			return fmt.Errorf(
+				"navigationcheck: position Virtual Regatta invalide: %w",
+				err,
+			)
+		}
+		from = parsedPosition
+	} else {
+		if math.IsNaN(*latitude) {
+			return errors.New(
+				"navigationcheck: le paramètre -latitude ou -position est obligatoire",
+			)
+		}
+		if math.IsNaN(*longitude) {
+			return errors.New(
+				"navigationcheck: le paramètre -longitude ou -position est obligatoire",
+			)
+		}
+		from = navigation.Position{
+			Latitude:  navigation.Latitude(*latitude),
+			Longitude: navigation.Longitude(*longitude),
+		}
 	}
 	if math.IsNaN(*heading) {
 		return errors.New(
@@ -84,10 +110,6 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 		)
 	}
 
-	from := navigation.Position{
-		Latitude:  navigation.Latitude(*latitude),
-		Longitude: navigation.Longitude(*longitude),
-	}
 	if err := from.Validate(); err != nil {
 		return fmt.Errorf(
 			"navigationcheck: position initiale invalide: %w",
