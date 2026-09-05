@@ -34,13 +34,13 @@ const (
 // Les composantes sont exprimées en mètres par seconde. Les tableaux sont
 // rangés ligne par ligne, du nord-ouest vers le sud-est.
 type GRIB2WindGrid struct {
-	ValidAt   time.Time
-	Width     int
-	Height    int
-	Latitudes []float64
+	ValidAt    time.Time
+	Width      int
+	Height     int
+	Latitudes  []float64
 	Longitudes []float64
-	U         []float64
-	V         []float64
+	U          []float64
+	V          []float64
 }
 
 // Validate vérifie que les coordonnées et les composantes décrivent toutes la
