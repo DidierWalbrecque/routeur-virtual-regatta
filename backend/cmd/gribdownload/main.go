@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
@@ -36,7 +37,7 @@ func run(args []string, stdout io.Writer) error {
 	}
 
 	downloader := weather.NewNOAAGFSDownloader()
-	for _, forecastHour := range options.forecastHours {
+	for index, forecastHour := range options.forecastHours {
 		request, err := weather.NewGFSForecastRequest(
 			options.date,
 			options.cycle,
@@ -69,6 +70,9 @@ func run(args []string, stdout io.Writer) error {
 			path,
 			request.ValidAt().Format("2006-01-02T15:04:05Z07:00"),
 		)
+		if index+1 < len(options.forecastHours) {
+			time.Sleep(time.Second)
+		}
 	}
 
 	return nil
