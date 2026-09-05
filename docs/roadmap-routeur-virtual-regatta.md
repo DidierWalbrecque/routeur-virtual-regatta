@@ -278,7 +278,7 @@ Connaître le vent à n'importe quelle position et heure couverte par les prévi
 - Résolution mondiale de 0,25°.
 - Grille de 1 440 × 721 points.
 - Composantes U et V à 10 mètres.
-- Échéance exemple `f003`.
+- Série réelle validée : run `20260905/06`, échéances `f000`, `f003` et `f006`.
 - Modèles GRIB2 observés : grille 3.0, produit 4.0 et représentation 5.3.
 - Lecteur natif Go retenu : `github.com/skysparq/grib2-go`.
 
@@ -295,7 +295,7 @@ Connaître le vent à n'importe quelle position et heure couverte par les prévi
 - [x] Convertir les mètres par seconde en nœuds.
 - [ ] Mettre en cache les grilles décodées.
 - [ ] Stocker les GRIB dans un volume Docker.
-- [ ] Prévoir un téléchargement NOAA indépendant du moteur de routage.
+- [x] Prévoir un téléchargement NOAA indépendant du moteur de routage.
 
 ### Livrable
 
