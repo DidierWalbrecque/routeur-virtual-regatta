@@ -280,11 +280,12 @@ Connaître le vent à n'importe quelle position et heure couverte par les prévi
 - Composantes U et V à 10 mètres.
 - Échéance exemple `f003`.
 - Modèles GRIB2 observés : grille 3.0, produit 4.0 et représentation 5.3.
+- Lecteur natif Go retenu : `github.com/skysparq/grib2-go`.
 
 ### Tâches
 
 - [ ] Créer `GRIB2WeatherProvider` derrière l'interface `WeatherProvider`.
-- [ ] Tester un lecteur GRIB2 natif Go sur le fichier fourni.
+- [x] Tester un lecteur GRIB2 natif Go sur le fichier fourni.
 - [ ] Comparer quelques valeurs décodées avec un outil de référence.
 - [ ] Extraire U et V à 10 mètres.
 - [ ] Charger une série d'échéances `f000`, `f003`, `f006`, etc.

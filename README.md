@@ -168,10 +168,25 @@ Pour comparer le résultat au jeu, relever la position au début puis à la fin 
 la période. Le calcul suppose un cap et une vitesse constants : il ne tient pas
 encore compte des variations de vent, des manœuvres ou de la stamina.
 
+## Vérifier un fichier météo GRIB2
+
+La commande `gribcheck` vérifie que le lecteur natif Go peut décoder toutes
+les grilles, coordonnées et valeurs d'un fichier NOAA GFS.
+
+Depuis le dossier `backend` :
+
+```bash
+go run ./cmd/gribcheck -file ../data/weather/gfs.2026042906.f003.grb2
+```
+
+Le fichier météo reste local dans `data/weather/` et n'est pas ajouté au dépôt
+Git. Le fichier d'exemple contient deux messages, correspondant aux composantes
+U et V du vent à 10 mètres.
+
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
 
 Phase 2 en cours : modèle métier construit progressivement avec les modules concernés.
 
-Travail actuel : phase 5 — calculs géographiques de navigation.
+Travail actuel : phase 6 — lecture et interpolation de la météo GRIB2.
