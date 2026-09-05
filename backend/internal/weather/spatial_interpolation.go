@@ -129,9 +129,11 @@ func (grid GRIB2WindGrid) validateInterpolationShape() error {
 	for column := 1; column < grid.Width; column++ {
 		previous := grid.unwrappedLongitudeAt(column - 1)
 		current := grid.unwrappedLongitudeAt(column)
-		if !finite(previous) || !finite(current) || current <= previous {
+		step := current - previous
+		if !finite(previous) || !finite(current) ||
+			step <= 0 || step > 180+interpolationTolerance {
 			return fmt.Errorf(
-				"axe des longitudes non strictement croissant à la colonne %d",
+				"axe des longitudes invalide à la colonne %d",
 				column,
 			)
 		}
