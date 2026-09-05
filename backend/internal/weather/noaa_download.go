@@ -160,15 +160,6 @@ func (downloader *NOAAGFSDownloader) Download(
 	if strings.TrimSpace(outputDirectory) == "" {
 		return "", errors.New("weather: dossier de destination requis")
 	}
-	if downloader.HTTPClient == nil {
-		return "", errors.New("weather: client HTTP NOAA requis")
-	}
-	if strings.TrimSpace(downloader.Endpoint) == "" {
-		return "", errors.New("weather: URL du service NOAA requise")
-	}
-	if downloader.MaxDownloadSize <= 0 {
-		return "", errors.New("weather: limite de téléchargement invalide")
-	}
 	if downloader.validateFile == nil {
 		return "", errors.New("weather: validation du fichier téléchargé requise")
 	}
@@ -203,6 +194,16 @@ func (downloader *NOAAGFSDownloader) Download(
 			destination,
 			err,
 		)
+	}
+
+	if downloader.HTTPClient == nil {
+		return "", errors.New("weather: client HTTP NOAA requis")
+	}
+	if strings.TrimSpace(downloader.Endpoint) == "" {
+		return "", errors.New("weather: URL du service NOAA requise")
+	}
+	if downloader.MaxDownloadSize <= 0 {
+		return "", errors.New("weather: limite de téléchargement invalide")
 	}
 
 	sourceURL, err := downloader.forecastURL(request)
