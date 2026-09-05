@@ -289,10 +289,10 @@ Connaître le vent à n'importe quelle position et heure couverte par les prévi
 - [ ] Comparer quelques valeurs décodées avec un outil de référence.
 - [x] Extraire U et V à 10 mètres.
 - [ ] Charger une série d'échéances `f000`, `f003`, `f006`, etc.
-- [ ] Interpoler spatialement U et V.
+- [x] Interpoler spatialement U et V.
 - [ ] Interpoler temporellement entre deux échéances.
-- [ ] Calculer force et direction du vent.
-- [ ] Convertir les mètres par seconde en nœuds.
+- [x] Calculer force et direction du vent.
+- [x] Convertir les mètres par seconde en nœuds.
 - [ ] Mettre en cache les grilles décodées.
 - [ ] Stocker les GRIB dans un volume Docker.
 - [ ] Prévoir un téléchargement NOAA indépendant du moteur de routage.
