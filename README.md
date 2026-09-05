@@ -168,6 +168,37 @@ Pour comparer le résultat au jeu, relever la position au début puis à la fin 
 la période. Le calcul suppose un cap et une vitesse constants : il ne tient pas
 encore compte des variations de vent, des manœuvres ou de la stamina.
 
+## Télécharger une série météo NOAA
+
+La commande `gribdownload` télécharge depuis le filtre officiel NOMADS
+uniquement les composantes U et V à 10 mètres du modèle GFS 0,25°. Le
+téléchargement reste indépendant du moteur de routage.
+
+Depuis le dossier `backend` :
+
+```bash
+go run ./cmd/gribdownload \
+  -date 20260905 \
+  -cycle 06 \
+  -hours 0,3,6 \
+  -output ../data/weather
+```
+
+Les paramètres correspondent à :
+
+- `-date` : date du run au format `YYYYMMDD` ;
+- `-cycle` : cycle `00`, `06`, `12` ou `18` ;
+- `-hours` : échéances séparées par des virgules ;
+- `-output` : dossier local de destination.
+
+La date et le cycle doivent encore être disponibles sur NOMADS. Les fichiers
+déjà présents et valides sont réutilisés. Chaque téléchargement est écrit dans
+un fichier temporaire, entièrement décodé et validé, puis installé sous un nom
+comme `gfs.2026090506.f003.grb2`.
+
+Service officiel :
+[NOAA NOMADS — filtre GFS 0,25°](https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl).
+
 ## Vérifier un fichier météo GRIB2
 
 La commande `gribcheck` vérifie que le lecteur natif Go peut extraire et
