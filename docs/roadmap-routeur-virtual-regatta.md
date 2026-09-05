@@ -287,7 +287,7 @@ Connaître le vent à n'importe quelle position et heure couverte par les prévi
 - [ ] Créer `GRIB2WeatherProvider` derrière l'interface `WeatherProvider`.
 - [x] Tester un lecteur GRIB2 natif Go sur le fichier fourni.
 - [ ] Comparer quelques valeurs décodées avec un outil de référence.
-- [ ] Extraire U et V à 10 mètres.
+- [x] Extraire U et V à 10 mètres.
 - [ ] Charger une série d'échéances `f000`, `f003`, `f006`, etc.
 - [ ] Interpoler spatialement U et V.
 - [ ] Interpoler temporellement entre deux échéances.

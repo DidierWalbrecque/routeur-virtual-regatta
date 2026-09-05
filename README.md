@@ -170,8 +170,8 @@ encore compte des variations de vent, des manœuvres ou de la stamina.
 
 ## Vérifier un fichier météo GRIB2
 
-La commande `gribcheck` vérifie que le lecteur natif Go peut décoder toutes
-les grilles, coordonnées et valeurs d'un fichier NOAA GFS.
+La commande `gribcheck` vérifie que le lecteur natif Go peut extraire et
+valider les composantes U et V du vent à 10 mètres d'un fichier NOAA GFS.
 
 Depuis le dossier `backend` :
 

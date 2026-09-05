@@ -1,4 +1,5 @@
-// Command gribcheck diagnoses whether a GRIB2 file can be fully decoded.
+// Command gribcheck diagnoses whether a GRIB2 file contains a complete
+// ten-meter wind grid.
 package main
 
 import (
@@ -6,10 +7,11 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math"
 	"os"
+	"time"
 
-	"github.com/skysparq/grib2-go/file"
-	"github.com/skysparq/grib2-go/templates"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
 func main() {
@@ -38,57 +40,48 @@ func run(args []string, stdout io.Writer) error {
 		return fmt.Errorf("arguments inattendus: %v", flags.Args())
 	}
 
-	source, err := os.Open(*filePath)
+	info, err := os.Stat(*filePath)
 	if err != nil {
-		return fmt.Errorf("ouverture de %q impossible: %w", *filePath, err)
-	}
-
-	info, err := source.Stat()
-	if err != nil {
-		_ = source.Close()
-		return fmt.Errorf("lecture des informations de %q impossible: %w", *filePath, err)
+		return fmt.Errorf(
+			"lecture des informations de %q impossible: %w",
+			*filePath,
+			err,
+		)
 	}
 
 	fmt.Fprintf(stdout, "Fichier : %s\n", *filePath)
 	fmt.Fprintf(stdout, "Taille : %d octets\n", info.Size())
-	fmt.Fprintln(stdout, "Décodage complet des messages, coordonnées et valeurs...")
+	fmt.Fprintln(stdout, "Extraction des composantes U et V à 10 mètres...")
 
-	gribFile := file.NewGribFile(source, templates.Version33())
-	defer gribFile.Close()
-
-	messageCount := 0
-	for indexed, parseErr := range gribFile.Records {
-		if parseErr != nil {
-			return fmt.Errorf("lecture du message %d impossible: %w", indexed.MessageNumber, parseErr)
-		}
-
-		griddedValues, err := indexed.Record.GetGriddedValues()
-		if err != nil {
-			return fmt.Errorf(
-				"décodage des valeurs du message %d impossible: %w",
-				indexed.MessageNumber,
-				err,
-			)
-		}
-
-		fmt.Fprintf(
-			stdout,
-			"%d. grille 3.%d | produit 4.%d | données 5.%d | %d points décodés\n",
-			indexed.MessageNumber,
-			indexed.Record.Grid.GridDefinitionTemplateNumber,
-			indexed.Record.Product.ProductDefinitionTemplateNumber,
-			indexed.Record.DataRepresentation.DataRepresentationTemplateNumber,
-			len(griddedValues.Values),
-		)
-		messageCount++
+	grid, err := weather.LoadGRIB2WindGrid(*filePath)
+	if err != nil {
+		return err
 	}
 
-	if messageCount == 0 {
-		return errors.New("aucun message GRIB2 trouvé")
-	}
+	minU, maxU := minMax(grid.U)
+	minV, maxV := minMax(grid.V)
 
-	fmt.Fprintf(stdout, "Messages entièrement décodés : %d\n", messageCount)
+	fmt.Fprintf(stdout, "Échéance : %s\n", grid.ValidAt.Format(time.RFC3339))
+	fmt.Fprintf(stdout, "Grille : %d x %d\n", grid.Width, grid.Height)
+	fmt.Fprintf(stdout, "Points : %d\n", len(grid.U))
+	fmt.Fprintf(stdout, "Composante U : %.6f à %.6f m/s\n", minU, maxU)
+	fmt.Fprintf(stdout, "Composante V : %.6f à %.6f m/s\n", minV, maxV)
+	fmt.Fprintln(stdout, "Composantes U et V à 10 mètres validées.")
 	return nil
+}
+
+func minMax(values []float64) (float64, float64) {
+	minimum := math.Inf(1)
+	maximum := math.Inf(-1)
+	for _, value := range values {
+		if value < minimum {
+			minimum = value
+		}
+		if value > maximum {
+			maximum = value
+		}
+	}
+	return minimum, maximum
 }
 
 func printErrorChain(stderr io.Writer, err error) {
