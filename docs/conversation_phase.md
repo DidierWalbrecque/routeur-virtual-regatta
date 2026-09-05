@@ -480,7 +480,7 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 | 01 — Environnement Go et Docker | Terminée | API Go, tests et environnement Docker opérationnels. |
 | 02 — Lecture et interpolation des polaires | Terminée | Chargement validé, interpolation bilinéaire, meilleure voile et équipements testés. |
 | 03 — Optimisation des équipements | En cours | Prochains achats abordables classés avec leur gain marginal instantané. |
-| 04 — Lecture des fichiers GRIB2 | En cours | U/V extraits et interpolés spatialement ; force et direction du vent disponibles. |
+| 04 — Lecture des fichiers GRIB2 | En cours | Séries GRIB2 chargées ; U/V interpolés dans l’espace et le temps ; validation NOAA réelle à poursuivre. |
 | 05 — Navigation, manœuvres et stamina | En cours | Calculs de navigation validés sur un scénario VR réel ; manœuvres et stamina à venir. |
 | 06 — Moteur de routage | À démarrer | |
 | 07 — API et interface cartographique | À démarrer | |
