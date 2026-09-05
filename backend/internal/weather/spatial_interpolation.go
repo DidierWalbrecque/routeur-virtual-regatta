@@ -42,13 +42,7 @@ func (grid GRIB2WindGrid) ComponentsAt(
 		)
 	}
 
-	longitude, err := grid.longitudeForPosition(position.Longitude)
-	if err != nil {
-		return 0, 0, fmt.Errorf(
-			"weather: interpolation spatiale impossible: %w",
-			err,
-		)
-	}
+	longitude := grid.longitudeForPosition(position.Longitude)
 	west, east, longitudeRatio, err := grid.longitudeBounds(longitude)
 	if err != nil {
 		return 0, 0, fmt.Errorf(
@@ -133,8 +127,8 @@ func (grid GRIB2WindGrid) validateInterpolationShape() error {
 		}
 	}
 	for column := 1; column < grid.Width; column++ {
-		previous := grid.Longitudes[column-1]
-		current := grid.Longitudes[column]
+		previous := grid.unwrappedLongitudeAt(column - 1)
+		current := grid.unwrappedLongitudeAt(column)
 		if !finite(previous) || !finite(current) || current <= previous {
 			return fmt.Errorf(
 				"axe des longitudes non strictement croissant à la colonne %d",
@@ -180,27 +174,32 @@ func (grid GRIB2WindGrid) latitudeBounds(
 
 func (grid GRIB2WindGrid) longitudeForPosition(
 	longitude navigation.Longitude,
-) (float64, error) {
-	first := grid.Longitudes[0]
-	if first < 0 {
-		return float64(longitude), nil
-	}
+) float64 {
+	return unwrapLongitude(float64(longitude), grid.Longitudes[0])
+}
 
-	noaaLongitude, err := navigation.NOAALongitudeFromLongitude(longitude)
-	if err != nil {
-		return 0, fmt.Errorf(
-			"conversion de la longitude vers la grille NOAA impossible: %w",
-			err,
-		)
+func (grid GRIB2WindGrid) unwrappedLongitudeAt(column int) float64 {
+	return unwrapLongitude(
+		grid.Longitudes[column],
+		grid.Longitudes[0],
+	)
+}
+
+func unwrapLongitude(longitude, axisStart float64) float64 {
+	for longitude < axisStart-interpolationTolerance {
+		longitude += 360
 	}
-	return float64(noaaLongitude), nil
+	for longitude >= axisStart+360-interpolationTolerance {
+		longitude -= 360
+	}
+	return longitude
 }
 
 func (grid GRIB2WindGrid) longitudeBounds(
 	longitude float64,
 ) (int, int, float64, error) {
-	first := grid.Longitudes[0]
-	last := grid.Longitudes[grid.Width-1]
+	first := grid.unwrappedLongitudeAt(0)
+	last := grid.unwrappedLongitudeAt(grid.Width - 1)
 
 	if nearlyEqual(longitude, first) {
 		return 0, 0, 0, nil
@@ -208,18 +207,18 @@ func (grid GRIB2WindGrid) longitudeBounds(
 	if longitude >= first-interpolationTolerance &&
 		longitude <= last+interpolationTolerance {
 		east := sort.Search(grid.Width, func(column int) bool {
-			return grid.Longitudes[column] >= longitude
+			return grid.unwrappedLongitudeAt(column) >= longitude
 		})
 		if east == grid.Width {
 			east = grid.Width - 1
 		}
-		if nearlyEqual(grid.Longitudes[east], longitude) || east == 0 {
+		if nearlyEqual(grid.unwrappedLongitudeAt(east), longitude) || east == 0 {
 			return east, east, 0, nil
 		}
 
 		west := east - 1
-		westLongitude := grid.Longitudes[west]
-		eastLongitude := grid.Longitudes[east]
+		westLongitude := grid.unwrappedLongitudeAt(west)
+		eastLongitude := grid.unwrappedLongitudeAt(east)
 		ratio := (longitude - westLongitude) /
 			(eastLongitude - westLongitude)
 		return west, east, ratio, nil
@@ -253,9 +252,9 @@ func (grid GRIB2WindGrid) longitudeIsCyclic() bool {
 	if grid.Width < 2 {
 		return false
 	}
-	first := grid.Longitudes[0]
-	second := grid.Longitudes[1]
-	last := grid.Longitudes[grid.Width-1]
+	first := grid.unwrappedLongitudeAt(0)
+	second := grid.unwrappedLongitudeAt(1)
+	last := grid.unwrappedLongitudeAt(grid.Width - 1)
 	step := second - first
 	return step > 0 &&
 		nearlyEqual((last-first)+step, 360)
