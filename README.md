@@ -185,12 +185,29 @@ Pour interpoler le vent à une position précise :
 go run ./cmd/gribcheck -file ../data/weather/gfs.2026042906.f003.grb2 -latitude 13.121111 -longitude 121.586667
 ```
 
-La commande affiche alors les composantes U et V interpolées, la vitesse en
-mètres par seconde et en nœuds, ainsi que la direction météorologique.
+Pour contrôler une série de prévisions, répéter `-file` et fournir l'instant
+recherché au format RFC3339 avec `-at` :
 
-Le fichier météo reste local dans `data/weather/` et n'est pas ajouté au dépôt
-Git. Le fichier d'exemple contient deux messages, correspondant aux composantes
-U et V du vent à 10 mètres.
+```bash
+go run ./cmd/gribcheck \
+  -file ../data/weather/gfs.2026042906.f000.grb2 \
+  -file ../data/weather/gfs.2026042906.f003.grb2 \
+  -latitude 13.121111 \
+  -longitude 121.586667 \
+  -at 2026-04-29T07:30:00Z
+```
+
+L'instant doit être compris entre les échéances chargées. Le vent est interpolé
+sur les composantes U et V, d'abord dans l'espace pour chaque grille, puis dans
+le temps. La vitesse et la direction sont calculées après ces interpolations.
+
+La commande affiche la vitesse en mètres par seconde et en nœuds, ainsi que la
+direction météorologique. Pour une seule échéance exacte, elle affiche également
+les composantes U et V interpolées.
+
+Les fichiers météo restent locaux dans `data/weather/` et ne sont pas ajoutés
+au dépôt Git. Chaque fichier attendu contient deux messages, correspondant aux
+composantes U et V du vent à 10 mètres.
 
 ## État du projet
 
