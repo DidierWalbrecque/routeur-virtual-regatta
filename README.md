@@ -179,6 +179,15 @@ Depuis le dossier `backend` :
 go run ./cmd/gribcheck -file ../data/weather/gfs.2026042906.f003.grb2
 ```
 
+Pour interpoler le vent à une position précise :
+
+```bash
+go run ./cmd/gribcheck -file ../data/weather/gfs.2026042906.f003.grb2 -latitude 13.121111 -longitude 121.586667
+```
+
+La commande affiche alors les composantes U et V interpolées, la vitesse en
+mètres par seconde et en nœuds, ainsi que la direction météorologique.
+
 Le fichier météo reste local dans `data/weather/` et n'est pas ajouté au dépôt
 Git. Le fichier d'exemple contient deux messages, correspondant aux composantes
 U et V du vent à 10 mètres.
