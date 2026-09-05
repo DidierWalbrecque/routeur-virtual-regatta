@@ -1,4 +1,4 @@
-// Command gribcheck diagnoses whether a GRIB2 file can be decoded by Squall.
+// Command gribcheck diagnoses whether a GRIB2 file can be fully decoded.
 package main
 
 import (
@@ -8,7 +8,8 @@ import (
 	"io"
 	"os"
 
-	grib "github.com/mmp/squall"
+	"github.com/skysparq/grib2-go/file"
+	"github.com/skysparq/grib2-go/templates"
 )
 
 func main() {
@@ -37,43 +38,56 @@ func run(args []string, stdout io.Writer) error {
 		return fmt.Errorf("arguments inattendus: %v", flags.Args())
 	}
 
-	file, err := os.Open(*filePath)
+	source, err := os.Open(*filePath)
 	if err != nil {
 		return fmt.Errorf("ouverture de %q impossible: %w", *filePath, err)
 	}
-	defer file.Close()
 
-	info, err := file.Stat()
+	info, err := source.Stat()
 	if err != nil {
+		_ = source.Close()
 		return fmt.Errorf("lecture des informations de %q impossible: %w", *filePath, err)
 	}
 
 	fmt.Fprintf(stdout, "Fichier : %s\n", *filePath)
 	fmt.Fprintf(stdout, "Taille : %d octets\n", info.Size())
-	fmt.Fprintln(stdout, "Décodage séquentiel strict (aucune erreur ignorée)...")
+	fmt.Fprintln(stdout, "Décodage complet des messages, coordonnées et valeurs...")
 
-	fields, err := grib.ReadWithOptions(file, grib.WithSequential())
-	if err != nil {
-		return fmt.Errorf("décodage GRIB2 impossible: %w", err)
-	}
-	if len(fields) == 0 {
-		return errors.New("aucun message GRIB2 décodé sans erreur explicite")
-	}
+	gribFile := file.NewGribFile(source, templates.Version33())
+	defer gribFile.Close()
 
-	fmt.Fprintf(stdout, "Messages décodés : %d\n", len(fields))
-	for index, field := range fields {
+	messageCount := 0
+	for indexed, parseErr := range gribFile.Records {
+		if parseErr != nil {
+			return fmt.Errorf("lecture du message %d impossible: %w", indexed.MessageNumber, parseErr)
+		}
+
+		griddedValues, err := indexed.Record.GetGriddedValues()
+		if err != nil {
+			return fmt.Errorf(
+				"décodage des valeurs du message %d impossible: %w",
+				indexed.MessageNumber,
+				err,
+			)
+		}
+
 		fmt.Fprintf(
 			stdout,
-			"%d. %s | %s | grille %dx%d | %d points\n",
-			index+1,
-			field.Parameter.String(),
-			field.Level,
-			field.GridNi,
-			field.GridNj,
-			field.NumPoints,
+			"%d. grille 3.%d | produit 4.%d | données 5.%d | %d points décodés\n",
+			indexed.MessageNumber,
+			indexed.Record.Grid.GridDefinitionTemplateNumber,
+			indexed.Record.Product.ProductDefinitionTemplateNumber,
+			indexed.Record.DataRepresentation.DataRepresentationTemplateNumber,
+			len(griddedValues.Values),
 		)
+		messageCount++
 	}
 
+	if messageCount == 0 {
+		return errors.New("aucun message GRIB2 trouvé")
+	}
+
+	fmt.Fprintf(stdout, "Messages entièrement décodés : %d\n", messageCount)
 	return nil
 }
 
