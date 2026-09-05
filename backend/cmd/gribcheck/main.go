@@ -11,6 +11,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
@@ -26,6 +27,16 @@ func run(args []string, stdout io.Writer) error {
 	flags.SetOutput(io.Discard)
 
 	filePath := flags.String("file", "", "chemin du fichier GRIB2")
+	latitude := flags.Float64(
+		"latitude",
+		math.NaN(),
+		"latitude à interroger en degrés décimaux",
+	)
+	longitude := flags.Float64(
+		"longitude",
+		math.NaN(),
+		"longitude à interroger en degrés décimaux",
+	)
 	if err := flags.Parse(args); err != nil {
 		return fmt.Errorf("arguments invalides: %w", err)
 	}
@@ -38,6 +49,14 @@ func run(args []string, stdout io.Writer) error {
 	}
 	if flags.NArg() > 0 && flags.Arg(0) != *filePath {
 		return fmt.Errorf("arguments inattendus: %v", flags.Args())
+	}
+
+	hasLatitude := !math.IsNaN(*latitude)
+	hasLongitude := !math.IsNaN(*longitude)
+	if hasLatitude != hasLongitude {
+		return errors.New(
+			"-latitude et -longitude doivent être fournis ensemble",
+		)
 	}
 
 	info, err := os.Stat(*filePath)
@@ -67,6 +86,42 @@ func run(args []string, stdout io.Writer) error {
 	fmt.Fprintf(stdout, "Composante U : %.6f à %.6f m/s\n", minU, maxU)
 	fmt.Fprintf(stdout, "Composante V : %.6f à %.6f m/s\n", minV, maxV)
 	fmt.Fprintln(stdout, "Composantes U et V à 10 mètres validées.")
+
+	if hasLatitude {
+		position := navigation.Position{
+			Latitude:  navigation.Latitude(*latitude),
+			Longitude: navigation.Longitude(*longitude),
+		}
+		u, v, err := grid.ComponentsAt(position)
+		if err != nil {
+			return err
+		}
+		wind, err := navigation.WindFromComponents(u, v)
+		if err != nil {
+			return err
+		}
+		speedInKnots, err := navigation.KnotsFromMetersPerSecond(wind.Speed)
+		if err != nil {
+			return err
+		}
+
+		fmt.Fprintf(
+			stdout,
+			"Position : %.6f°, %.6f°\n",
+			*latitude,
+			*longitude,
+		)
+		fmt.Fprintf(stdout, "U interpolé : %.6f m/s\n", u)
+		fmt.Fprintf(stdout, "V interpolé : %.6f m/s\n", v)
+		fmt.Fprintf(
+			stdout,
+			"Vent : %.6f m/s | %.6f nd | direction %.3f°\n",
+			wind.Speed,
+			speedInKnots,
+			wind.Direction,
+		)
+	}
+
 	return nil
 }
 
