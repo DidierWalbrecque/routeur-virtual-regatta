@@ -57,7 +57,8 @@ func (grid GRIB2WindGrid) Validate() error {
 			grid.Height,
 		)
 	}
-	if grid.Width > math.MaxInt/grid.Height {
+	maxInt := int(^uint(0) >> 1)
+	if grid.Width > maxInt/grid.Height {
 		return fmt.Errorf("weather: dimensions de grille GRIB2 trop grandes")
 	}
 
