@@ -266,7 +266,7 @@ Les résultats de distance, cap et déplacement correspondent à des cas de réf
 
 ## Phase 6 — Lire et interpoler la météo GRIB2
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
