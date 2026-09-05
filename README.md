@@ -216,21 +216,30 @@ Pour interpoler le vent à une position précise :
 go run ./cmd/gribcheck -file ../data/weather/gfs.2026042906.f003.grb2 -latitude 13.121111 -longitude 121.586667
 ```
 
-Pour contrôler une série de prévisions, répéter `-file` et fournir l'instant
-recherché au format RFC3339 avec `-at` :
+Pour contrôler la météo pendant une course, répéter `-file` et fournir
+l'instant recherché au format RFC3339 UTC avec `-at` :
 
 ```bash
+cd ~/Documents/dev/routeur-virtual-regatta/backend
+
 go run ./cmd/gribcheck \
-  -file ../data/weather/gfs.2026042906.f000.grb2 \
-  -file ../data/weather/gfs.2026042906.f003.grb2 \
+  -file ../data/weather/gfs.2026090506.f000.grb2 \
+  -file ../data/weather/gfs.2026090506.f003.grb2 \
+  -file ../data/weather/gfs.2026090506.f006.grb2 \
   -latitude 13.121111 \
   -longitude 121.586667 \
-  -at 2026-04-29T07:30:00Z
+  -at 2026-09-05T07:30:00Z
 ```
+
+Remplacer la latitude, la longitude et l'heure UTC par les valeurs de la course.
+La date, le cycle et les noms de fichiers doivent correspondre à la série
+préalablement téléchargée avec `gribdownload`.
 
 L'instant doit être compris entre les échéances chargées. Le vent est interpolé
 sur les composantes U et V, d'abord dans l'espace pour chaque grille, puis dans
 le temps. La vitesse et la direction sont calculées après ces interpolations.
+Cette commande vérifie actuellement la météo seulement : elle ne calcule pas
+encore une route complète et ne se connecte pas à Virtual Regatta.
 
 La commande affiche la vitesse en mètres par seconde et en nœuds, ainsi que la
 direction météorologique. Pour une seule échéance exacte, elle affiche également
