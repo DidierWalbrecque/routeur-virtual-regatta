@@ -91,6 +91,29 @@ func TestGRIB2WindGridComponentsAtConvertsWestLongitudeToNOAA(t *testing.T) {
 	assertClose(t, "V", float64(v), -15)
 }
 
+func TestGRIB2WindGridComponentsAtUnwrapsLongitudeDiscontinuity(t *testing.T) {
+	grid := GRIB2WindGrid{
+		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
+		Width:      4,
+		Height:     1,
+		Latitudes:  []float64{0, 0, 0, 0},
+		Longitudes: []float64{0, 90, -180, -90},
+		U:          []float64{0, 1, 2, 3},
+		V:          []float64{10, 11, 12, 13},
+	}
+
+	u, v, err := grid.ComponentsAt(navigation.Position{
+		Latitude:  0,
+		Longitude: -135,
+	})
+	if err != nil {
+		t.Fatalf("interpolation après la coupure refusée: %v", err)
+	}
+
+	assertClose(t, "U", float64(u), 2.5)
+	assertClose(t, "V", float64(v), 12.5)
+}
+
 func TestGRIB2WindGridComponentsAtWrapsGlobalLongitude(t *testing.T) {
 	grid := GRIB2WindGrid{
 		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
