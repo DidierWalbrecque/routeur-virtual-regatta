@@ -8,7 +8,6 @@ import (
 	"time"
 
 	gribfile "github.com/skysparq/grib2-go/file"
-	"github.com/skysparq/grib2-go/record"
 	"github.com/skysparq/grib2-go/templates"
 )
 
