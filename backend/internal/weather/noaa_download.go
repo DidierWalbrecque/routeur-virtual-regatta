@@ -16,7 +16,7 @@ import (
 const (
 	defaultNOAAGFSEndpoint = "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfs_0p25.pl"
 	defaultMaxDownloadSize = int64(64 << 20)
-	gfsDateLayout           = "20060102"
+	gfsDateLayout          = "20060102"
 )
 
 // GFSForecastRequest identifie une échéance du modèle NOAA GFS 0,25°.
