@@ -16,6 +16,7 @@ import (
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
@@ -42,25 +43,6 @@ type options struct {
 	minutes     float64
 	stepMinutes float64
 	owned       equipment.EquipmentSet
-}
-
-type raceStepInput struct {
-	Position navigation.Position
-	Instant  time.Time
-	Heading  navigation.Heading
-	Minutes  float64
-	Owned    equipment.EquipmentSet
-}
-
-type raceStepResult struct {
-	Wind         navigation.Wind
-	WindKnots    navigation.Knots
-	WindAngle    navigation.TrueWindAngle
-	Tack         navigation.Tack
-	BestSail     polar.SailPerformance
-	Distance     navigation.NauticalMiles
-	NextPosition navigation.Position
-	NextInstant  time.Time
 }
 
 func main() {
@@ -93,17 +75,17 @@ func run(args []string, stdout, stderr io.Writer) error {
 		)
 	}
 
-	result, err := simulateRace(
+	result, err := simulation.Run(
 		context.Background(),
 		weatherProvider,
 		boatPolar,
-		raceSimulationInput{
-			Position:    options.position,
-			Instant:     options.instant,
-			Heading:     options.heading,
-			Minutes:     options.minutes,
-			StepMinutes: options.stepMinutes,
-			Owned:       options.owned,
+		simulation.Input{
+			Position:     options.position,
+			Instant:      options.instant,
+			Heading:      options.heading,
+			Duration:     time.Duration(options.minutes * float64(time.Minute)),
+			StepDuration: time.Duration(options.stepMinutes * float64(time.Minute)),
+			Owned:        options.owned,
 		},
 	)
 	if err != nil {
@@ -176,145 +158,6 @@ func run(args []string, stdout, stderr io.Writer) error {
 	)
 
 	return nil
-}
-
-func evaluateRaceStep(
-	ctx context.Context,
-	weatherProvider weather.WeatherProvider,
-	boatPolar *polar.Polar,
-	input raceStepInput,
-) (raceStepResult, error) {
-	if weatherProvider == nil {
-		return raceStepResult{}, errors.New(
-			"racecheck: fournisseur météo requis",
-		)
-	}
-	if boatPolar == nil {
-		return raceStepResult{}, errors.New("racecheck: polaire requise")
-	}
-	if err := input.Position.Validate(); err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: position invalide: %w",
-			err,
-		)
-	}
-	if input.Instant.IsZero() {
-		return raceStepResult{}, errors.New(
-			"racecheck: instant initial requis",
-		)
-	}
-	if err := input.Heading.Validate(); err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: cap invalide: %w",
-			err,
-		)
-	}
-	if math.IsNaN(input.Minutes) ||
-		math.IsInf(input.Minutes, 0) ||
-		input.Minutes <= 0 {
-		return raceStepResult{}, errors.New(
-			"racecheck: la durée doit être strictement positive",
-		)
-	}
-	if err := input.Owned.Validate(); err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: équipements invalides: %w",
-			err,
-		)
-	}
-
-	wind, err := weatherProvider.WindAt(
-		ctx,
-		input.Position,
-		input.Instant,
-	)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: calcul du vent impossible: %w",
-			err,
-		)
-	}
-	windKnots, err := navigation.KnotsFromMetersPerSecond(wind.Speed)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: conversion du vent impossible: %w",
-			err,
-		)
-	}
-	windAngle, err := navigation.TrueWindAngleFromHeading(
-		input.Heading,
-		wind.Direction,
-	)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: calcul du TWA impossible: %w",
-			err,
-		)
-	}
-	tack, err := navigation.TackFromHeading(
-		input.Heading,
-		wind.Direction,
-	)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: calcul de l'amure impossible: %w",
-			err,
-		)
-	}
-
-	effects, err := equipment.ResolveEffects(boatPolar, input.Owned)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: résolution des équipements impossible: %w",
-			err,
-		)
-	}
-	bestSail, err := boatPolar.BestEffectiveSailAt(
-		polar.WindSpeed(windKnots),
-		polar.TrueWindAngle(windAngle),
-		effects.AvailableSails,
-		effects.SpeedOptions,
-	)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: calcul de la vitesse impossible: %w",
-			err,
-		)
-	}
-
-	distance, err := navigation.DistanceAtConstantSpeed(
-		navigation.Knots(bestSail.Speed),
-		navigation.Seconds(input.Minutes*60),
-	)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: calcul de la distance impossible: %w",
-			err,
-		)
-	}
-	nextPosition, err := navigation.DestinationPosition(
-		input.Position,
-		input.Heading,
-		distance,
-	)
-	if err != nil {
-		return raceStepResult{}, fmt.Errorf(
-			"racecheck: calcul de la position suivante impossible: %w",
-			err,
-		)
-	}
-
-	duration := time.Duration(input.Minutes * float64(time.Minute))
-	return raceStepResult{
-		Wind:         wind,
-		WindKnots:    windKnots,
-		WindAngle:    windAngle,
-		Tack:         tack,
-		BestSail:     bestSail,
-		Distance:     distance,
-		NextPosition: nextPosition,
-		NextInstant:  input.Instant.Add(duration),
-	}, nil
 }
 
 func parseOptions(args []string, stderr io.Writer) (options, error) {
