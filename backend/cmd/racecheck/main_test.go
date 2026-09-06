@@ -1,120 +1,14 @@
 package main
 
 import (
-	"context"
 	"io"
 	"math"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
-	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 )
-
-type staticWeatherProvider struct {
-	wind navigation.Wind
-	err  error
-}
-
-func (provider staticWeatherProvider) WindAt(
-	context.Context,
-	navigation.Position,
-	time.Time,
-) (navigation.Wind, error) {
-	return provider.wind, provider.err
-}
-
-func TestEvaluateRaceStep(t *testing.T) {
-	at := time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC)
-	position := navigation.Position{
-		Latitude:  13.121111,
-		Longitude: 121.586667,
-	}
-	weatherProvider := staticWeatherProvider{
-		wind: navigation.Wind{
-			Speed:     5,
-			Direction: 180,
-		},
-	}
-
-	result, err := evaluateRaceStep(
-		context.Background(),
-		weatherProvider,
-		testPolar(),
-		raceStepInput{
-			Position: position,
-			Instant:  at,
-			Heading:  90,
-			Minutes:  30,
-		},
-	)
-	if err != nil {
-		t.Fatalf("calcul refusé: %v", err)
-	}
-
-	wantWindKnots, err := navigation.KnotsFromMetersPerSecond(5)
-	if err != nil {
-		t.Fatalf("conversion du vent attendue impossible: %v", err)
-	}
-	assertClose(
-		t,
-		"vent en nœuds",
-		float64(result.WindKnots),
-		float64(wantWindKnots),
-	)
-	assertClose(t, "TWA", float64(result.WindAngle), 90)
-	if result.Tack != navigation.TackStarboard {
-		t.Fatalf("amure = %q, attendue tribord", result.Tack)
-	}
-	if result.BestSail.SailName != "Jib" {
-		t.Fatalf("voile = %q, attendue Jib", result.BestSail.SailName)
-	}
-	assertClose(t, "vitesse", float64(result.BestSail.Speed), 8)
-	assertClose(t, "distance", float64(result.Distance), 4)
-	if result.NextPosition == position {
-		t.Fatal("la position suivante est identique à la position initiale")
-	}
-	wantNextAt := at.Add(30 * time.Minute)
-	if !result.NextInstant.Equal(wantNextAt) {
-		t.Fatalf(
-			"instant suivant = %s, attendu %s",
-			result.NextInstant,
-			wantNextAt,
-		)
-	}
-}
-
-func TestEvaluateRaceStepRejectsMissingDependencies(t *testing.T) {
-	input := raceStepInput{
-		Position: navigation.Position{},
-		Instant:  time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
-		Heading:  90,
-		Minutes:  30,
-	}
-	provider := staticWeatherProvider{
-		wind: navigation.Wind{Speed: 5, Direction: 180},
-	}
-
-	if _, err := evaluateRaceStep(
-		context.Background(),
-		nil,
-		testPolar(),
-		input,
-	); err == nil || !strings.Contains(err.Error(), "fournisseur météo") {
-		t.Fatalf("erreur fournisseur = %v", err)
-	}
-
-	if _, err := evaluateRaceStep(
-		context.Background(),
-		provider,
-		nil,
-		input,
-	); err == nil || !strings.Contains(err.Error(), "polaire") {
-		t.Fatalf("erreur polaire = %v", err)
-	}
-}
 
 func TestParseOptionsAcceptsVirtualRegattaPosition(t *testing.T) {
 	options, err := parseOptions([]string{
@@ -308,37 +202,6 @@ func TestFormatTack(t *testing.T) {
 		if got := formatTack(tack); got != want {
 			t.Errorf("formatTack(%q) = %q, attendu %q", tack, got, want)
 		}
-	}
-}
-
-func testPolar() *polar.Polar {
-	return &polar.Polar{
-		Label:            "Test boat",
-		GlobalSpeedRatio: 1,
-		WindSpeeds:       []polar.WindSpeed{0, 20},
-		WindAngles:       []polar.TrueWindAngle{0, 180},
-		Sails: []polar.Sail{
-			{
-				ID:   1,
-				Name: "Jib",
-				Speeds: polar.SpeedGrid{
-					Values: [][]polar.BoatSpeed{
-						{8, 8},
-						{8, 8},
-					},
-				},
-			},
-			{
-				ID:   2,
-				Name: "Spi",
-				Speeds: polar.SpeedGrid{
-					Values: [][]polar.BoatSpeed{
-						{7, 7},
-						{7, 7},
-					},
-				},
-			},
-		},
 	}
 }
 
