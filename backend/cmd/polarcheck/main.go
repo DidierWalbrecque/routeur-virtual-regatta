@@ -162,20 +162,7 @@ func run(args []string, stdout io.Writer, stderr io.Writer) error {
 }
 
 func parseEquipmentSet(value string) (equipment.EquipmentSet, error) {
-	if strings.TrimSpace(value) == "" {
-		return equipment.NewSet()
-	}
-
-	parts := strings.Split(value, ",")
-	items := make([]equipment.Equipment, 0, len(parts))
-	for _, part := range parts {
-		item, err := equipment.Parse(part)
-		if err != nil {
-			return 0, err
-		}
-		items = append(items, item)
-	}
-	return equipment.NewSet(items...)
+	return equipment.ParseSet(value)
 }
 
 func formatEquipmentSet(set equipment.EquipmentSet) string {
