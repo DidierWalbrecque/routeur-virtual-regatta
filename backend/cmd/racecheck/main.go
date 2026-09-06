@@ -1,5 +1,5 @@
-// Command racecheck evaluates one constant-heading course step with real
-// weather, a boat polar and the owned equipment.
+// Command racecheck simulates a constant-heading course with real weather,
+// a boat polar and the owned equipment.
 package main
 
 import (
@@ -34,13 +34,14 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files     filePaths
-	polarPath string
-	position  navigation.Position
-	instant   time.Time
-	heading   navigation.Heading
-	minutes   float64
-	owned     equipment.EquipmentSet
+	files       filePaths
+	polarPath   string
+	position    navigation.Position
+	instant     time.Time
+	heading     navigation.Heading
+	minutes     float64
+	stepMinutes float64
+	owned       equipment.EquipmentSet
 }
 
 type raceStepInput struct {
@@ -92,21 +93,23 @@ func run(args []string, stdout, stderr io.Writer) error {
 		)
 	}
 
-	result, err := evaluateRaceStep(
+	result, err := simulateRace(
 		context.Background(),
 		weatherProvider,
 		boatPolar,
-		raceStepInput{
-			Position: options.position,
-			Instant:  options.instant,
-			Heading:  options.heading,
-			Minutes:  options.minutes,
-			Owned:    options.owned,
+		raceSimulationInput{
+			Position:    options.position,
+			Instant:     options.instant,
+			Heading:     options.heading,
+			Minutes:     options.minutes,
+			StepMinutes: options.stepMinutes,
+			Owned:       options.owned,
 		},
 	)
 	if err != nil {
 		return err
 	}
+	lastStep := result.Steps[len(result.Steps)-1]
 
 	initialPosition, err := navigation.FormatVirtualRegattaPosition(
 		options.position,
@@ -139,21 +142,27 @@ func run(args []string, stdout, stderr io.Writer) error {
 	fmt.Fprintf(stdout, "Cap constant : %.2f°\n", options.heading)
 	fmt.Fprintf(
 		stdout,
-		"Vent NOAA : %.6f nd | direction %.3f°\n",
-		result.WindKnots,
-		result.Wind.Direction,
+		"Pas de calcul : %.2f min | %d pas\n",
+		options.stepMinutes,
+		len(result.Steps),
 	)
 	fmt.Fprintf(
 		stdout,
-		"TWA : %.3f° | amure %s\n",
-		result.WindAngle,
-		formatTack(result.Tack),
+		"Vent NOAA au dernier pas : %.6f nd | direction %.3f°\n",
+		lastStep.WindKnots,
+		lastStep.Wind.Direction,
 	)
-	fmt.Fprintf(stdout, "Meilleure voile : %s\n", result.BestSail.SailName)
 	fmt.Fprintf(
 		stdout,
-		"Vitesse attendue : %.6f nd\n",
-		result.BestSail.Speed,
+		"TWA au dernier pas : %.3f° | amure %s\n",
+		lastStep.WindAngle,
+		formatTack(lastStep.Tack),
+	)
+	fmt.Fprintf(stdout, "Voile au dernier pas : %s\n", lastStep.BestSail.SailName)
+	fmt.Fprintf(
+		stdout,
+		"Vitesse au dernier pas : %.6f nd\n",
+		lastStep.BestSail.Speed,
 	)
 	fmt.Fprintf(stdout, "Durée simulée : %.2f min\n", options.minutes)
 	fmt.Fprintf(stdout, "Distance parcourue : %.6f NM\n", result.Distance)
@@ -351,7 +360,12 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	minutes := flags.Float64(
 		"minutes",
 		math.NaN(),
-		"durée à simuler en minutes",
+		"durée totale à simuler en minutes",
+	)
+	stepMinutes := flags.Float64(
+		"step-minutes",
+		10,
+		"durée maximale d'un pas de calcul en minutes",
 	)
 	ownedText := flags.String(
 		"owned",
@@ -422,6 +436,13 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 			"racecheck: -minutes doit être strictement positif",
 		)
 	}
+	if math.IsNaN(*stepMinutes) ||
+		math.IsInf(*stepMinutes, 0) ||
+		*stepMinutes <= 0 {
+		return options{}, errors.New(
+			"racecheck: -step-minutes doit être strictement positif",
+		)
+	}
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
 		return options{}, fmt.Errorf(
@@ -435,6 +456,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.instant = instant
 	result.heading = initialHeading
 	result.minutes = *minutes
+	result.stepMinutes = *stepMinutes
 	result.owned = owned
 	return result, nil
 }

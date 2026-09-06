@@ -266,7 +266,8 @@ go run ./cmd/racecheck \
   -position "13°N 07'16\" - 121°E 35'12\"" \
   -at 2026-09-05T07:30:00Z \
   -heading 321 \
-  -minutes 10 \
+  -minutes 240 \
+  -step-minutes 10 \
   -owned code0,foils
 ```
 
@@ -274,9 +275,17 @@ La position peut aussi être fournie avec `-latitude` et `-longitude` en
 degrés décimaux. Les équipements acceptés par `-owned` sont les mêmes que pour
 `polarcheck`.
 
-Cette commande simule un seul pas à cap constant. Le vent, la voile et la
-vitesse sont calculés à l'instant initial puis conservés pendant la durée
-demandée. Elle ne recherche pas encore le meilleur cap, ne modélise pas les
+Cette commande simule une navigation à cap constant pendant la durée totale
+donnée par `-minutes`. L'option `-step-minutes` fixe le pas maximal de
+calcul : à chaque pas, le vent, le TWA, l'amure, la meilleure voile et la
+vitesse sont recalculés à la nouvelle position et au nouvel instant. Le dernier
+pas est raccourci lorsque la durée totale n'est pas un multiple du pas.
+
+Pour couvrir quatre heures avec un recalcul toutes les dix minutes, utiliser
+`-minutes 240 -step-minutes 10`. Les fichiers GRIB2 doivent couvrir toute la
+période simulée.
+
+La commande ne recherche pas encore le meilleur cap, ne modélise pas les
 manœuvres ou la stamina et ne se connecte pas à Virtual Regatta.
 
 ## État du projet
