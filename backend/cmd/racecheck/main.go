@@ -52,14 +52,14 @@ type raceStepInput struct {
 }
 
 type raceStepResult struct {
-	Wind          navigation.Wind
-	WindKnots     navigation.Knots
-	WindAngle     navigation.TrueWindAngle
-	Tack          navigation.Tack
-	BestSail      polar.SailPerformance
-	Distance      navigation.NauticalMiles
-	NextPosition  navigation.Position
-	NextInstant   time.Time
+	Wind         navigation.Wind
+	WindKnots    navigation.Knots
+	WindAngle    navigation.TrueWindAngle
+	Tack         navigation.Tack
+	BestSail     polar.SailPerformance
+	Distance     navigation.NauticalMiles
+	NextPosition navigation.Position
+	NextInstant  time.Time
 }
 
 func main() {

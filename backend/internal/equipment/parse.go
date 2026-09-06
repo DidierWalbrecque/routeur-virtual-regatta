@@ -29,7 +29,6 @@ func Parse(value string) (Equipment, error) {
 	}
 }
 
-
 // ParseSet transforme une liste d'identifiants séparés par des virgules en
 // ensemble d'équipements. Une chaîne vide représente l'équipement de base.
 func ParseSet(value string) (EquipmentSet, error) {

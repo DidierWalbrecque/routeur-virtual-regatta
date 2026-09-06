@@ -32,7 +32,6 @@ func TestParseEquipmentRejectsUnknownValue(t *testing.T) {
 	}
 }
 
-
 func TestParseEquipmentSet(t *testing.T) {
 	set, err := ParseSet("code0, Foils,code0")
 	if err != nil {

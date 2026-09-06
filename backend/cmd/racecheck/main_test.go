@@ -205,8 +205,8 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 		wantErr string
 	}{
 		{
-			name: "fichier absent",
-			args: base[2:],
+			name:    "fichier absent",
+			args:    base[2:],
 			wantErr: "-file",
 		},
 		{
