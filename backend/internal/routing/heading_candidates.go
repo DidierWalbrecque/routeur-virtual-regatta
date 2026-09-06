@@ -58,7 +58,7 @@ func EvaluateHeadingCandidates(
 			return nil, fmt.Errorf(
 				"routing: cap dupliqué pour le candidat %d: %.6f°",
 				index+1,
-			heading,
+				heading,
 			)
 		}
 		seen[heading] = struct{}{}
