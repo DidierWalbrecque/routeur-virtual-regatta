@@ -249,6 +249,36 @@ Les fichiers météo restent locaux dans `data/weather/` et ne sont pas ajoutés
 au dépôt Git. Chaque fichier attendu contient deux messages, correspondant aux
 composantes U et V du vent à 10 mètres.
 
+## Vérifier une étape complète pendant une course
+
+La commande `racecheck` réunit les composants déjà disponibles : météo GRIB2,
+calcul du TWA et de l'amure, polaire, équipements, meilleure voile, vitesse et
+position suivante.
+
+Depuis le dossier `backend` :
+
+```bash
+go run ./cmd/racecheck \
+  -file ../data/weather/gfs.2026090506.f000.grb2 \
+  -file ../data/weather/gfs.2026090506.f003.grb2 \
+  -file ../data/weather/gfs.2026090506.f006.grb2 \
+  -polar ../data/polars/ultim_bp_11.json \
+  -position "13°N 07'16\" - 121°E 35'12\"" \
+  -at 2026-09-05T07:30:00Z \
+  -heading 321 \
+  -minutes 10 \
+  -owned code0,foils
+```
+
+La position peut aussi être fournie avec `-latitude` et `-longitude` en
+degrés décimaux. Les équipements acceptés par `-owned` sont les mêmes que pour
+`polarcheck`.
+
+Cette commande simule un seul pas à cap constant. Le vent, la voile et la
+vitesse sont calculés à l'instant initial puis conservés pendant la durée
+demandée. Elle ne recherche pas encore le meilleur cap, ne modélise pas les
+manœuvres ou la stamina et ne se connecte pas à Virtual Regatta.
+
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
