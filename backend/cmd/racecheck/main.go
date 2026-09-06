@@ -154,15 +154,15 @@ func run(args []string, stdout, stderr io.Writer) error {
 	)
 	fmt.Fprintf(
 		stdout,
-		"TWA : %.3f° | amure %s\n",
+		"TWA au dernier pas : %.3f° | amure %s\n",
 		lastStep.WindAngle,
 		formatTack(lastStep.Tack),
 	)
-	fmt.Fprintf(stdout, "Meilleure voile : %s\n", result.BestSail.SailName)
+	fmt.Fprintf(stdout, "Voile au dernier pas : %s\n", lastStep.BestSail.SailName)
 	fmt.Fprintf(
 		stdout,
-		"Vitesse attendue : %.6f nd\n",
-		result.BestSail.Speed,
+		"Vitesse au dernier pas : %.6f nd\n",
+		lastStep.BestSail.Speed,
 	)
 	fmt.Fprintf(stdout, "Durée simulée : %.2f min\n", options.minutes)
 	fmt.Fprintf(stdout, "Distance parcourue : %.6f NM\n", result.Distance)
