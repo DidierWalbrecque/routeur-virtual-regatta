@@ -28,3 +28,26 @@ func Parse(value string) (Equipment, error) {
 		)
 	}
 }
+
+
+// ParseSet transforme une liste d'identifiants séparés par des virgules en
+// ensemble d'équipements. Une chaîne vide représente l'équipement de base.
+func ParseSet(value string) (EquipmentSet, error) {
+	if strings.TrimSpace(value) == "" {
+		return NewSet()
+	}
+
+	parts := strings.Split(value, ",")
+	items := make([]Equipment, 0, len(parts))
+	for _, part := range parts {
+		item, err := Parse(part)
+		if err != nil {
+			return 0, fmt.Errorf(
+				"equipment: lecture de la liste impossible: %w",
+				err,
+			)
+		}
+		items = append(items, item)
+	}
+	return NewSet(items...)
+}
