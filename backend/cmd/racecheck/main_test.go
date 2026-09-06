@@ -155,6 +155,9 @@ func TestParseOptionsAcceptsVirtualRegattaPosition(t *testing.T) {
 	if options.minutes != 10 {
 		t.Fatalf("durée = %v", options.minutes)
 	}
+	if options.stepMinutes != 10 {
+		t.Fatalf("durée d'un pas = %v, attendue 10", options.stepMinutes)
+	}
 	if !options.owned.Has(equipment.Code0) ||
 		!options.owned.Has(equipment.Foils) {
 		t.Fatalf("équipements = %v", options.owned)
