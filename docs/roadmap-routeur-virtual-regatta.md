@@ -341,7 +341,7 @@ Les durées et consommations correspondent aux règles connues et évoluent cont
 
 ## Phase 8 — Construire le moteur de routage par isochrones
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
@@ -349,17 +349,24 @@ Calculer une route complète dans une météo qui évolue avec le temps.
 
 ### Tâches
 
-- [ ] Définir le pas de temps du calcul.
-- [ ] Générer plusieurs caps depuis chaque état.
-- [ ] Déplacer le bateau selon météo, polaire et équipement.
+- [x] Définir le pas de temps du calcul.
+- [x] Générer plusieurs caps depuis chaque état.
+- [x] Déplacer le bateau selon météo, polaire et équipement.
 - [ ] Conserver cap, voile, stamina, amure et parent dans chaque nœud.
-- [ ] Découper le front d'isochrones en secteurs.
+- [x] Découper le front d'isochrones en secteurs.
 - [ ] Supprimer les états dominés sans supprimer des réserves de stamina utiles.
-- [ ] Détecter l'arrivée.
-- [ ] Reconstruire la route depuis les parents.
+- [x] Détecter l'arrivée.
+- [x] Reconstruire la route depuis les parents.
 - [ ] Retourner caps, voiles, manœuvres et heures.
 - [ ] Exporter la route en GeoJSON.
-- [ ] Ajouter l'annulation et la progression d'un calcul.
+- [x] Ajouter l'annulation et la progression d'un calcul.
+
+### État actuel
+
+Le routage en pleine mer produit des fronts successifs, reconstruit la meilleure
+route et limite adaptativement leur taille. Sur le scénario réel de référence
+de quatre heures, la limite de 500 candidats réduit le temps de calcul de
+24,832 s à 9,600 s, avec une perte de progression de 0,783 NM.
 
 ### Livrable
 
