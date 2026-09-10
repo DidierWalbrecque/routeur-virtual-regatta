@@ -296,10 +296,10 @@ func TestWriteResult(t *testing.T) {
 		Progress:          1,
 	}
 	search := routing.IsochroneSearch{
-		Origin:       position,
-		Destination:  destination,
-		StartedAt:    instant,
-		StepDuration: 10 * time.Minute,
+		Origin:        position,
+		Destination:   destination,
+		StartedAt:     instant,
+		StepDuration:  10 * time.Minute,
 		MaxCandidates: 500,
 		Frontiers: []routing.IsochroneFrontier{
 			{
