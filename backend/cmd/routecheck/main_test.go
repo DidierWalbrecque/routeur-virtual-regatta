@@ -26,6 +26,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-step-minutes", "10",
 		"-heading-spacing", "15",
 		"-cell-size", "2.5",
+		"-max-candidates", "100",
 		"-arrival-radius", "0.5",
 		"-owned", "code0,foils",
 	}, io.Discard)
@@ -72,6 +73,12 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 	if options.cellSize != 2.5 {
 		t.Errorf("taille de cellule = %.3f NM, attendue 2.5", options.cellSize)
 	}
+	if options.maxCandidates != 100 {
+		t.Errorf(
+			"limite = %d, attendue 100",
+			options.maxCandidates,
+		)
+	}
 	if options.arrivalRadius != 0.5 {
 		t.Errorf(
 			"rayon d'arrivée = %.3f NM, attendu 0.5",
@@ -110,6 +117,12 @@ func TestParseOptionsAcceptsDecimalPositionsAndDefaults(t *testing.T) {
 	}
 	if options.cellSize != 1 {
 		t.Errorf("taille de cellule = %.3f NM, attendue 1", options.cellSize)
+	}
+	if options.maxCandidates != 500 {
+		t.Errorf(
+			"limite = %d, attendue 500",
+			options.maxCandidates,
+		)
 	}
 	if options.arrivalRadius != 1 {
 		t.Errorf(
@@ -208,6 +221,14 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			wantErr: "-cell-size",
 		},
 		{
+			name: "limite de candidats trop petite",
+			args: append(
+				append([]string{}, base...),
+				"-max-candidates", "3",
+			),
+			wantErr: "-max-candidates",
+		},
+		{
 			name: "rayon d'arrivée négatif",
 			args: append(
 				append([]string{}, base...),
@@ -279,11 +300,13 @@ func TestWriteResult(t *testing.T) {
 		Destination:  destination,
 		StartedAt:    instant,
 		StepDuration: 10 * time.Minute,
+		MaxCandidates: 500,
 		Frontiers: []routing.IsochroneFrontier{
 			{
-				Index:   1,
-				Instant: instant.Add(10 * time.Minute),
-				Nodes:   []routing.IsochroneNode{node},
+				Index:    1,
+				Instant:  instant.Add(10 * time.Minute),
+				CellSize: 1,
+				Nodes:    []routing.IsochroneNode{node},
 			},
 		},
 	}
@@ -309,6 +332,7 @@ func TestWriteResult(t *testing.T) {
 		layerCount:     1,
 		headingSpacing: 10,
 		cellSize:       1,
+		maxCandidates:  500,
 		arrivalRadius:  1,
 	}
 
@@ -335,6 +359,7 @@ func TestWriteResult(t *testing.T) {
 		"Position finale VR :",
 		"Destination atteinte : non",
 		"Positions conservées par front : 1",
+		"Cellules effectives par front : 1.000",
 	} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("sortie absente %q:\n%s", expected, output.String())
