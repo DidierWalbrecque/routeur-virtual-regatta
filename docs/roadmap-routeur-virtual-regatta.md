@@ -157,7 +157,7 @@ Créer les structures utilisées par tous les modules sans les lier à l'interfa
 - [ ] Définir `Position`, `Wind`, `Heading` et `TimeStep`.
 - [x] Définir `Polar`, `Sail`, `Foil`, `Hull` et `Winch`.
 - [x] Définir `RaceConfiguration`, `RaceBudget` et `Equipment`.
-- [ ] Définir `BoatState`, `StaminaState` et `ManeuverState`.
+- [x] Définir `BoatState`, `StaminaState` et `ManeuverState`.
 - [ ] Définir `RouteRequest`, `RouteNode` et `RouteResult`.
 - [ ] Définir les interfaces `WeatherProvider`, `PolarProvider`, `Constraint` et `Router`.
 - [x] Définir les erreurs métier et les règles de validation des polaires.
@@ -311,11 +311,14 @@ Les valeurs interpolées sont continues dans l'espace et le temps et concordent 
 
 ## Phase 7 — Modéliser les manœuvres et la stamina
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
 Calculer le véritable coût d'une transition de cap ou de voile.
+
+Le modèle sépare la manœuvre nautique du changement de voile afin de
+représenter les actions simultanées sans figer leur règle de cumul.
 
 ### Tâches
 
