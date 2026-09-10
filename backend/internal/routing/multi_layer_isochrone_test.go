@@ -228,6 +228,78 @@ func TestBuildIsochroneSearchPrunesEveryFrontier(t *testing.T) {
 	}
 }
 
+func TestBuildIsochroneSearchLimitsFrontierSizeAdaptively(t *testing.T) {
+	provider := &staticWeatherProvider{
+		wind: navigation.Wind{
+			Speed:     5,
+			Direction: 180,
+		},
+	}
+	const (
+		layerCount    = 6
+		maxCandidates = 8
+	)
+	search, err := BuildIsochroneSearch(
+		context.Background(),
+		provider,
+		testPolar(),
+		IsochroneSearchInput{
+			Position:       navigation.Position{},
+			Destination:    navigation.Position{Longitude: 10},
+			Instant:        time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			StepDuration:   time.Hour,
+			LayerCount:     layerCount,
+			HeadingSpacing: 15,
+			CellSize:       1,
+			MaxCandidates:  maxCandidates,
+		},
+	)
+	if err != nil {
+		t.Fatalf("construction refusée: %v", err)
+	}
+	if search.MaxCandidates != maxCandidates {
+		t.Errorf(
+			"limite = %d, attendue %d",
+			search.MaxCandidates,
+			maxCandidates,
+		)
+	}
+
+	cellSizeIncreased := false
+	for index, frontier := range search.Frontiers {
+		if len(frontier.Nodes) > maxCandidates {
+			t.Errorf(
+				"front %d : %d positions, limite %d",
+				index+1,
+				len(frontier.Nodes),
+				maxCandidates,
+			)
+		}
+		if frontier.CellSize < 1 {
+			t.Errorf(
+				"front %d : cellule %.3f NM inférieure au minimum",
+				index+1,
+				frontier.CellSize,
+			)
+		}
+		if frontier.CellSize > 1 {
+			cellSizeIncreased = true
+		}
+	}
+	if !cellSizeIncreased {
+		t.Fatal("la taille des cellules n'a jamais été augmentée")
+	}
+
+	maximumCalls := 24 + (layerCount-1)*maxCandidates*24
+	if provider.calls > maximumCalls {
+		t.Errorf(
+			"appels météo = %d, maximum attendu %d",
+			provider.calls,
+			maximumCalls,
+		)
+	}
+}
+
 func TestBuildIsochroneSearchStopsAtArrivalRadius(t *testing.T) {
 	provider := &staticWeatherProvider{
 		wind: navigation.Wind{
@@ -390,6 +462,17 @@ func TestBuildIsochroneSearchRejectsInvalidInputs(t *testing.T) {
 				return input
 			}(),
 			wantErr: "rayon d'arrivée",
+		},
+		{
+			name:      "limite de candidats trop petite",
+			provider:  validProvider(),
+			boatPolar: testPolar(),
+			input: func() IsochroneSearchInput {
+				input := validInput
+				input.MaxCandidates = 3
+				return input
+			}(),
+			wantErr: "au moins égale à 4",
 		},
 		{
 			name:      "grille de caps invalide",

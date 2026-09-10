@@ -309,6 +309,7 @@ go run ./cmd/routecheck \
   -step-minutes 10 \
   -heading-spacing 15 \
   -cell-size 1 \
+  -max-candidates 500 \
   -arrival-radius 1 \
   -owned code0,foils
 ```
@@ -319,7 +320,9 @@ Les paramètres spécifiques au routage correspondent à :
 - `-minutes` : horizon total du calcul, multiple exact du pas ;
 - `-step-minutes` : durée séparant deux fronts d'isochrones ;
 - `-heading-spacing` : écart en degrés entre les caps explorés ;
-- `-cell-size` : côté des cellules d'élagage en milles nautiques ;
+- `-cell-size` : taille minimale des cellules d'élagage en milles nautiques ;
+- `-max-candidates` : nombre maximal de positions conservées par front,
+  par défaut 500 ; la valeur 0 désactive la limite ;
 - `-arrival-radius` : distance maximale de la destination considérée comme
   une arrivée, par défaut 1 NM.
 
@@ -331,11 +334,18 @@ que `racecheck`.
 La commande affiche chaque étape de la route retenue avec le cap, le vent, le
 TWA, l'amure, la voile, la vitesse, la position, la distance restante et la
 progression globale. Elle indique aussi le nombre de positions conservées dans
-chaque front et si la destination a été atteinte. Le calcul s'arrête au premier
-front dont le meilleur point entre dans le rayon d'arrivée.
+chaque front, la taille de cellule effectivement utilisée et si la destination
+a été atteinte. Le calcul s'arrête au premier front dont le meilleur point
+entre dans le rayon d'arrivée.
 
-Un espacement de caps ou une taille de cellule plus petits augmentent la
-précision, mais aussi le temps de calcul et la mémoire utilisés. Commencer avec
+Lorsque le nombre de positions dépasse `-max-candidates`, le moteur agrandit
+progressivement les cellules pour réduire le front tout en conservant une
+répartition géographique. La taille demandée par `-cell-size` reste donc un
+minimum ; la sortie permet de voir si elle a dû être augmentée.
+
+Un espacement de caps plus petit, une cellule minimale plus petite ou une
+limite de candidats plus élevée préservent davantage de routes alternatives,
+mais augmentent le temps de calcul et la mémoire utilisés. Commencer avec
 `-heading-spacing 15 -cell-size 1` pour un test d'une heure. Pour tester quatre
 heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.

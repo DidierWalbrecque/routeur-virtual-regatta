@@ -48,6 +48,7 @@ type options struct {
 	owned          equipment.EquipmentSet
 	headingSpacing float64
 	cellSize       navigation.NauticalMiles
+	maxCandidates  int
 	arrivalRadius  navigation.NauticalMiles
 }
 
@@ -94,6 +95,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			Owned:          options.owned,
 			HeadingSpacing: options.headingSpacing,
 			CellSize:       options.cellSize,
+			MaxCandidates:  options.maxCandidates,
 			ArrivalRadius:  options.arrivalRadius,
 		},
 	)
@@ -150,9 +152,10 @@ func writeResult(
 	)
 	fmt.Fprintf(
 		stdout,
-		"Exploration : caps tous les %.2f° | cellules %.3f NM | arrivée %.3f NM\n",
+		"Exploration : caps tous les %.2f° | cellules min. %.3f NM | limite %d | arrivée %.3f NM\n",
 		options.headingSpacing,
 		options.cellSize,
+		options.maxCandidates,
 		options.arrivalRadius,
 	)
 	fmt.Fprintln(stdout, "Route retenue :")
@@ -227,6 +230,11 @@ func writeResult(
 		fmt.Fprintf(stdout, " %d", len(frontier.Nodes))
 	}
 	fmt.Fprintln(stdout)
+	fmt.Fprint(stdout, "Cellules effectives par front :")
+	for _, frontier := range search.Frontiers {
+		fmt.Fprintf(stdout, " %.3f", frontier.CellSize)
+	}
+	fmt.Fprintln(stdout)
 
 	return nil
 }
@@ -299,7 +307,12 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	cellSize := flags.Float64(
 		"cell-size",
 		1,
-		"taille d'une cellule d'élagage en milles nautiques",
+		"taille minimale d'une cellule d'élagage en milles nautiques",
+	)
+	maxCandidates := flags.Int(
+		"max-candidates",
+		500,
+		"nombre maximal de positions conservées par front ; 0 désactive la limite",
 	)
 	arrivalRadius := flags.Float64(
 		"arrival-radius",
@@ -410,6 +423,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 			"routecheck: -cell-size doit être strictement positif",
 		)
 	}
+	if *maxCandidates != 0 && *maxCandidates < 4 {
+		return options{}, errors.New(
+			"routecheck: -max-candidates doit être nul ou au moins égal à 4",
+		)
+	}
 	arrivalRadiusValue := navigation.NauticalMiles(*arrivalRadius)
 	if math.IsNaN(*arrivalRadius) ||
 		math.IsInf(*arrivalRadius, 0) ||
@@ -437,6 +455,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.owned = owned
 	result.headingSpacing = *headingSpacing
 	result.cellSize = cellSizeValue
+	result.maxCandidates = *maxCandidates
 	result.arrivalRadius = arrivalRadiusValue
 	return result, nil
 }
