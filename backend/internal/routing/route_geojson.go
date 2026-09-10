@@ -15,9 +15,9 @@ type geoJSONFeatureCollection struct {
 }
 
 type geoJSONFeature struct {
-	Type       string            `json:"type"`
-	Properties any               `json:"properties"`
-	Geometry   geoJSONGeometry   `json:"geometry"`
+	Type       string          `json:"type"`
+	Properties any             `json:"properties"`
+	Geometry   geoJSONGeometry `json:"geometry"`
 }
 
 type geoJSONGeometry struct {
