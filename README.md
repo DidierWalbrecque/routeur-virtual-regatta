@@ -343,10 +343,9 @@ progressivement les cellules pour réduire le front tout en conservant une
 répartition géographique. La taille demandée par `-cell-size` reste donc un
 minimum ; la sortie permet de voir si elle a dû être augmentée.
 
-Un espacement de caps, une taille de cellule ou une limite de candidats plus
-petits ou plus grands selon le paramètre peuvent modifier le compromis entre
-précision, temps de calcul et mémoire. Une limite plus élevée préserve davantage
-de routes alternatives mais ralentit le calcul. Commencer avec
+Un espacement de caps plus petit, une cellule minimale plus petite ou une
+limite de candidats plus élevée préservent davantage de routes alternatives,
+mais augmentent le temps de calcul et la mémoire utilisés. Commencer avec
 `-heading-spacing 15 -cell-size 1` pour un test d'une heure. Pour tester quatre
 heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.
