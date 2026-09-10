@@ -358,7 +358,7 @@ Calculer une route complète dans une météo qui évolue avec le temps.
 - [x] Détecter l'arrivée.
 - [x] Reconstruire la route depuis les parents.
 - [ ] Retourner caps, voiles, manœuvres et heures.
-- [ ] Exporter la route en GeoJSON.
+- [x] Exporter la route en GeoJSON.
 - [x] Ajouter l'annulation et la progression d'un calcul.
 
 ### État actuel

@@ -311,6 +311,7 @@ go run ./cmd/routecheck \
   -cell-size 1 \
   -max-candidates 500 \
   -arrival-radius 1 \
+  -geojson ../data/routes/route.geojson \
   -owned code0,foils
 ```
 
@@ -324,7 +325,9 @@ Les paramètres spécifiques au routage correspondent à :
 - `-max-candidates` : nombre maximal de positions conservées par front,
   par défaut 500 ; la valeur 0 désactive la limite ;
 - `-arrival-radius` : distance maximale de la destination considérée comme
-  une arrivée, par défaut 1 NM.
+  une arrivée, par défaut 1 NM ;
+- `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
+  parent est créé automatiquement.
 
 La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
@@ -337,6 +340,12 @@ progression globale. Elle indique aussi le nombre de positions conservées dans
 chaque front, la taille de cellule effectivement utilisée et si la destination
 a été atteinte. Le calcul s'arrête au premier front dont le meilleur point
 entre dans le rayon d'arrivée.
+
+Avec `-geojson`, elle écrit également une `FeatureCollection` comprenant la
+ligne de route, le départ, la destination et chaque étape. Les points d'étape
+conservent le cap, la voile, le vent, le TWA, l'amure, la vitesse et la
+progression ; le fichier peut être chargé directement dans MapLibre ou un
+logiciel SIG.
 
 Lorsque le nombre de positions dépasse `-max-candidates`, le moteur agrandit
 progressivement les cellules pour réduire le front tout en conservant une
@@ -360,4 +369,4 @@ Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement 
 
 Phase 2 en cours : modèle métier construit progressivement avec les modules concernés.
 
-Travail actuel : phase 6 — lecture et interpolation de la météo GRIB2.
+Travail actuel : phase 8 — moteur de routage par isochrones en pleine mer.

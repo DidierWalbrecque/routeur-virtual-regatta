@@ -8,6 +8,10 @@ backend/bin/
 data/weather/*
 !data/weather/.gitkeep
 
+# Routes calculées localement
+data/routes/*
+!data/routes/.gitkeep
+
 # Frontend
 frontend/node_modules/
 frontend/dist/

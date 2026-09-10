@@ -50,6 +50,7 @@ type options struct {
 	cellSize       navigation.NauticalMiles
 	maxCandidates  int
 	arrivalRadius  navigation.NauticalMiles
+	geoJSONPath    string
 }
 
 func main() {
@@ -109,6 +110,9 @@ func run(args []string, stdout, stderr io.Writer) error {
 			"routecheck: reconstruction de la route impossible: %w",
 			err,
 		)
+	}
+	if err := writeRouteGeoJSON(options.geoJSONPath, route); err != nil {
+		return err
 	}
 	return writeResult(stdout, boatPolar, options, search, route)
 }
@@ -235,6 +239,9 @@ func writeResult(
 		fmt.Fprintf(stdout, " %.3f", frontier.CellSize)
 	}
 	fmt.Fprintln(stdout)
+	if options.geoJSONPath != "" {
+		fmt.Fprintf(stdout, "GeoJSON : %s\n", options.geoJSONPath)
+	}
 
 	return nil
 }
@@ -318,6 +325,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		"arrival-radius",
 		1,
 		"distance maximale de la destination considérée comme une arrivée en milles nautiques",
+	)
+	geoJSONPath := flags.String(
+		"geojson",
+		"",
+		"chemin optionnel du fichier GeoJSON à produire",
 	)
 	ownedText := flags.String(
 		"owned",
@@ -457,6 +469,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.cellSize = cellSizeValue
 	result.maxCandidates = *maxCandidates
 	result.arrivalRadius = arrivalRadiusValue
+	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
 
