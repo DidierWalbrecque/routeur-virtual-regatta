@@ -24,6 +24,7 @@ type IsochroneSearchInput struct {
 	Owned          equipment.EquipmentSet
 	HeadingSpacing float64
 	CellSize       navigation.NauticalMiles
+	MaxCandidates  int
 	ArrivalRadius  navigation.NauticalMiles
 }
 
@@ -39,9 +40,10 @@ type IsochroneNode struct {
 
 // IsochroneFrontier contains the retained positions reached at one instant.
 type IsochroneFrontier struct {
-	Index   int
-	Instant time.Time
-	Nodes   []IsochroneNode
+	Index    int
+	Instant  time.Time
+	CellSize navigation.NauticalMiles
+	Nodes    []IsochroneNode
 }
 
 // IsochroneSearch contains every retained frontier of an exploration.
@@ -51,6 +53,7 @@ type IsochroneSearch struct {
 	StartedAt     time.Time
 	StepDuration  time.Duration
 	ArrivalRadius navigation.NauticalMiles
+	MaxCandidates int
 	Reached       bool
 	Frontiers     []IsochroneFrontier
 }
@@ -135,6 +138,11 @@ func BuildIsochroneSearch(
 			"routing: construction des isochrones impossible: taille de cellule finie strictement positive requise",
 		)
 	}
+	if input.MaxCandidates != 0 && input.MaxCandidates < 4 {
+		return IsochroneSearch{}, errors.New(
+			"routing: construction des isochrones impossible: la limite doit être nulle ou au moins égale à 4 candidats",
+		)
+	}
 	arrivalRadius := float64(input.ArrivalRadius)
 	if math.IsNaN(arrivalRadius) ||
 		math.IsInf(arrivalRadius, 0) ||
@@ -161,6 +169,7 @@ func BuildIsochroneSearch(
 		StartedAt:     input.Instant,
 		StepDuration:  input.StepDuration,
 		ArrivalRadius: input.ArrivalRadius,
+		MaxCandidates: input.MaxCandidates,
 		Frontiers:     make([]IsochroneFrontier, 0, input.LayerCount),
 	}
 	parentPositions := []navigation.Position{input.Position}
@@ -225,10 +234,11 @@ func BuildIsochroneSearch(
 			}
 		}
 
-		nodes, err := pruneIsochroneNodes(
+		nodes, effectiveCellSize, err := pruneIsochroneNodesToLimit(
 			input.Position,
 			expanded,
 			cellSize,
+			input.MaxCandidates,
 		)
 		if err != nil {
 			return IsochroneSearch{}, fmt.Errorf(
@@ -240,9 +250,10 @@ func BuildIsochroneSearch(
 
 		nextInstant := currentInstant.Add(input.StepDuration)
 		search.Frontiers = append(search.Frontiers, IsochroneFrontier{
-			Index:   layerIndex + 1,
-			Instant: nextInstant,
-			Nodes:   nodes,
+			Index:    layerIndex + 1,
+			Instant:  nextInstant,
+			CellSize: navigation.NauticalMiles(effectiveCellSize),
+			Nodes:    nodes,
 		})
 		if nodes[0].RemainingDistance <= input.ArrivalRadius {
 			search.Reached = true
@@ -257,6 +268,37 @@ func BuildIsochroneSearch(
 	}
 
 	return search, nil
+}
+
+func pruneIsochroneNodesToLimit(
+	origin navigation.Position,
+	nodes []IsochroneNode,
+	minimumCellSize float64,
+	maxCandidates int,
+) ([]IsochroneNode, float64, error) {
+	effectiveCellSize := minimumCellSize
+	for {
+		selected, err := pruneIsochroneNodes(
+			origin,
+			nodes,
+			effectiveCellSize,
+		)
+		if err != nil {
+			return nil, 0, err
+		}
+		if maxCandidates == 0 || len(selected) <= maxCandidates {
+			return selected, effectiveCellSize, nil
+		}
+
+		nextCellSize := effectiveCellSize * 2
+		if math.IsInf(nextCellSize, 0) ||
+			nextCellSize <= effectiveCellSize {
+			return nil, 0, errors.New(
+				"impossible d'agrandir les cellules pour respecter la limite de candidats",
+			)
+		}
+		effectiveCellSize = nextCellSize
+	}
 }
 
 func pruneIsochroneNodes(
