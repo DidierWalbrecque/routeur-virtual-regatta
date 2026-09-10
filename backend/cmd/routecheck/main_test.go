@@ -19,8 +19,8 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-file", "f000.grb2",
 		"-file", "f003.grb2",
 		"-polar", "boat.json",
-		"-position", "13°N 07'16" - 121°E 35'12"",
-		"-destination", "14°N 00'00" - 120°E 00'00"",
+		"-position", `13°N 07'16" - 121°E 35'12"`,
+		"-destination", `14°N 00'00" - 120°E 00'00"`,
 		"-at", "2026-09-05T07:30:00Z",
 		"-minutes", "240",
 		"-step-minutes", "10",
@@ -110,8 +110,8 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 	base := []string{
 		"-file", "f003.grb2",
 		"-polar", "boat.json",
-		"-position", "13°N 07'16" - 121°E 35'12"",
-		"-destination", "14°N 00'00" - 120°E 00'00"",
+		"-position", `13°N 07'16" - 121°E 35'12"`,
+		"-destination", `14°N 00'00" - 120°E 00'00"`,
 		"-at", "2026-09-05T09:00:00Z",
 		"-minutes", "60",
 	}
@@ -130,8 +130,8 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			name: "polaire absente",
 			args: []string{
 				"-file", "f003.grb2",
-				"-position", "13°N 07'16" - 121°E 35'12"",
-				"-destination", "14°N 00'00" - 120°E 00'00"",
+				"-position", `13°N 07'16" - 121°E 35'12"`,
+				"-destination", `14°N 00'00" - 120°E 00'00"`,
 				"-at", "2026-09-05T09:00:00Z",
 				"-minutes", "60",
 			},
@@ -142,7 +142,7 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			args: []string{
 				"-file", "f003.grb2",
 				"-polar", "boat.json",
-				"-destination", "14°N 00'00" - 120°E 00'00"",
+				"-destination", `14°N 00'00" - 120°E 00'00"`,
 				"-at", "2026-09-05T09:00:00Z",
 				"-minutes", "60",
 			},
@@ -153,7 +153,7 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			args: []string{
 				"-file", "f003.grb2",
 				"-polar", "boat.json",
-				"-position", "13°N 07'16" - 121°E 35'12"",
+				"-position", `13°N 07'16" - 121°E 35'12"`,
 				"-at", "2026-09-05T09:00:00Z",
 				"-minutes", "60",
 			},
@@ -164,8 +164,8 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			args: []string{
 				"-file", "f003.grb2",
 				"-polar", "boat.json",
-				"-position", "13°N 07'16" - 121°E 35'12"",
-				"-destination", "14°N 00'00" - 120°E 00'00"",
+				"-position", `13°N 07'16" - 121°E 35'12"`,
+				"-destination", `14°N 00'00" - 120°E 00'00"`,
 				"-minutes", "60",
 			},
 			wantErr: "-at",
@@ -304,8 +304,8 @@ func TestWriteResult(t *testing.T) {
 
 	for _, expected := range []string{
 		"Bateau : Test boat",
-		"Départ VR : 13°N 00'00" - 121°E 00'00"",
-		"Destination VR : 14°N 00'00" - 120°E 00'00"",
+		`Départ VR : 13°N 00'00" - 121°E 00'00"`,
+		`Destination VR : 14°N 00'00" - 120°E 00'00"`,
 		"Route retenue :",
 		"1. 2026-09-05T07:40:00Z | cap 321.00°",
 		"voile Jib | vitesse 8.000 nd",
