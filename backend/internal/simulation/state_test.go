@@ -176,4 +176,3 @@ func validBoatState() BoatState {
 		Stamina: StaminaState{Level: 100},
 	}
 }
-
