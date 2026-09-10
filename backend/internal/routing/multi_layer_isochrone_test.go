@@ -228,6 +228,62 @@ func TestBuildIsochroneSearchPrunesEveryFrontier(t *testing.T) {
 	}
 }
 
+func TestBuildIsochroneSearchStopsAtArrivalRadius(t *testing.T) {
+	provider := &staticWeatherProvider{
+		wind: navigation.Wind{
+			Speed:     5,
+			Direction: 180,
+		},
+	}
+	search, err := BuildIsochroneSearch(
+		context.Background(),
+		provider,
+		testPolar(),
+		IsochroneSearchInput{
+			Position:       navigation.Position{},
+			Destination:    navigation.Position{Longitude: 0.13},
+			Instant:        time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			StepDuration:   time.Hour,
+			LayerCount:     5,
+			HeadingSpacing: 90,
+			CellSize:       1,
+			ArrivalRadius:  0.5,
+		},
+	)
+	if err != nil {
+		t.Fatalf("construction refusée: %v", err)
+	}
+	if !search.Reached {
+		t.Fatal("la destination doit être déclarée atteinte")
+	}
+	if search.ArrivalRadius != 0.5 {
+		t.Errorf(
+			"rayon d'arrivée = %.3f NM, attendu 0.5",
+			search.ArrivalRadius,
+		)
+	}
+	if len(search.Frontiers) != 1 {
+		t.Fatalf(
+			"nombre de fronts = %d, attendu 1",
+			len(search.Frontiers),
+		)
+	}
+	best, ok := search.Best()
+	if !ok {
+		t.Fatal("meilleur nœud absent")
+	}
+	if best.RemainingDistance > search.ArrivalRadius {
+		t.Errorf(
+			"distance restante = %.6f NM, rayon %.6f NM",
+			best.RemainingDistance,
+			search.ArrivalRadius,
+		)
+	}
+	if provider.calls != 4 {
+		t.Errorf("appels météo = %d, attendus 4", provider.calls)
+	}
+}
+
 func TestIsochroneSearchBestRejectsEmptySearch(t *testing.T) {
 	if _, ok := (IsochroneSearch{}).Best(); ok {
 		t.Fatal("une recherche vide ne doit pas avoir de meilleur nœud")
@@ -312,6 +368,28 @@ func TestBuildIsochroneSearchRejectsInvalidInputs(t *testing.T) {
 				return input
 			}(),
 			wantErr: "taille de cellule",
+		},
+		{
+			name:      "rayon d'arrivée négatif",
+			provider:  validProvider(),
+			boatPolar: testPolar(),
+			input: func() IsochroneSearchInput {
+				input := validInput
+				input.ArrivalRadius = -1
+				return input
+			}(),
+			wantErr: "rayon d'arrivée",
+		},
+		{
+			name:      "rayon d'arrivée non fini",
+			provider:  validProvider(),
+			boatPolar: testPolar(),
+			input: func() IsochroneSearchInput {
+				input := validInput
+				input.ArrivalRadius = navigation.NauticalMiles(math.NaN())
+				return input
+			}(),
+			wantErr: "rayon d'arrivée",
 		},
 		{
 			name:      "grille de caps invalide",

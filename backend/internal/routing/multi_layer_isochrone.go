@@ -24,6 +24,7 @@ type IsochroneSearchInput struct {
 	Owned          equipment.EquipmentSet
 	HeadingSpacing float64
 	CellSize       navigation.NauticalMiles
+	ArrivalRadius  navigation.NauticalMiles
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -45,11 +46,13 @@ type IsochroneFrontier struct {
 
 // IsochroneSearch contains every retained frontier of an exploration.
 type IsochroneSearch struct {
-	Origin       navigation.Position
-	Destination  navigation.Position
-	StartedAt    time.Time
-	StepDuration time.Duration
-	Frontiers    []IsochroneFrontier
+	Origin        navigation.Position
+	Destination   navigation.Position
+	StartedAt     time.Time
+	StepDuration  time.Duration
+	ArrivalRadius navigation.NauticalMiles
+	Reached       bool
+	Frontiers     []IsochroneFrontier
 }
 
 // Best returns the best retained node from the final frontier.
@@ -132,6 +135,14 @@ func BuildIsochroneSearch(
 			"routing: construction des isochrones impossible: taille de cellule finie strictement positive requise",
 		)
 	}
+	arrivalRadius := float64(input.ArrivalRadius)
+	if math.IsNaN(arrivalRadius) ||
+		math.IsInf(arrivalRadius, 0) ||
+		input.ArrivalRadius < 0 {
+		return IsochroneSearch{}, errors.New(
+			"routing: construction des isochrones impossible: rayon d'arrivée fini positif ou nul requis",
+		)
+	}
 
 	initialDistance, err := navigation.DistanceBetween(
 		input.Position,
@@ -145,11 +156,12 @@ func BuildIsochroneSearch(
 	}
 
 	search := IsochroneSearch{
-		Origin:       input.Position,
-		Destination:  input.Destination,
-		StartedAt:    input.Instant,
-		StepDuration: input.StepDuration,
-		Frontiers:    make([]IsochroneFrontier, 0, input.LayerCount),
+		Origin:        input.Position,
+		Destination:   input.Destination,
+		StartedAt:     input.Instant,
+		StepDuration:  input.StepDuration,
+		ArrivalRadius: input.ArrivalRadius,
+		Frontiers:     make([]IsochroneFrontier, 0, input.LayerCount),
 	}
 	parentPositions := []navigation.Position{input.Position}
 	currentInstant := input.Instant
@@ -232,6 +244,10 @@ func BuildIsochroneSearch(
 			Instant: nextInstant,
 			Nodes:   nodes,
 		})
+		if nodes[0].RemainingDistance <= input.ArrivalRadius {
+			search.Reached = true
+			break
+		}
 
 		parentPositions = make([]navigation.Position, len(nodes))
 		for index, node := range nodes {

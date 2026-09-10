@@ -48,6 +48,7 @@ type options struct {
 	owned          equipment.EquipmentSet
 	headingSpacing float64
 	cellSize       navigation.NauticalMiles
+	arrivalRadius  navigation.NauticalMiles
 }
 
 func main() {
@@ -93,6 +94,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			Owned:          options.owned,
 			HeadingSpacing: options.headingSpacing,
 			CellSize:       options.cellSize,
+			ArrivalRadius:  options.arrivalRadius,
 		},
 	)
 	if err != nil {
@@ -148,9 +150,10 @@ func writeResult(
 	)
 	fmt.Fprintf(
 		stdout,
-		"Exploration : caps tous les %.2f° | cellules %.3f NM\n",
+		"Exploration : caps tous les %.2f° | cellules %.3f NM | arrivée %.3f NM\n",
 		options.headingSpacing,
 		options.cellSize,
+		options.arrivalRadius,
 	)
 	fmt.Fprintln(stdout, "Route retenue :")
 
@@ -214,6 +217,11 @@ func writeResult(
 		"Progression globale : %+.3f NM\n",
 		final.Node.Progress,
 	)
+	reached := "non"
+	if search.Reached {
+		reached = "oui"
+	}
+	fmt.Fprintf(stdout, "Destination atteinte : %s\n", reached)
 	fmt.Fprint(stdout, "Positions conservées par front :")
 	for _, frontier := range search.Frontiers {
 		fmt.Fprintf(stdout, " %d", len(frontier.Nodes))
@@ -292,6 +300,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		"cell-size",
 		1,
 		"taille d'une cellule d'élagage en milles nautiques",
+	)
+	arrivalRadius := flags.Float64(
+		"arrival-radius",
+		1,
+		"distance maximale de la destination considérée comme une arrivée en milles nautiques",
 	)
 	ownedText := flags.String(
 		"owned",
@@ -397,6 +410,14 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 			"routecheck: -cell-size doit être strictement positif",
 		)
 	}
+	arrivalRadiusValue := navigation.NauticalMiles(*arrivalRadius)
+	if math.IsNaN(*arrivalRadius) ||
+		math.IsInf(*arrivalRadius, 0) ||
+		arrivalRadiusValue < 0 {
+		return options{}, errors.New(
+			"routecheck: -arrival-radius doit être positif ou nul",
+		)
+	}
 
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
@@ -416,6 +437,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.owned = owned
 	result.headingSpacing = *headingSpacing
 	result.cellSize = cellSizeValue
+	result.arrivalRadius = arrivalRadiusValue
 	return result, nil
 }
 
