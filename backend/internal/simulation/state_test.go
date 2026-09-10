@@ -1,6 +1,7 @@
 package simulation
 
 import (
+	"fmt"
 	"math"
 	"strings"
 	"testing"
@@ -11,7 +12,7 @@ import (
 
 func TestStaminaLevelValidate(t *testing.T) {
 	for _, level := range []StaminaLevel{0, 50, 100} {
-		t.Run(strings.ReplaceAll(levelName(level), ".", "_"), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%.1f", level), func(t *testing.T) {
 			if err := level.Validate(); err != nil {
 				t.Fatalf("stamina %.1f refusée: %v", level, err)
 			}
@@ -176,42 +177,3 @@ func validBoatState() BoatState {
 	}
 }
 
-func levelName(level StaminaLevel) string {
-	return strings.TrimSpace(
-		strings.ReplaceAll(
-			strings.ReplaceAll(
-				strings.TrimRight(
-					strings.TrimRight(
-						formatLevel(level),
-						"0",
-					),
-					".",
-				),
-				"-",
-				"negative_",
-			),
-			"+",
-			"positive_",
-		),
-	)
-}
-
-func formatLevel(level StaminaLevel) string {
-	return strings.TrimSpace(
-		strings.ReplaceAll(
-			strings.ReplaceAll(
-				strings.ReplaceAll(
-					strings.TrimSpace(
-						string(rune(int(level) + '0')),
-					),
-					" ",
-					"_",
-				),
-				"/",
-				"_",
-			),
-			"\\",
-			"_",
-		),
-	)
-}
