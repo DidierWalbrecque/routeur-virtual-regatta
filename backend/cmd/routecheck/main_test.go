@@ -26,6 +26,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-step-minutes", "10",
 		"-heading-spacing", "15",
 		"-cell-size", "2.5",
+		"-arrival-radius", "0.5",
 		"-owned", "code0,foils",
 	}, io.Discard)
 	if err != nil {
@@ -71,6 +72,12 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 	if options.cellSize != 2.5 {
 		t.Errorf("taille de cellule = %.3f NM, attendue 2.5", options.cellSize)
 	}
+	if options.arrivalRadius != 0.5 {
+		t.Errorf(
+			"rayon d'arrivée = %.3f NM, attendu 0.5",
+			options.arrivalRadius,
+		)
+	}
 	if !options.owned.Has(equipment.Code0) ||
 		!options.owned.Has(equipment.Foils) {
 		t.Errorf("équipements = %v", options.owned)
@@ -103,6 +110,12 @@ func TestParseOptionsAcceptsDecimalPositionsAndDefaults(t *testing.T) {
 	}
 	if options.cellSize != 1 {
 		t.Errorf("taille de cellule = %.3f NM, attendue 1", options.cellSize)
+	}
+	if options.arrivalRadius != 1 {
+		t.Errorf(
+			"rayon d'arrivée = %.3f NM, attendu 1",
+			options.arrivalRadius,
+		)
 	}
 }
 
@@ -193,6 +206,14 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 				"-cell-size", "0",
 			),
 			wantErr: "-cell-size",
+		},
+		{
+			name: "rayon d'arrivée négatif",
+			args: append(
+				append([]string{}, base...),
+				"-arrival-radius", "-1",
+			),
+			wantErr: "-arrival-radius",
 		},
 		{
 			name: "équipement inconnu",
@@ -288,6 +309,7 @@ func TestWriteResult(t *testing.T) {
 		layerCount:     1,
 		headingSpacing: 10,
 		cellSize:       1,
+		arrivalRadius:  1,
 	}
 
 	var output strings.Builder
@@ -311,6 +333,7 @@ func TestWriteResult(t *testing.T) {
 		"voile Jib | vitesse 8.000 nd",
 		"distance restante 83.000 NM",
 		"Position finale VR :",
+		"Destination atteinte : non",
 		"Positions conservées par front : 1",
 	} {
 		if !strings.Contains(output.String(), expected) {
