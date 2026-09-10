@@ -309,6 +309,7 @@ go run ./cmd/routecheck \
   -step-minutes 10 \
   -heading-spacing 15 \
   -cell-size 1 \
+  -arrival-radius 1 \
   -owned code0,foils
 ```
 
@@ -318,7 +319,9 @@ Les paramètres spécifiques au routage correspondent à :
 - `-minutes` : horizon total du calcul, multiple exact du pas ;
 - `-step-minutes` : durée séparant deux fronts d'isochrones ;
 - `-heading-spacing` : écart en degrés entre les caps explorés ;
-- `-cell-size` : côté des cellules d'élagage en milles nautiques.
+- `-cell-size` : côté des cellules d'élagage en milles nautiques ;
+- `-arrival-radius` : distance maximale de la destination considérée comme
+  une arrivée, par défaut 1 NM.
 
 La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
@@ -328,7 +331,8 @@ que `racecheck`.
 La commande affiche chaque étape de la route retenue avec le cap, le vent, le
 TWA, l'amure, la voile, la vitesse, la position, la distance restante et la
 progression globale. Elle indique aussi le nombre de positions conservées dans
-chaque front.
+chaque front et si la destination a été atteinte. Le calcul s'arrête au premier
+front dont le meilleur point entre dans le rayon d'arrivée.
 
 Un espacement de caps ou une taille de cellule plus petits augmentent la
 précision, mais aussi le temps de calcul et la mémoire utilisés. Commencer avec
