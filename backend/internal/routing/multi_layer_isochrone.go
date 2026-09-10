@@ -46,9 +46,9 @@ type IsochroneFrontier struct {
 
 // IsochroneSearch contains every retained frontier of an exploration.
 type IsochroneSearch struct {
-	Origin       navigation.Position
-	Destination  navigation.Position
-	StartedAt    time.Time
+	Origin        navigation.Position
+	Destination   navigation.Position
+	StartedAt     time.Time
 	StepDuration  time.Duration
 	ArrivalRadius navigation.NauticalMiles
 	Reached       bool
@@ -156,9 +156,9 @@ func BuildIsochroneSearch(
 	}
 
 	search := IsochroneSearch{
-		Origin:       input.Position,
-		Destination:  input.Destination,
-		StartedAt:    input.Instant,
+		Origin:        input.Position,
+		Destination:   input.Destination,
+		StartedAt:     input.Instant,
 		StepDuration:  input.StepDuration,
 		ArrivalRadius: input.ArrivalRadius,
 		Frontiers:     make([]IsochroneFrontier, 0, input.LayerCount),
