@@ -26,6 +26,7 @@ type IsochroneSearchInput struct {
 	CellSize       navigation.NauticalMiles
 	MaxCandidates  int
 	ArrivalRadius  navigation.NauticalMiles
+	Progress       IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -78,6 +79,17 @@ func BuildIsochroneSearch(
 	boatPolar *polar.Polar,
 	input IsochroneSearchInput,
 ) (IsochroneSearch, error) {
+	if ctx == nil {
+		return IsochroneSearch{}, errors.New(
+			"routing: construction des isochrones impossible: contexte requis",
+		)
+	}
+	if err := ctx.Err(); err != nil {
+		return IsochroneSearch{}, fmt.Errorf(
+			"routing: construction des isochrones annulée avant le calcul: %w",
+			err,
+		)
+	}
 	if weatherProvider == nil {
 		return IsochroneSearch{}, errors.New(
 			"routing: construction des isochrones impossible: fournisseur météo requis",
@@ -176,6 +188,14 @@ func BuildIsochroneSearch(
 	currentInstant := input.Instant
 
 	for layerIndex := 0; layerIndex < input.LayerCount; layerIndex++ {
+		if err := ctx.Err(); err != nil {
+			return search, fmt.Errorf(
+				"routing: construction interrompue avant la couche %d: %w",
+				layerIndex+1,
+				err,
+			)
+		}
+
 		expanded := make(
 			[]IsochroneNode,
 			0,
@@ -183,6 +203,15 @@ func BuildIsochroneSearch(
 		)
 
 		for parentIndex, position := range parentPositions {
+			if err := ctx.Err(); err != nil {
+				return search, fmt.Errorf(
+					"routing: construction interrompue à la couche %d avant le parent %d: %w",
+					layerIndex+1,
+					parentIndex+1,
+					err,
+				)
+			}
+
 			candidates, err := EvaluateHeadingCandidates(
 				ctx,
 				weatherProvider,
@@ -196,7 +225,7 @@ func BuildIsochroneSearch(
 				},
 			)
 			if err != nil {
-				return IsochroneSearch{}, fmt.Errorf(
+				return search, fmt.Errorf(
 					"routing: construction de la couche %d impossible: développement du parent %d impossible: %w",
 					layerIndex+1,
 					parentIndex+1,
@@ -241,7 +270,7 @@ func BuildIsochroneSearch(
 			input.MaxCandidates,
 		)
 		if err != nil {
-			return IsochroneSearch{}, fmt.Errorf(
+			return search, fmt.Errorf(
 				"routing: construction de la couche %d impossible: élagage spatial impossible: %w",
 				layerIndex+1,
 				err,
@@ -249,14 +278,25 @@ func BuildIsochroneSearch(
 		}
 
 		nextInstant := currentInstant.Add(input.StepDuration)
-		search.Frontiers = append(search.Frontiers, IsochroneFrontier{
+		frontier := IsochroneFrontier{
 			Index:    layerIndex + 1,
 			Instant:  nextInstant,
 			CellSize: navigation.NauticalMiles(effectiveCellSize),
 			Nodes:    nodes,
-		})
-		if nodes[0].RemainingDistance <= input.ArrivalRadius {
-			search.Reached = true
+		}
+		search.Frontiers = append(search.Frontiers, frontier)
+		search.Reached = nodes[0].RemainingDistance <= input.ArrivalRadius
+		if input.Progress != nil {
+			input.Progress(IsochroneProgress{
+				CompletedLayers: len(search.Frontiers),
+				TotalLayers:     input.LayerCount,
+				Instant:         frontier.Instant,
+				CandidateCount:  len(frontier.Nodes),
+				CellSize:        frontier.CellSize,
+				Reached:         search.Reached,
+			})
+		}
+		if search.Reached {
 			break
 		}
 
