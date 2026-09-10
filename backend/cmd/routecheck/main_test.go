@@ -28,6 +28,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-cell-size", "2.5",
 		"-max-candidates", "100",
 		"-arrival-radius", "0.5",
+		"-geojson", "out/route.geojson",
 		"-owned", "code0,foils",
 	}, io.Discard)
 	if err != nil {
@@ -85,6 +86,12 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 			options.arrivalRadius,
 		)
 	}
+	if options.geoJSONPath != "out/route.geojson" {
+		t.Errorf(
+			"GeoJSON = %q, attendu out/route.geojson",
+			options.geoJSONPath,
+		)
+	}
 	if !options.owned.Has(equipment.Code0) ||
 		!options.owned.Has(equipment.Foils) {
 		t.Errorf("équipements = %v", options.owned)
@@ -128,6 +135,12 @@ func TestParseOptionsAcceptsDecimalPositionsAndDefaults(t *testing.T) {
 		t.Errorf(
 			"rayon d'arrivée = %.3f NM, attendu 1",
 			options.arrivalRadius,
+		)
+	}
+	if options.geoJSONPath != "" {
+		t.Errorf(
+			"GeoJSON par défaut = %q, attendu vide",
+			options.geoJSONPath,
 		)
 	}
 }
