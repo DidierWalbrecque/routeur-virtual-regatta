@@ -288,6 +288,58 @@ période simulée.
 La commande ne recherche pas encore le meilleur cap, ne modélise pas les
 manœuvres ou la stamina et ne se connecte pas à Virtual Regatta.
 
+## Calculer une première route par isochrones
+
+La commande `routecheck` explore plusieurs caps à chaque pas, construit des
+fronts d'isochrones successifs, élimine les positions proches les moins
+intéressantes puis reconstruit le meilleur chemin conservé vers la destination.
+
+Depuis le dossier `backend` :
+
+```bash
+go run ./cmd/routecheck \
+  -file ../data/weather/gfs.2026090506.f000.grb2 \
+  -file ../data/weather/gfs.2026090506.f003.grb2 \
+  -file ../data/weather/gfs.2026090506.f006.grb2 \
+  -polar ../data/polars/ultim_bp_11.json \
+  -position "13°N 07'16\" - 121°E 35'12\"" \
+  -destination "14°N 00'00\" - 120°E 00'00\"" \
+  -at 2026-09-05T07:30:00Z \
+  -minutes 60 \
+  -step-minutes 10 \
+  -heading-spacing 15 \
+  -cell-size 1 \
+  -owned code0,foils
+```
+
+Les paramètres spécifiques au routage correspondent à :
+
+- `-destination` : point recherché au format Virtual Regatta ;
+- `-minutes` : horizon total du calcul, multiple exact du pas ;
+- `-step-minutes` : durée séparant deux fronts d'isochrones ;
+- `-heading-spacing` : écart en degrés entre les caps explorés ;
+- `-cell-size` : côté des cellules d'élagage en milles nautiques.
+
+La destination peut également être fournie en degrés décimaux avec
+`-destination-latitude` et `-destination-longitude`. Les paramètres de
+position initiale, météo, polaire et équipements utilisent les mêmes formats
+que `racecheck`.
+
+La commande affiche chaque étape de la route retenue avec le cap, le vent, le
+TWA, l'amure, la voile, la vitesse, la position, la distance restante et la
+progression globale. Elle indique aussi le nombre de positions conservées dans
+chaque front.
+
+Un espacement de caps ou une taille de cellule plus petits augmentent la
+précision, mais aussi le temps de calcul et la mémoire utilisés. Commencer avec
+`-heading-spacing 15 -cell-size 1` pour un test d'une heure. Pour tester quatre
+heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
+période.
+
+Il s'agit encore d'une route théorique sans terres, portes de course, stamina
+ni pénalités de manœuvre. La commande ne se connecte pas à Virtual Regatta et
+ne commande jamais le bateau.
+
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
