@@ -27,8 +27,9 @@ type IsochroneSearchInput struct {
 	CellSize       navigation.NauticalMiles
 	MaxCandidates  int
 	ArrivalRadius  navigation.NauticalMiles
-	InitialStamina simulation.StaminaState
-	Progress       IsochroneProgressReporter
+	InitialStamina    simulation.StaminaState
+	InitialNavigation *InitialNavigationState
+	Progress          IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -67,6 +68,7 @@ type IsochroneSearch struct {
 	StepDuration   time.Duration
 	ArrivalRadius  navigation.NauticalMiles
 	InitialStamina simulation.StaminaState
+	InitialState   *simulation.BoatState
 	MaxCandidates  int
 	Reached        bool
 	Frontiers      []IsochroneFrontier
@@ -194,6 +196,34 @@ func BuildIsochroneSearch(
 		)
 	}
 
+	initialParent := isochroneParentState{
+		Position: input.Position,
+		Stamina:  input.InitialStamina,
+	}
+	var initialState *simulation.BoatState
+	if input.InitialNavigation != nil {
+		resolvedState, windAngle, resolveErr := resolveInitialBoatState(
+			ctx,
+			weatherProvider,
+			boatPolar,
+			input.Position,
+			input.Instant,
+			input.InitialStamina,
+			input.Owned,
+			*input.InitialNavigation,
+		)
+		if resolveErr != nil {
+			return IsochroneSearch{}, fmt.Errorf(
+				"routing: construction des isochrones impossible: %w",
+				resolveErr,
+			)
+		}
+		initialParent.BoatState = resolvedState
+		initialParent.WindAngle = windAngle
+		initialParent.HasBoatState = true
+		initialState = &resolvedState
+	}
+
 	search := IsochroneSearch{
 		Origin:         input.Position,
 		Destination:    input.Destination,
@@ -201,13 +231,11 @@ func BuildIsochroneSearch(
 		StepDuration:   input.StepDuration,
 		ArrivalRadius:  input.ArrivalRadius,
 		InitialStamina: input.InitialStamina,
+		InitialState:   initialState,
 		MaxCandidates:  input.MaxCandidates,
 		Frontiers:      make([]IsochroneFrontier, 0, input.LayerCount),
 	}
-	parentStates := []isochroneParentState{{
-		Position: input.Position,
-		Stamina:  input.InitialStamina,
-	}}
+	parentStates := []isochroneParentState{initialParent}
 	currentInstant := input.Instant
 
 	for layerIndex := 0; layerIndex < input.LayerCount; layerIndex++ {
