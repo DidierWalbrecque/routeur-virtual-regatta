@@ -19,6 +19,89 @@ type SpeedPenaltyApplication struct {
 	RemainingPenalty    *polar.ManeuverPenalty
 }
 
+// ManeuverSpeedPenaltyCombiner resolves simultaneous nautical and sail-change
+// speed penalties. No default is provided until the in-game rule is confirmed.
+type ManeuverSpeedPenaltyCombiner func(
+	nautical polar.ManeuverPenalty,
+	sailChange polar.ManeuverPenalty,
+) (polar.ManeuverPenalty, error)
+
+// CombinedSpeedPenalty returns the performance penalty represented by a
+// transition. Simultaneous penalties require an explicit combination rule.
+func (evaluation TransitionEvaluation) CombinedSpeedPenalty(
+	combine ManeuverSpeedPenaltyCombiner,
+) (*polar.ManeuverPenalty, error) {
+	switch {
+	case evaluation.NauticalPenalty == nil &&
+		evaluation.SailChangePenalty == nil:
+		return nil, nil
+	case evaluation.NauticalPenalty != nil &&
+		evaluation.SailChangePenalty == nil:
+		return validatedSpeedPenaltyCopy(
+			"pénalité nautique",
+			evaluation.NauticalPenalty,
+		)
+	case evaluation.NauticalPenalty == nil &&
+		evaluation.SailChangePenalty != nil:
+		return validatedSpeedPenaltyCopy(
+			"pénalité de changement de voile",
+			evaluation.SailChangePenalty,
+		)
+	}
+
+	if _, err := validatedSpeedPenaltyCopy(
+		"pénalité nautique",
+		evaluation.NauticalPenalty,
+	); err != nil {
+		return nil, err
+	}
+	if _, err := validatedSpeedPenaltyCopy(
+		"pénalité de changement de voile",
+		evaluation.SailChangePenalty,
+	); err != nil {
+		return nil, err
+	}
+	if combine == nil {
+		return nil, errors.New(
+			"simulation: combinaison de pénalités impossible: règle explicite requise pour des pénalités simultanées",
+		)
+	}
+
+	combined, err := combine(
+		*evaluation.NauticalPenalty,
+		*evaluation.SailChangePenalty,
+	)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"simulation: combinaison de pénalités impossible: %w",
+			err,
+		)
+	}
+	if err := validateAppliedSpeedPenalty(combined); err != nil {
+		return nil, fmt.Errorf(
+			"simulation: combinaison de pénalités impossible: résultat invalide: %w",
+			err,
+		)
+	}
+
+	return &combined, nil
+}
+
+func validatedSpeedPenaltyCopy(
+	label string,
+	penalty *polar.ManeuverPenalty,
+) (*polar.ManeuverPenalty, error) {
+	if err := validateAppliedSpeedPenalty(*penalty); err != nil {
+		return nil, fmt.Errorf(
+			"simulation: combinaison de pénalités impossible: %s invalide: %w",
+			label,
+			err,
+		)
+	}
+	copy := *penalty
+	return &copy, nil
+}
+
 // ApplyManeuverSpeedPenalty integrates one already-combined speed penalty over
 // a movement step. A nil penalty represents an entirely unpenalized step.
 func ApplyManeuverSpeedPenalty(
