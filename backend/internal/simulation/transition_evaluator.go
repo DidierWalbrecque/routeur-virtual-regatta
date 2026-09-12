@@ -16,10 +16,10 @@ type StaminaConsumptionCombiner func(
 // TransitionEvaluator assembles maneuver detection, polar penalties and stamina
 // calculations without combining simultaneous performance penalties.
 type TransitionEvaluator struct {
-	WinchProfile     polar.WinchProfile
-	ConsumptionRules StaminaConsumptionRules
-	WindCurve        StaminaWindCurve
-	DurationCurve    StaminaDurationCurve
+	WinchProfile       polar.WinchProfile
+	ConsumptionRules   StaminaConsumptionRules
+	WindCurve          StaminaWindCurve
+	DurationCurve      StaminaDurationCurve
 	CombineConsumption StaminaConsumptionCombiner
 }
 
