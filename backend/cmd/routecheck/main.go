@@ -38,20 +38,20 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files          filePaths
-	polarPath      string
-	position       navigation.Position
-	destination    navigation.Position
-	instant        time.Time
-	totalDuration  time.Duration
-	stepDuration   time.Duration
-	layerCount     int
-	owned          equipment.EquipmentSet
-	headingSpacing float64
-	cellSize       navigation.NauticalMiles
-	maxCandidates  int
-	arrivalRadius  navigation.NauticalMiles
-	stamina          simulation.StaminaState
+	files             filePaths
+	polarPath         string
+	position          navigation.Position
+	destination       navigation.Position
+	instant           time.Time
+	totalDuration     time.Duration
+	stepDuration      time.Duration
+	layerCount        int
+	owned             equipment.EquipmentSet
+	headingSpacing    float64
+	cellSize          navigation.NauticalMiles
+	maxCandidates     int
+	arrivalRadius     navigation.NauticalMiles
+	stamina           simulation.StaminaState
 	initialNavigation *initialNavigationOptions
 	geoJSONPath       string
 }
@@ -98,16 +98,16 @@ func run(args []string, stdout, stderr io.Writer) error {
 		weatherProvider,
 		boatPolar,
 		routing.IsochroneSearchInput{
-			Position:       options.position,
-			Destination:    options.destination,
-			Instant:        options.instant,
-			StepDuration:   options.stepDuration,
-			LayerCount:     options.layerCount,
-			Owned:          options.owned,
-			HeadingSpacing: options.headingSpacing,
-			CellSize:       options.cellSize,
-			MaxCandidates:  options.maxCandidates,
-			ArrivalRadius:  options.arrivalRadius,
+			Position:          options.position,
+			Destination:       options.destination,
+			Instant:           options.instant,
+			StepDuration:      options.stepDuration,
+			LayerCount:        options.layerCount,
+			Owned:             options.owned,
+			HeadingSpacing:    options.headingSpacing,
+			CellSize:          options.cellSize,
+			MaxCandidates:     options.maxCandidates,
+			ArrivalRadius:     options.arrivalRadius,
 			InitialStamina:    options.stamina,
 			InitialNavigation: initialNavigation,
 		},
