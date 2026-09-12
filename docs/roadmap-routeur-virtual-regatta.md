@@ -330,7 +330,7 @@ représenter les actions simultanées sans figer leur règle de cumul.
 - [x] Appliquer le coefficient de vent à la consommation.
 - [x] Calculer la récupération d'énergie pendant les périodes calmes.
 - [x] Calculer l'effet de l'énergie sur la durée de la manœuvre.
-- [ ] Maintenir la stamina entre 0 % et 100 %.
+- [x] Maintenir la stamina entre 0 % et 100 %.
 - [ ] Tester les manœuvres isolées et successives.
 - [ ] Rendre les courbes configurables pour suivre les évolutions du jeu.
 
