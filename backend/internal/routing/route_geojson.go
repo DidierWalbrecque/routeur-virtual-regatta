@@ -47,6 +47,9 @@ type stepGeoJSONProperties struct {
 	WindDirection       float64 `json:"windDirection"`
 	TrueWindAngle       float64 `json:"trueWindAngle"`
 	Tack                string  `json:"tack"`
+	Maneuver            string  `json:"maneuver"`
+	SailChanged         bool    `json:"sailChanged"`
+	Stamina             float64 `json:"stamina"`
 	RemainingDistanceNM float64 `json:"remainingDistanceNM"`
 	ProgressNM          float64 `json:"progressNM"`
 }
@@ -115,6 +118,9 @@ func (route IsochroneRoute) MarshalGeoJSON() ([]byte, error) {
 				WindDirection:       float64(step.Wind.Direction),
 				TrueWindAngle:       float64(step.WindAngle),
 				Tack:                string(step.Tack),
+				Maneuver:            geoJSONManeuver(routeStep.Node),
+				SailChanged:         geoJSONSailChanged(routeStep.Node),
+				Stamina:             float64(routeStep.Node.State.Stamina.Level),
 				RemainingDistanceNM: float64(routeStep.Node.RemainingDistance),
 				ProgressNM:          float64(routeStep.Node.Progress),
 			},
@@ -136,6 +142,17 @@ func (route IsochroneRoute) MarshalGeoJSON() ([]byte, error) {
 		)
 	}
 	return data, nil
+}
+
+func geoJSONManeuver(node IsochroneNode) string {
+	if node.Maneuver == nil {
+		return "unknown"
+	}
+	return string(node.Maneuver.Kind)
+}
+
+func geoJSONSailChanged(node IsochroneNode) bool {
+	return node.Maneuver != nil && node.Maneuver.SailChanged
 }
 
 func validateRouteForGeoJSON(route IsochroneRoute) error {
