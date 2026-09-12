@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
 )
 
 func TestIsochroneRouteMarshalGeoJSON(t *testing.T) {
@@ -16,6 +17,11 @@ func TestIsochroneRouteMarshalGeoJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("reconstruction refusée: %v", err)
 	}
+	route.Steps[0].Node.Maneuver = &simulation.ManeuverState{
+		Kind:        simulation.ManeuverTack,
+		SailChanged: true,
+	}
+	route.Steps[0].Node.State.Stamina.Level = 72.5
 
 	data, err := route.MarshalGeoJSON()
 	if err != nil {
@@ -118,6 +124,25 @@ func TestIsochroneRouteMarshalGeoJSON(t *testing.T) {
 	}
 	if firstStepFeature.Properties["tack"] != string(step.Tack) {
 		t.Errorf("amure = %v, attendue %s", firstStepFeature.Properties["tack"], step.Tack)
+	}
+	if firstStepFeature.Properties["maneuver"] != string(simulation.ManeuverTack) {
+		t.Errorf(
+			"manœuvre = %v, attendue %s",
+			firstStepFeature.Properties["maneuver"],
+			simulation.ManeuverTack,
+		)
+	}
+	if firstStepFeature.Properties["sailChanged"] != true {
+		t.Errorf(
+			"changement de voile = %v, attendu true",
+			firstStepFeature.Properties["sailChanged"],
+		)
+	}
+	if firstStepFeature.Properties["stamina"] != 72.5 {
+		t.Errorf(
+			"stamina = %v, attendue 72.5",
+			firstStepFeature.Properties["stamina"],
+		)
 	}
 	if firstStepFeature.Geometry.Type != "Point" {
 		t.Errorf("géométrie du pas = %q, attendue Point", firstStepFeature.Geometry.Type)
