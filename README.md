@@ -312,6 +312,8 @@ go run ./cmd/routecheck \
   -max-candidates 500 \
   -arrival-radius 1 \
   -stamina 100 \
+  -current-heading 321 \
+  -current-sail Jib \
   -geojson ../data/routes/route.geojson \
   -owned code0,foils
 ```
@@ -328,6 +330,9 @@ Les paramètres spécifiques au routage correspondent à :
 - `-arrival-radius` : distance maximale de la destination considérée comme
   une arrivée, par défaut 1 NM ;
 - `-stamina` : réserve initiale du bateau entre 0 et 100, par défaut 100 ;
+- `-current-heading` : cap actuellement suivi, de 0° inclus à 360° exclus ;
+- `-current-sail` : nom de la voile actuelle tel qu'il apparaît dans la
+  polaire, sans distinction entre majuscules et minuscules ;
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
 
@@ -335,6 +340,11 @@ La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
 position initiale, météo, polaire et équipements utilisent les mêmes formats
 que `racecheck`.
+
+`-current-heading` et `-current-sail` sont facultatifs, mais doivent être
+fournis ensemble. Ils permettent au moteur de détecter une manœuvre dès le
+premier front à partir de l'état réel du bateau. La voile doit être présente
+dans la polaire et disponible avec les équipements déclarés par `-owned`.
 
 La commande affiche chaque étape de la route retenue avec le cap, le vent, le
 TWA, l'amure, la voile, la vitesse, la position, la distance restante et la

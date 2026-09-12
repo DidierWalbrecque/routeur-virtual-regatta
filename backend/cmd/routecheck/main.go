@@ -38,21 +38,22 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files          filePaths
-	polarPath      string
-	position       navigation.Position
-	destination    navigation.Position
-	instant        time.Time
-	totalDuration  time.Duration
-	stepDuration   time.Duration
-	layerCount     int
-	owned          equipment.EquipmentSet
-	headingSpacing float64
-	cellSize       navigation.NauticalMiles
-	maxCandidates  int
-	arrivalRadius  navigation.NauticalMiles
-	stamina        simulation.StaminaState
-	geoJSONPath    string
+	files             filePaths
+	polarPath         string
+	position          navigation.Position
+	destination       navigation.Position
+	instant           time.Time
+	totalDuration     time.Duration
+	stepDuration      time.Duration
+	layerCount        int
+	owned             equipment.EquipmentSet
+	headingSpacing    float64
+	cellSize          navigation.NauticalMiles
+	maxCandidates     int
+	arrivalRadius     navigation.NauticalMiles
+	stamina           simulation.StaminaState
+	initialNavigation *initialNavigationOptions
+	geoJSONPath       string
 }
 
 func main() {
@@ -84,23 +85,31 @@ func run(args []string, stdout, stderr io.Writer) error {
 			err,
 		)
 	}
+	initialNavigation, err := resolveInitialNavigationState(
+		boatPolar,
+		options.initialNavigation,
+	)
+	if err != nil {
+		return err
+	}
 
 	search, err := routing.BuildIsochroneSearch(
 		context.Background(),
 		weatherProvider,
 		boatPolar,
 		routing.IsochroneSearchInput{
-			Position:       options.position,
-			Destination:    options.destination,
-			Instant:        options.instant,
-			StepDuration:   options.stepDuration,
-			LayerCount:     options.layerCount,
-			Owned:          options.owned,
-			HeadingSpacing: options.headingSpacing,
-			CellSize:       options.cellSize,
-			MaxCandidates:  options.maxCandidates,
-			ArrivalRadius:  options.arrivalRadius,
-			InitialStamina: options.stamina,
+			Position:          options.position,
+			Destination:       options.destination,
+			Instant:           options.instant,
+			StepDuration:      options.stepDuration,
+			LayerCount:        options.layerCount,
+			Owned:             options.owned,
+			HeadingSpacing:    options.headingSpacing,
+			CellSize:          options.cellSize,
+			MaxCandidates:     options.maxCandidates,
+			ArrivalRadius:     options.arrivalRadius,
+			InitialStamina:    options.stamina,
+			InitialNavigation: initialNavigation,
 		},
 	)
 	if err != nil {
@@ -334,6 +343,16 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		100,
 		"stamina initiale du bateau entre 0 et 100",
 	)
+	currentHeading := flags.Float64(
+		"current-heading",
+		math.NaN(),
+		"cap actuel du bateau en degrés ; nécessite -current-sail",
+	)
+	currentSail := flags.String(
+		"current-sail",
+		"",
+		"nom de la voile actuelle dans la polaire ; nécessite -current-heading",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -466,6 +485,13 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 			err,
 		)
 	}
+	initialNavigation, err := parseInitialNavigationOptions(
+		*currentHeading,
+		*currentSail,
+	)
+	if err != nil {
+		return options{}, err
+	}
 
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
@@ -488,6 +514,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.maxCandidates = *maxCandidates
 	result.arrivalRadius = arrivalRadiusValue
 	result.stamina = staminaState
+	result.initialNavigation = initialNavigation
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
