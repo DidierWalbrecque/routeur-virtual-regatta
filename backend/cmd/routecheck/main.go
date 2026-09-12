@@ -219,6 +219,24 @@ func writeResult(
 			formatSailChange(routeStep.Node.Maneuver),
 			routeStep.Node.State.Stamina.Level,
 		)
+		if routeStep.Node.SpeedPenalty != nil &&
+			routeStep.Node.SpeedPenalty.AppliedPenalty != nil {
+			remaining := time.Duration(0)
+			if routeStep.Node.SpeedPenalty.RemainingPenalty != nil {
+				remaining =
+					routeStep.Node.SpeedPenalty.RemainingPenalty.Duration
+			}
+			averageSpeed := float64(step.Distance) /
+				step.Duration.Hours()
+			fmt.Fprintf(
+				stdout,
+				"   pénalité vitesse %.3f | appliquée %s | reste %s | vitesse moyenne %.3f nd\n",
+				routeStep.Node.SpeedPenalty.AppliedPenalty.SpeedRatio,
+				routeStep.Node.SpeedPenalty.PenalizedDuration,
+				remaining,
+				averageSpeed,
+			)
+		}
 	}
 
 	final := route.Steps[len(route.Steps)-1]
