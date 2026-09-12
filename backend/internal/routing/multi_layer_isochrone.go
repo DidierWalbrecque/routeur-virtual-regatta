@@ -17,19 +17,20 @@ import (
 
 // IsochroneSearchInput describes a multi-layer isochrone exploration.
 type IsochroneSearchInput struct {
-	Position          navigation.Position
-	Destination       navigation.Position
-	Instant           time.Time
-	StepDuration      time.Duration
-	LayerCount        int
-	Owned             equipment.EquipmentSet
-	HeadingSpacing    float64
-	CellSize          navigation.NauticalMiles
-	MaxCandidates     int
-	ArrivalRadius     navigation.NauticalMiles
-	InitialStamina    simulation.StaminaState
-	InitialNavigation *InitialNavigationState
-	Progress          IsochroneProgressReporter
+	Position            navigation.Position
+	Destination         navigation.Position
+	Instant             time.Time
+	StepDuration        time.Duration
+	LayerCount          int
+	Owned               equipment.EquipmentSet
+	HeadingSpacing      float64
+	CellSize            navigation.NauticalMiles
+	MaxCandidates       int
+	ArrivalRadius       navigation.NauticalMiles
+	InitialStamina      simulation.StaminaState
+	InitialNavigation   *InitialNavigationState
+	TransitionEvaluator *simulation.TransitionEvaluator
+	Progress            IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -41,6 +42,7 @@ type IsochroneNode struct {
 	RemainingDistance navigation.NauticalMiles
 	Progress          DistanceProgress
 	Maneuver          *simulation.ManeuverState
+	Transition        *simulation.TransitionEvaluation
 	State             simulation.BoatState
 }
 
@@ -299,6 +301,36 @@ func BuildIsochroneSearch(
 						err,
 					)
 				}
+				var transition *simulation.TransitionEvaluation
+				if maneuver != nil && input.TransitionEvaluator != nil {
+					evaluation, evaluateErr := input.TransitionEvaluator.Evaluate(
+						simulation.TransitionEvaluationRequest{
+							Transition: simulation.ManeuverTransition{
+								PreviousTack:      parentState.BoatState.Tack,
+								NextTack:          candidate.Step.Tack,
+								PreviousWindAngle: parentState.WindAngle,
+								NextWindAngle:     candidate.Step.WindAngle,
+								PreviousSailID:    parentState.BoatState.SailID,
+								NextSailID:        candidate.Step.BestSail.SailID,
+							},
+							WindSpeed: polar.WindSpeed(candidate.Step.WindKnots),
+							Stamina:   parentState.Stamina,
+							ProfessionalWinches: input.Owned.Has(
+								equipment.ProWinches,
+							),
+						},
+					)
+					if evaluateErr != nil {
+						return IsochroneSearch{}, fmt.Errorf(
+							"routing: construction de la couche %d impossible: évaluation de la transition au cap %.6f° impossible: %w",
+							layerIndex+1,
+							candidate.Heading,
+							evaluateErr,
+						)
+					}
+					maneuver = &evaluation.Maneuver
+					transition = &evaluation
+				}
 
 				remainingDistance, err := navigation.DistanceBetween(
 					candidate.Step.NextPosition,
@@ -312,13 +344,17 @@ func BuildIsochroneSearch(
 					)
 				}
 
+				nextStamina := parentState.Stamina
+				if transition != nil {
+					nextStamina = transition.NextStamina
+				}
 				state := simulation.BoatState{
 					Position: candidate.Step.NextPosition,
 					Instant:  candidate.Step.NextInstant,
 					Heading:  candidate.Step.Heading,
 					SailID:   candidate.Step.BestSail.SailID,
 					Tack:     candidate.Step.Tack,
-					Stamina:  parentState.Stamina,
+					Stamina:  nextStamina,
 				}
 				if err := state.Validate(); err != nil {
 					return IsochroneSearch{}, fmt.Errorf(
@@ -336,8 +372,9 @@ func BuildIsochroneSearch(
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
 					),
-					Maneuver: maneuver,
-					State:    state,
+					Maneuver:   maneuver,
+					Transition: transition,
+					State:      state,
 				})
 			}
 		}
