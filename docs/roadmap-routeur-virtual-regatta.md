@@ -331,8 +331,8 @@ représenter les actions simultanées sans figer leur règle de cumul.
 - [x] Calculer la récupération d'énergie pendant les périodes calmes.
 - [x] Calculer l'effet de l'énergie sur la durée de la manœuvre.
 - [x] Maintenir la stamina entre 0 % et 100 %.
-- [ ] Tester les manœuvres isolées et successives.
-- [ ] Rendre les courbes configurables pour suivre les évolutions du jeu.
+- [x] Tester les manœuvres isolées et successives.
+- [x] Rendre les courbes configurables pour suivre les évolutions du jeu.
 
 ### Livrable
 
