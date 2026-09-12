@@ -362,7 +362,7 @@ Calculer une route complète dans une météo qui évolue avec le temps.
 - [x] Définir le pas de temps du calcul.
 - [x] Générer plusieurs caps depuis chaque état.
 - [x] Déplacer le bateau selon météo, polaire et équipement.
-- [ ] Conserver cap, voile, stamina, amure et parent dans chaque nœud.
+- [x] Conserver cap, voile, stamina, amure et parent dans chaque nœud.
 - [x] Découper le front d'isochrones en secteurs.
 - [ ] Supprimer les états dominés sans supprimer des réserves de stamina utiles.
 - [x] Détecter l'arrivée.
@@ -374,9 +374,11 @@ Calculer une route complète dans une météo qui évolue avec le temps.
 ### État actuel
 
 Le routage en pleine mer produit des fronts successifs, reconstruit la meilleure
-route et limite adaptativement leur taille. Sur le scénario réel de référence
-de quatre heures, la limite de 500 candidats réduit le temps de calcul de
-24,832 s à 9,600 s, avec une perte de progression de 0,783 NM.
+route et limite adaptativement leur taille. Chaque nœud conserve désormais son
+état nautique complet ; la stamina reste inchangée tant que le
+`TransitionEvaluator` n'est pas branché au déplacement. Sur le scénario réel de
+référence de quatre heures, la limite de 500 candidats réduit le temps de calcul
+de 24,832 s à 9,600 s, avec une perte de progression de 0,783 NM.
 
 ### Livrable
 
