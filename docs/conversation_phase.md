@@ -481,7 +481,7 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 | 02 — Lecture et interpolation des polaires | Terminée | Chargement validé, interpolation bilinéaire, meilleure voile et équipements testés. |
 | 03 — Optimisation des équipements | En cours | Prochains achats abordables classés avec leur gain marginal instantané. |
 | 04 — Lecture des fichiers GRIB2 | En cours | Téléchargement NOAA et série réelle `f000/f003/f006` validés ; cache et stockage Docker à poursuivre. |
-| 05 — Navigation, manœuvres et stamina | En cours | Calculs de navigation validés sur un scénario VR réel ; manœuvres et stamina à venir. |
+| 05 — Navigation, manœuvres et stamina | En cours | Manœuvres détectées ; durées et ratios des winchs interpolés selon le vent ; stamina à intégrer. |
 | 06 — Moteur de routage | En cours | Isochrones multi-fronts, arrivée, reconstruction, élagage adaptatif, progression et annulation disponibles. |
 | 07 — API et interface cartographique | À démarrer | |
 | 08 — Tests et performances | À démarrer | |
@@ -491,4 +491,4 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 
 ## Première action recommandée
 
-Poursuivre avec la conversation **06 — Moteur de routage** afin d'exporter la route en GeoJSON, puis d'intégrer progressivement les manœuvres, la stamina et les contraintes de course.
+Poursuivre avec la conversation **05 — Navigation, manœuvres et stamina** afin d'intégrer la consommation et la récupération de stamina, puis appliquer les pénalités au moteur de routage.
