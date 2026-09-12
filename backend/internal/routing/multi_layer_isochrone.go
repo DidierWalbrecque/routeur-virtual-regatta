@@ -11,6 +11,7 @@ import (
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
@@ -26,6 +27,7 @@ type IsochroneSearchInput struct {
 	CellSize       navigation.NauticalMiles
 	MaxCandidates  int
 	ArrivalRadius  navigation.NauticalMiles
+	InitialStamina simulation.StaminaState
 	Progress       IsochroneProgressReporter
 }
 
@@ -37,6 +39,12 @@ type IsochroneNode struct {
 	InitialDistance   navigation.NauticalMiles
 	RemainingDistance navigation.NauticalMiles
 	Progress          DistanceProgress
+	State             simulation.BoatState
+}
+
+type isochroneParentState struct {
+	Position navigation.Position
+	Stamina  simulation.StaminaState
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
@@ -53,8 +61,9 @@ type IsochroneSearch struct {
 	Destination   navigation.Position
 	StartedAt     time.Time
 	StepDuration  time.Duration
-	ArrivalRadius navigation.NauticalMiles
-	MaxCandidates int
+	ArrivalRadius  navigation.NauticalMiles
+	InitialStamina simulation.StaminaState
+	MaxCandidates  int
 	Reached       bool
 	Frontiers     []IsochroneFrontier
 }
@@ -133,6 +142,12 @@ func BuildIsochroneSearch(
 			err,
 		)
 	}
+	if err := input.InitialStamina.Validate(); err != nil {
+		return IsochroneSearch{}, fmt.Errorf(
+			"routing: construction des isochrones impossible: stamina initiale invalide: %w",
+			err,
+		)
+	}
 
 	headings, err := GenerateHeadingGrid(input.HeadingSpacing)
 	if err != nil {
@@ -180,11 +195,15 @@ func BuildIsochroneSearch(
 		Destination:   input.Destination,
 		StartedAt:     input.Instant,
 		StepDuration:  input.StepDuration,
-		ArrivalRadius: input.ArrivalRadius,
-		MaxCandidates: input.MaxCandidates,
+		ArrivalRadius:  input.ArrivalRadius,
+		InitialStamina: input.InitialStamina,
+		MaxCandidates:  input.MaxCandidates,
 		Frontiers:     make([]IsochroneFrontier, 0, input.LayerCount),
 	}
-	parentPositions := []navigation.Position{input.Position}
+	parentStates := []isochroneParentState{{
+		Position: input.Position,
+		Stamina:  input.InitialStamina,
+	}}
 	currentInstant := input.Instant
 
 	for layerIndex := 0; layerIndex < input.LayerCount; layerIndex++ {
@@ -199,10 +218,10 @@ func BuildIsochroneSearch(
 		expanded := make(
 			[]IsochroneNode,
 			0,
-			len(parentPositions)*len(headings),
+			len(parentStates)*len(headings),
 		)
 
-		for parentIndex, position := range parentPositions {
+		for parentIndex, parentState := range parentStates {
 			if err := ctx.Err(); err != nil {
 				return search, fmt.Errorf(
 					"routing: construction interrompue à la couche %d avant le parent %d: %w",
@@ -217,7 +236,7 @@ func BuildIsochroneSearch(
 				weatherProvider,
 				boatPolar,
 				HeadingCandidatesInput{
-					Position: position,
+					Position: parentState.Position,
 					Instant:  currentInstant,
 					Duration: input.StepDuration,
 					Owned:    input.Owned,
@@ -251,6 +270,22 @@ func BuildIsochroneSearch(
 					)
 				}
 
+				state := simulation.BoatState{
+					Position: candidate.Step.NextPosition,
+					Instant:  candidate.Step.NextInstant,
+					Heading:  candidate.Step.Heading,
+					SailID:   candidate.Step.BestSail.SailID,
+					Tack:     candidate.Step.Tack,
+					Stamina:  parentState.Stamina,
+				}
+				if err := state.Validate(); err != nil {
+					return IsochroneSearch{}, fmt.Errorf(
+						"routing: construction de la couche %d impossible: état atteint invalide: %w",
+						layerIndex+1,
+						err,
+					)
+				}
+
 				expanded = append(expanded, IsochroneNode{
 					ParentIndex:       lineageParent,
 					Candidate:         candidate,
@@ -259,6 +294,7 @@ func BuildIsochroneSearch(
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
 					),
+					State: state,
 				})
 			}
 		}
@@ -300,9 +336,12 @@ func BuildIsochroneSearch(
 			break
 		}
 
-		parentPositions = make([]navigation.Position, len(nodes))
+		parentStates = make([]isochroneParentState, len(nodes))
 		for index, node := range nodes {
-			parentPositions[index] = node.Candidate.Step.NextPosition
+			parentStates[index] = isochroneParentState{
+				Position: node.State.Position,
+				Stamina:  node.State.Stamina,
+			}
 		}
 		currentInstant = nextInstant
 	}
