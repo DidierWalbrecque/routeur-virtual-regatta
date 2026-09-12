@@ -39,12 +39,16 @@ type IsochroneNode struct {
 	InitialDistance   navigation.NauticalMiles
 	RemainingDistance navigation.NauticalMiles
 	Progress          DistanceProgress
+	Maneuver          *simulation.ManeuverState
 	State             simulation.BoatState
 }
 
 type isochroneParentState struct {
-	Position navigation.Position
-	Stamina  simulation.StaminaState
+	Position     navigation.Position
+	Stamina      simulation.StaminaState
+	BoatState    simulation.BoatState
+	WindAngle    navigation.TrueWindAngle
+	HasBoatState bool
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
@@ -258,6 +262,16 @@ func BuildIsochroneSearch(
 			}
 
 			for _, candidate := range candidates {
+				maneuver, err := candidateManeuver(parentState, candidate)
+				if err != nil {
+					return IsochroneSearch{}, fmt.Errorf(
+						"routing: construction de la couche %d impossible: manœuvre du candidat au cap %.6f° invalide: %w",
+						layerIndex+1,
+						candidate.Heading,
+						err,
+					)
+				}
+
 				remainingDistance, err := navigation.DistanceBetween(
 					candidate.Step.NextPosition,
 					input.Destination,
@@ -294,7 +308,8 @@ func BuildIsochroneSearch(
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
 					),
-					State: state,
+					Maneuver: maneuver,
+					State:    state,
 				})
 			}
 		}
@@ -339,14 +354,49 @@ func BuildIsochroneSearch(
 		parentStates = make([]isochroneParentState, len(nodes))
 		for index, node := range nodes {
 			parentStates[index] = isochroneParentState{
-				Position: node.State.Position,
-				Stamina:  node.State.Stamina,
+				Position:     node.State.Position,
+				Stamina:      node.State.Stamina,
+				BoatState:    node.State,
+				WindAngle:    node.Candidate.Step.WindAngle,
+				HasBoatState: true,
 			}
 		}
 		currentInstant = nextInstant
 	}
 
 	return search, nil
+}
+
+func candidateManeuver(
+	parent isochroneParentState,
+	candidate HeadingCandidate,
+) (*simulation.ManeuverState, error) {
+	if !parent.HasBoatState {
+		return nil, nil
+	}
+	if parent.BoatState.Tack != navigation.TackUndefined &&
+		candidate.Step.Tack != navigation.TackUndefined &&
+		parent.BoatState.Tack != candidate.Step.Tack &&
+		parent.WindAngle+candidate.Step.WindAngle == 180 {
+		// With diametrically opposed headings, the endpoints alone do not
+		// reveal whether the boat crossed upwind or downwind.
+		return nil, nil
+	}
+
+	maneuver, err := simulation.DetectManeuver(
+		simulation.ManeuverTransition{
+			PreviousTack:      parent.BoatState.Tack,
+			NextTack:          candidate.Step.Tack,
+			PreviousWindAngle: parent.WindAngle,
+			NextWindAngle:     candidate.Step.WindAngle,
+			PreviousSailID:    parent.BoatState.SailID,
+			NextSailID:        candidate.Step.BestSail.SailID,
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &maneuver, nil
 }
 
 func pruneIsochroneNodesToLimit(
