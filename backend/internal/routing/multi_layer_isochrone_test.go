@@ -164,7 +164,7 @@ func TestBuildIsochroneSearch(t *testing.T) {
 	}
 }
 
-func TestBuildIsochroneSearchPrunesEveryFrontier(t *testing.T) {
+func TestBuildIsochroneSearchPreservesDistinctBoatStates(t *testing.T) {
 	provider := &staticWeatherProvider{
 		wind: navigation.Wind{
 			Speed:     5,
@@ -196,35 +196,37 @@ func TestBuildIsochroneSearchPrunesEveryFrontier(t *testing.T) {
 		)
 	}
 	for index, frontier := range search.Frontiers {
-		if len(frontier.Nodes) != 1 {
+		if len(frontier.Nodes) != 4 {
 			t.Fatalf(
-				"positions du front %d = %d, attendue 1",
+				"positions du front %d = %d, attendues 4 états nautiques",
 				index+1,
 				len(frontier.Nodes),
 			)
 		}
-		wantParent := 0
-		if index == 0 {
-			wantParent = -1
-		}
-		if frontier.Nodes[0].ParentIndex != wantParent {
-			t.Errorf(
-				"parent du front %d = %d, attendu %d",
-				index+1,
-				frontier.Nodes[0].ParentIndex,
-				wantParent,
-			)
-		}
-		if frontier.Nodes[0].Candidate.Heading != 0 {
-			t.Errorf(
-				"cap conservé au front %d = %.1f°, attendu 0°",
-				index+1,
-				frontier.Nodes[0].Candidate.Heading,
-			)
+		for nodeIndex, node := range frontier.Nodes {
+			if index == 0 {
+				if node.ParentIndex != -1 {
+					t.Errorf(
+						"parent du nœud %d du premier front = %d, attendu -1",
+						nodeIndex+1,
+						node.ParentIndex,
+					)
+				}
+				continue
+			}
+			if node.ParentIndex < 0 ||
+				node.ParentIndex >= len(search.Frontiers[index-1].Nodes) {
+				t.Errorf(
+					"parent du nœud %d du front %d = %d, hors du front précédent",
+					nodeIndex+1,
+					index+1,
+					node.ParentIndex,
+				)
+			}
 		}
 	}
-	if provider.calls != 12 {
-		t.Errorf("appels météo = %d, attendus 12", provider.calls)
+	if provider.calls != 36 {
+		t.Errorf("appels météo = %d, attendus 36", provider.calls)
 	}
 }
 

@@ -483,6 +483,9 @@ func pruneIsochroneNodesToLimit(
 		if maxCandidates == 0 || len(selected) <= maxCandidates {
 			return selected, effectiveCellSize, nil
 		}
+		if effectiveCellSize >= maximumStateAwareCellSize {
+			return selected[:maxCandidates], effectiveCellSize, nil
+		}
 
 		nextCellSize := effectiveCellSize * 2
 		if math.IsInf(nextCellSize, 0) ||
@@ -495,6 +498,15 @@ func pruneIsochroneNodesToLimit(
 	}
 }
 
+const maximumStateAwareCellSize = 360 * nauticalMilesPerDegree
+
+type isochroneStateCell struct {
+	spatialCell
+	heading navigation.Heading
+	sailID  polar.SailID
+	tack    navigation.Tack
+}
+
 func pruneIsochroneNodes(
 	origin navigation.Position,
 	nodes []IsochroneNode,
@@ -504,9 +516,19 @@ func pruneIsochroneNodes(
 		return nil, errors.New("aucune position à conserver")
 	}
 
-	selected := make([]IsochroneNode, 0, len(nodes))
-	cellIndexes := make(map[spatialCell]int, len(nodes))
+	groups := make(
+		map[isochroneStateCell][]IsochroneNode,
+		len(nodes),
+	)
+	keys := make([]isochroneStateCell, 0, len(nodes))
 	for index, node := range nodes {
+		if err := node.State.Stamina.Validate(); err != nil {
+			return nil, fmt.Errorf(
+				"stamina de la position %d invalide: %w",
+				index+1,
+				err,
+			)
+		}
 		cell, err := spatialCellFor(
 			origin,
 			node.Candidate.Step.NextPosition,
@@ -520,19 +542,67 @@ func pruneIsochroneNodes(
 			)
 		}
 
-		selectedIndex, exists := cellIndexes[cell]
+		key := isochroneStateCell{
+			spatialCell: cell,
+			heading:     node.State.Heading,
+			sailID:      node.State.SailID,
+			tack:        node.State.Tack,
+		}
+		group, exists := groups[key]
 		if !exists {
-			cellIndexes[cell] = len(selected)
-			selected = append(selected, node)
+			keys = append(keys, key)
+		}
+
+		dominated := false
+		for _, existing := range group {
+			if isochroneNodeDominates(existing, node) {
+				dominated = true
+				break
+			}
+		}
+		if dominated {
 			continue
 		}
-		if node.Progress > selected[selectedIndex].Progress {
-			selected[selectedIndex] = node
+
+		kept := group[:0]
+		for _, existing := range group {
+			if !isochroneNodeDominates(node, existing) {
+				kept = append(kept, existing)
+			}
 		}
+		groups[key] = append(kept, node)
 	}
 
+	selected := make([]IsochroneNode, 0, len(nodes))
+	for _, key := range keys {
+		selected = append(selected, groups[key]...)
+	}
 	sort.SliceStable(selected, func(left, right int) bool {
-		return selected[left].Progress > selected[right].Progress
+		if selected[left].Progress != selected[right].Progress {
+			return selected[left].Progress > selected[right].Progress
+		}
+		if selected[left].State.Stamina.Level !=
+			selected[right].State.Stamina.Level {
+			return selected[left].State.Stamina.Level >
+				selected[right].State.Stamina.Level
+		}
+		if selected[left].State.Heading != selected[right].State.Heading {
+			return selected[left].State.Heading <
+				selected[right].State.Heading
+		}
+		if selected[left].State.SailID != selected[right].State.SailID {
+			return selected[left].State.SailID <
+				selected[right].State.SailID
+		}
+		return selected[left].State.Tack < selected[right].State.Tack
 	})
 	return selected, nil
+}
+
+func isochroneNodeDominates(
+	left,
+	right IsochroneNode,
+) bool {
+	return left.Progress >= right.Progress &&
+		left.State.Stamina.Level >= right.State.Stamina.Level
 }
