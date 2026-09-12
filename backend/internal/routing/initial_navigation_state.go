@@ -117,4 +117,3 @@ func containsSailID(sails []polar.SailID, wanted polar.SailID) bool {
 	}
 	return false
 }
-
