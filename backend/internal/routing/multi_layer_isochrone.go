@@ -57,15 +57,15 @@ type IsochroneFrontier struct {
 
 // IsochroneSearch contains every retained frontier of an exploration.
 type IsochroneSearch struct {
-	Origin        navigation.Position
-	Destination   navigation.Position
-	StartedAt     time.Time
-	StepDuration  time.Duration
+	Origin         navigation.Position
+	Destination    navigation.Position
+	StartedAt      time.Time
+	StepDuration   time.Duration
 	ArrivalRadius  navigation.NauticalMiles
 	InitialStamina simulation.StaminaState
 	MaxCandidates  int
-	Reached       bool
-	Frontiers     []IsochroneFrontier
+	Reached        bool
+	Frontiers      []IsochroneFrontier
 }
 
 // Best returns the best retained node from the final frontier.
@@ -191,14 +191,14 @@ func BuildIsochroneSearch(
 	}
 
 	search := IsochroneSearch{
-		Origin:        input.Position,
-		Destination:   input.Destination,
-		StartedAt:     input.Instant,
-		StepDuration:  input.StepDuration,
+		Origin:         input.Position,
+		Destination:    input.Destination,
+		StartedAt:      input.Instant,
+		StepDuration:   input.StepDuration,
 		ArrivalRadius:  input.ArrivalRadius,
 		InitialStamina: input.InitialStamina,
 		MaxCandidates:  input.MaxCandidates,
-		Frontiers:     make([]IsochroneFrontier, 0, input.LayerCount),
+		Frontiers:      make([]IsochroneFrontier, 0, input.LayerCount),
 	}
 	parentStates := []isochroneParentState{{
 		Position: input.Position,
