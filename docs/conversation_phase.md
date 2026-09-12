@@ -481,7 +481,7 @@ Vérifier la fiabilité du routeur, mesurer les performances et préparer une pr
 | 02 — Lecture et interpolation des polaires | Terminée | Chargement validé, interpolation bilinéaire, meilleure voile et équipements testés. |
 | 03 — Optimisation des équipements | En cours | Prochains achats abordables classés avec leur gain marginal instantané. |
 | 04 — Lecture des fichiers GRIB2 | En cours | Téléchargement NOAA et série réelle `f000/f003/f006` validés ; cache et stockage Docker à poursuivre. |
-| 05 — Navigation, manœuvres et stamina | En cours | Consommation, récupération et durée configurables ; état de stamina borné entre 0 % et 100 %. |
+| 05 — Navigation, manœuvres et stamina | En cours | Modèle configurable testé sur des manœuvres isolées et successives ; courbes officielles et cumul simultané à confirmer. |
 | 06 — Moteur de routage | En cours | Isochrones multi-fronts, arrivée, reconstruction, élagage adaptatif, progression et annulation disponibles. |
 | 07 — API et interface cartographique | À démarrer | |
 | 08 — Tests et performances | À démarrer | |
