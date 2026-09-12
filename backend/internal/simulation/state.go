@@ -85,12 +85,13 @@ func (state ManeuverState) Active() bool {
 // BoatState is the state that must be carried between route nodes once
 // maneuver and stamina effects are evaluated.
 type BoatState struct {
-	Position navigation.Position
-	Instant  time.Time
-	Heading  navigation.Heading
-	SailID   polar.SailID
-	Tack     navigation.Tack
-	Stamina  StaminaState
+	Position           navigation.Position
+	Instant            time.Time
+	Heading            navigation.Heading
+	SailID             polar.SailID
+	Tack               navigation.Tack
+	Stamina            StaminaState
+	ActiveSpeedPenalty *polar.ManeuverPenalty
 }
 
 // Validate checks every independent part of a boat state.
@@ -117,6 +118,14 @@ func (state BoatState) Validate() error {
 	}
 	if err := state.Stamina.Validate(); err != nil {
 		return fmt.Errorf("simulation: état du bateau: %w", err)
+	}
+	if state.ActiveSpeedPenalty != nil {
+		if err := validateAppliedSpeedPenalty(*state.ActiveSpeedPenalty); err != nil {
+			return fmt.Errorf(
+				"simulation: état du bateau: pénalité de vitesse active invalide: %w",
+				err,
+			)
+		}
 	}
 	return nil
 }

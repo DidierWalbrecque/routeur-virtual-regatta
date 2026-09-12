@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 )
 
 func TestStaminaLevelValidate(t *testing.T) {
@@ -101,6 +102,18 @@ func TestBoatStateValidate(t *testing.T) {
 	}
 }
 
+func TestBoatStateValidateAcceptsActiveSpeedPenalty(t *testing.T) {
+	state := validBoatState()
+	state.ActiveSpeedPenalty = &polar.ManeuverPenalty{
+		SpeedRatio: 0.5,
+		Duration:   4 * time.Minute,
+	}
+
+	if err := state.Validate(); err != nil {
+		t.Fatalf("état avec pénalité active refusé: %v", err)
+	}
+}
+
 func TestBoatStateValidateRejectsInvalidValues(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -148,6 +161,26 @@ func TestBoatStateValidateRejectsInvalidValues(t *testing.T) {
 				state.Stamina.Level = 101
 			},
 			wantErr: "stamina",
+		},
+		{
+			name: "coefficient de pénalité active",
+			mutate: func(state *BoatState) {
+				state.ActiveSpeedPenalty = &polar.ManeuverPenalty{
+					SpeedRatio: 1.1,
+					Duration:   time.Minute,
+				}
+			},
+			wantErr: "pénalité de vitesse active",
+		},
+		{
+			name: "durée de pénalité active",
+			mutate: func(state *BoatState) {
+				state.ActiveSpeedPenalty = &polar.ManeuverPenalty{
+					SpeedRatio: 0.5,
+					Duration:   0,
+				}
+			},
+			wantErr: "pénalité de vitesse active",
 		},
 	}
 
