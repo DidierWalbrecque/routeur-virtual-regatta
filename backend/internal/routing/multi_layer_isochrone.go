@@ -44,11 +44,11 @@ type IsochroneNode struct {
 }
 
 type isochroneParentState struct {
-	Position       navigation.Position
-	Stamina        simulation.StaminaState
-	BoatState      simulation.BoatState
-	WindAngle      navigation.TrueWindAngle
-	HasBoatState   bool
+	Position     navigation.Position
+	Stamina      simulation.StaminaState
+	BoatState    simulation.BoatState
+	WindAngle    navigation.TrueWindAngle
+	HasBoatState bool
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
