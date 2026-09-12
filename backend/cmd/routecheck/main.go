@@ -17,6 +17,7 @@ import (
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
@@ -50,6 +51,7 @@ type options struct {
 	cellSize       navigation.NauticalMiles
 	maxCandidates  int
 	arrivalRadius  navigation.NauticalMiles
+	stamina        simulation.StaminaState
 	geoJSONPath    string
 }
 
@@ -98,6 +100,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			CellSize:       options.cellSize,
 			MaxCandidates:  options.maxCandidates,
 			ArrivalRadius:  options.arrivalRadius,
+			InitialStamina: options.stamina,
 		},
 	)
 	if err != nil {
@@ -326,6 +329,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		1,
 		"distance maximale de la destination considérée comme une arrivée en milles nautiques",
 	)
+	stamina := flags.Float64(
+		"stamina",
+		100,
+		"stamina initiale du bateau entre 0 et 100",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -449,6 +457,16 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		)
 	}
 
+	staminaState := simulation.StaminaState{
+		Level: simulation.StaminaLevel(*stamina),
+	}
+	if err := staminaState.Validate(); err != nil {
+		return options{}, fmt.Errorf(
+			"routecheck: -stamina invalide: %w",
+			err,
+		)
+	}
+
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
 		return options{}, fmt.Errorf(
@@ -469,6 +487,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.cellSize = cellSizeValue
 	result.maxCandidates = *maxCandidates
 	result.arrivalRadius = arrivalRadiusValue
+	result.stamina = staminaState
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
