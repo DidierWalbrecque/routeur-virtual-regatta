@@ -17,20 +17,20 @@ import (
 
 // IsochroneSearchInput describes a multi-layer isochrone exploration.
 type IsochroneSearchInput struct {
-	Position          navigation.Position
-	Destination       navigation.Position
-	Instant           time.Time
-	StepDuration      time.Duration
-	LayerCount        int
-	Owned             equipment.EquipmentSet
-	HeadingSpacing    float64
-	CellSize          navigation.NauticalMiles
-	MaxCandidates     int
-	ArrivalRadius     navigation.NauticalMiles
-	InitialStamina    simulation.StaminaState
-	InitialNavigation  *InitialNavigationState
+	Position            navigation.Position
+	Destination         navigation.Position
+	Instant             time.Time
+	StepDuration        time.Duration
+	LayerCount          int
+	Owned               equipment.EquipmentSet
+	HeadingSpacing      float64
+	CellSize            navigation.NauticalMiles
+	MaxCandidates       int
+	ArrivalRadius       navigation.NauticalMiles
+	InitialStamina      simulation.StaminaState
+	InitialNavigation   *InitialNavigationState
 	TransitionEvaluator *simulation.TransitionEvaluator
-	Progress           IsochroneProgressReporter
+	Progress            IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
