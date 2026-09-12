@@ -307,6 +307,13 @@ func TestWriteResult(t *testing.T) {
 		InitialDistance:   84,
 		RemainingDistance: 83,
 		Progress:          1,
+		Maneuver: &simulation.ManeuverState{
+			Kind:        simulation.ManeuverTack,
+			SailChanged: true,
+		},
+		State: simulation.BoatState{
+			Stamina: simulation.StaminaState{Level: 72.5},
+		},
 	}
 	search := routing.IsochroneSearch{
 		Origin:        position,
@@ -369,6 +376,7 @@ func TestWriteResult(t *testing.T) {
 		"1. 2026-09-05T07:40:00Z | cap 321.00°",
 		"voile Jib | vitesse 8.000 nd",
 		"distance restante 83.000 NM",
+		"manœuvre virement | changement de voile oui | stamina 72.5",
 		"Position finale VR :",
 		"Destination atteinte : non",
 		"Positions conservées par front : 1",
@@ -377,6 +385,52 @@ func TestWriteResult(t *testing.T) {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("sortie absente %q:\n%s", expected, output.String())
 		}
+	}
+}
+
+func TestFormatManeuverState(t *testing.T) {
+	tests := []struct {
+		name           string
+		maneuver       *simulation.ManeuverState
+		wantManeuver   string
+		wantSailChange string
+	}{
+		{
+			name:           "inconnu",
+			wantManeuver:   "indéterminée",
+			wantSailChange: "indéterminé",
+		},
+		{
+			name: "aucune action",
+			maneuver: &simulation.ManeuverState{
+				Kind: simulation.ManeuverNone,
+			},
+			wantManeuver:   "aucune",
+			wantSailChange: "non",
+		},
+		{
+			name: "empannage et voile",
+			maneuver: &simulation.ManeuverState{
+				Kind:        simulation.ManeuverGybe,
+				SailChanged: true,
+			},
+			wantManeuver:   "empannage",
+			wantSailChange: "oui",
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			if got := formatManeuver(test.maneuver); got != test.wantManeuver {
+				t.Errorf("manœuvre = %q, attendue %q", got, test.wantManeuver)
+			}
+			if got := formatSailChange(test.maneuver); got != test.wantSailChange {
+				t.Errorf(
+					"changement de voile = %q, attendu %q",
+					got,
+					test.wantSailChange,
+				)
+			}
+		})
 	}
 }
 

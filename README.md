@@ -347,16 +347,18 @@ premier front à partir de l'état réel du bateau. La voile doit être présent
 dans la polaire et disponible avec les équipements déclarés par `-owned`.
 
 La commande affiche chaque étape de la route retenue avec le cap, le vent, le
-TWA, l'amure, la voile, la vitesse, la position, la distance restante et la
-progression globale. Elle indique aussi le nombre de positions conservées dans
+TWA, l'amure, la voile, la vitesse, la manœuvre détectée, le changement de
+voile, la stamina, la position, la distance restante et la progression globale.
+Elle indique aussi le nombre de positions conservées dans
 chaque front, la taille de cellule effectivement utilisée et si la destination
 a été atteinte. Le calcul s'arrête au premier front dont le meilleur point
 entre dans le rayon d'arrivée.
 
 Avec `-geojson`, elle écrit également une `FeatureCollection` comprenant la
 ligne de route, le départ, la destination et chaque étape. Les points d'étape
-conservent le cap, la voile, le vent, le TWA, l'amure, la vitesse et la
-progression ; le fichier peut être chargé directement dans MapLibre ou un
+conservent le cap, la voile, le vent, le TWA, l'amure, la vitesse, la
+manœuvre, le changement de voile, la stamina et la progression ; le fichier
+peut être chargé directement dans MapLibre ou un
 logiciel SIG.
 
 Lorsque le nombre de positions dépasse `-max-candidates`, le moteur agrandit

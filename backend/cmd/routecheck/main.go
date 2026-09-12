@@ -212,6 +212,13 @@ func writeResult(
 			routeStep.Node.RemainingDistance,
 			routeStep.Node.Progress,
 		)
+		fmt.Fprintf(
+			stdout,
+			"   manœuvre %s | changement de voile %s | stamina %.1f\n",
+			formatManeuver(routeStep.Node.Maneuver),
+			formatSailChange(routeStep.Node.Maneuver),
+			routeStep.Node.State.Stamina.Level,
+		)
 	}
 
 	final := route.Steps[len(route.Steps)-1]
@@ -563,6 +570,32 @@ func parsePosition(
 		)
 	}
 	return position, nil
+}
+
+func formatManeuver(maneuver *simulation.ManeuverState) string {
+	if maneuver == nil {
+		return "indéterminée"
+	}
+	switch maneuver.Kind {
+	case simulation.ManeuverNone:
+		return "aucune"
+	case simulation.ManeuverTack:
+		return "virement"
+	case simulation.ManeuverGybe:
+		return "empannage"
+	default:
+		return string(maneuver.Kind)
+	}
+}
+
+func formatSailChange(maneuver *simulation.ManeuverState) string {
+	if maneuver == nil {
+		return "indéterminé"
+	}
+	if maneuver.SailChanged {
+		return "oui"
+	}
+	return "non"
 }
 
 func formatTack(tack navigation.Tack) string {
