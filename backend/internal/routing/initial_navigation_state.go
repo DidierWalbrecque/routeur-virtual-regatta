@@ -2,7 +2,6 @@ package routing
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -119,4 +118,3 @@ func containsSailID(sails []polar.SailID, wanted polar.SailID) bool {
 	return false
 }
 
-var _ = errors.New
