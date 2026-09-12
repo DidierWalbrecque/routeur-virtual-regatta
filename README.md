@@ -311,6 +311,7 @@ go run ./cmd/routecheck \
   -cell-size 1 \
   -max-candidates 500 \
   -arrival-radius 1 \
+  -stamina 100 \
   -geojson ../data/routes/route.geojson \
   -owned code0,foils
 ```
@@ -326,6 +327,7 @@ Les paramètres spécifiques au routage correspondent à :
   par défaut 500 ; la valeur 0 désactive la limite ;
 - `-arrival-radius` : distance maximale de la destination considérée comme
   une arrivée, par défaut 1 NM ;
+- `-stamina` : réserve initiale du bateau entre 0 et 100, par défaut 100 ;
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
 
@@ -359,9 +361,10 @@ mais augmentent le temps de calcul et la mémoire utilisés. Commencer avec
 heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.
 
-Il s'agit encore d'une route théorique sans terres, portes de course, stamina
-ni pénalités de manœuvre. La commande ne se connecte pas à Virtual Regatta et
-ne commande jamais le bateau.
+Il s'agit encore d'une route théorique sans terres ni portes de course. La
+stamina initiale est conservée dans chaque nœud, mais sa consommation et les
+pénalités de manœuvre ne modifient pas encore la route. La commande ne se
+connecte pas à Virtual Regatta et ne commande jamais le bateau.
 
 ## État du projet
 
