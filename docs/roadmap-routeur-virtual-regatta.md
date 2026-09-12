@@ -333,6 +333,13 @@ représenter les actions simultanées sans figer leur règle de cumul.
 - [x] Maintenir la stamina entre 0 % et 100 %.
 - [x] Tester les manœuvres isolées et successives.
 - [x] Rendre les courbes configurables pour suivre les évolutions du jeu.
+- [x] Assembler les calculs confirmés dans un `TransitionEvaluator`.
+
+### État actuel
+
+Le moteur technique de transition est assemblé. La validation finale de cette
+phase reste dépendante des courbes officielles de stamina et de la règle de
+cumul des actions simultanées, suivies en phase 0.
 
 ### Livrable
 
