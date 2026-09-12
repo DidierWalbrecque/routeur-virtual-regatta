@@ -102,9 +102,9 @@ func TestStaminaStateConsumedByRejectsInvalidInputs(t *testing.T) {
 			wantErr: "coût invalide",
 		},
 		{
-			name:   "coût non fini",
-			state:  StaminaState{Level: 100},
-			amount: StaminaLevel(math.Inf(1)),
+			name:    "coût non fini",
+			state:   StaminaState{Level: 100},
+			amount:  StaminaLevel(math.Inf(1)),
 			wantErr: "coût invalide",
 		},
 	}
