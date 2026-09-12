@@ -374,6 +374,14 @@ func candidateManeuver(
 	if !parent.HasBoatState {
 		return nil, nil
 	}
+	if parent.BoatState.Tack != navigation.TackUndefined &&
+		candidate.Step.Tack != navigation.TackUndefined &&
+		parent.BoatState.Tack != candidate.Step.Tack &&
+		parent.WindAngle+candidate.Step.WindAngle == 180 {
+		// With diametrically opposed headings, the endpoints alone do not
+		// reveal whether the boat crossed upwind or downwind.
+		return nil, nil
+	}
 
 	maneuver, err := simulation.DetectManeuver(
 		simulation.ManeuverTransition{
