@@ -322,8 +322,8 @@ représenter les actions simultanées sans figer leur règle de cumul.
 
 ### Tâches
 
-- [ ] Distinguer changement de cap simple, virement et empannage.
-- [ ] Détecter un changement de voile.
+- [x] Distinguer changement de cap simple, virement et empannage.
+- [x] Détecter un changement de voile.
 - [ ] Interpoler le temps de manœuvre entre vent faible et vent fort.
 - [ ] Appliquer les ratios des winchs standard et pro.
 - [ ] Calculer la consommation d'énergie selon la manœuvre.
