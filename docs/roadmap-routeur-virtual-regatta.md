@@ -328,7 +328,7 @@ représenter les actions simultanées sans figer leur règle de cumul.
 - [x] Appliquer les ratios des winchs standard et pro.
 - [x] Calculer la consommation d'énergie selon la manœuvre.
 - [x] Appliquer le coefficient de vent à la consommation.
-- [ ] Calculer la récupération d'énergie pendant les périodes calmes.
+- [x] Calculer la récupération d'énergie pendant les périodes calmes.
 - [ ] Calculer l'effet de l'énergie sur la durée de la manœuvre.
 - [ ] Maintenir la stamina entre 0 % et 100 %.
 - [ ] Tester les manœuvres isolées et successives.
