@@ -326,7 +326,7 @@ représenter les actions simultanées sans figer leur règle de cumul.
 - [x] Détecter un changement de voile.
 - [x] Interpoler le temps de manœuvre entre vent faible et vent fort.
 - [x] Appliquer les ratios des winchs standard et pro.
-- [ ] Calculer la consommation d'énergie selon la manœuvre.
+- [x] Calculer la consommation d'énergie selon la manœuvre.
 - [ ] Appliquer le coefficient de vent à la consommation.
 - [ ] Calculer la récupération d'énergie pendant les périodes calmes.
 - [ ] Calculer l'effet de l'énergie sur la durée de la manœuvre.
