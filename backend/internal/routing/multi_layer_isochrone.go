@@ -17,21 +17,21 @@ import (
 
 // IsochroneSearchInput describes a multi-layer isochrone exploration.
 type IsochroneSearchInput struct {
-	Position            navigation.Position
-	Destination         navigation.Position
-	Instant             time.Time
-	StepDuration        time.Duration
-	LayerCount          int
-	Owned               equipment.EquipmentSet
-	HeadingSpacing      float64
-	CellSize            navigation.NauticalMiles
-	MaxCandidates       int
-	ArrivalRadius       navigation.NauticalMiles
-	InitialStamina      simulation.StaminaState
-	InitialNavigation   *InitialNavigationState
-	TransitionEvaluator  *simulation.TransitionEvaluator
+	Position              navigation.Position
+	Destination           navigation.Position
+	Instant               time.Time
+	StepDuration          time.Duration
+	LayerCount            int
+	Owned                 equipment.EquipmentSet
+	HeadingSpacing        float64
+	CellSize              navigation.NauticalMiles
+	MaxCandidates         int
+	ArrivalRadius         navigation.NauticalMiles
+	InitialStamina        simulation.StaminaState
+	InitialNavigation     *InitialNavigationState
+	TransitionEvaluator   *simulation.TransitionEvaluator
 	CombineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
-	Progress             IsochroneProgressReporter
+	Progress              IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -331,10 +331,10 @@ func BuildIsochroneSearch(
 					activeSpeedPenalty = speedPenalty.RemainingPenalty
 				}
 				state := simulation.BoatState{
-					Position: candidate.Step.NextPosition,
-					Instant:  candidate.Step.NextInstant,
-					Heading:  candidate.Step.Heading,
-					SailID:   candidate.Step.BestSail.SailID,
+					Position:           candidate.Step.NextPosition,
+					Instant:            candidate.Step.NextInstant,
+					Heading:            candidate.Step.Heading,
+					SailID:             candidate.Step.BestSail.SailID,
 					Tack:               candidate.Step.Tack,
 					Stamina:            nextStamina,
 					ActiveSpeedPenalty: activeSpeedPenalty,
