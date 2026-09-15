@@ -17,20 +17,21 @@ import (
 
 // IsochroneSearchInput describes a multi-layer isochrone exploration.
 type IsochroneSearchInput struct {
-	Position            navigation.Position
-	Destination         navigation.Position
-	Instant             time.Time
-	StepDuration        time.Duration
-	LayerCount          int
-	Owned               equipment.EquipmentSet
-	HeadingSpacing      float64
-	CellSize            navigation.NauticalMiles
-	MaxCandidates       int
-	ArrivalRadius       navigation.NauticalMiles
-	InitialStamina      simulation.StaminaState
-	InitialNavigation   *InitialNavigationState
-	TransitionEvaluator *simulation.TransitionEvaluator
-	Progress            IsochroneProgressReporter
+	Position              navigation.Position
+	Destination           navigation.Position
+	Instant               time.Time
+	StepDuration          time.Duration
+	LayerCount            int
+	Owned                 equipment.EquipmentSet
+	HeadingSpacing        float64
+	CellSize              navigation.NauticalMiles
+	MaxCandidates         int
+	ArrivalRadius         navigation.NauticalMiles
+	InitialStamina        simulation.StaminaState
+	InitialNavigation     *InitialNavigationState
+	TransitionEvaluator   *simulation.TransitionEvaluator
+	CombineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
+	Progress              IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -43,6 +44,7 @@ type IsochroneNode struct {
 	Progress          DistanceProgress
 	Maneuver          *simulation.ManeuverState
 	Transition        *simulation.TransitionEvaluation
+	SpeedPenalty      *simulation.SpeedPenaltyApplication
 	State             simulation.BoatState
 }
 
@@ -292,46 +294,22 @@ func BuildIsochroneSearch(
 			}
 
 			for _, candidate := range candidates {
-				maneuver, err := candidateManeuver(parentState, candidate)
+				maneuver, transition, speedPenalty, err :=
+					evaluateCandidateTransitionAndPenalty(
+						parentState,
+						&candidate,
+						input.Owned,
+						input.TransitionEvaluator,
+						input.CombineSpeedPenalties,
+					)
 				if err != nil {
 					return IsochroneSearch{}, fmt.Errorf(
-						"routing: construction de la couche %d impossible: manœuvre du candidat au cap %.6f° invalide: %w",
+						"routing: construction de la couche %d impossible: candidat au cap %.6f° invalide: %w",
 						layerIndex+1,
 						candidate.Heading,
 						err,
 					)
 				}
-				var transition *simulation.TransitionEvaluation
-				if maneuver != nil && input.TransitionEvaluator != nil {
-					evaluation, evaluateErr := input.TransitionEvaluator.Evaluate(
-						simulation.TransitionEvaluationRequest{
-							Transition: simulation.ManeuverTransition{
-								PreviousTack:      parentState.BoatState.Tack,
-								NextTack:          candidate.Step.Tack,
-								PreviousWindAngle: parentState.WindAngle,
-								NextWindAngle:     candidate.Step.WindAngle,
-								PreviousSailID:    parentState.BoatState.SailID,
-								NextSailID:        candidate.Step.BestSail.SailID,
-							},
-							WindSpeed: polar.WindSpeed(candidate.Step.WindKnots),
-							Stamina:   parentState.Stamina,
-							ProfessionalWinches: input.Owned.Has(
-								equipment.ProWinches,
-							),
-						},
-					)
-					if evaluateErr != nil {
-						return IsochroneSearch{}, fmt.Errorf(
-							"routing: construction de la couche %d impossible: évaluation de la transition au cap %.6f° impossible: %w",
-							layerIndex+1,
-							candidate.Heading,
-							evaluateErr,
-						)
-					}
-					maneuver = &evaluation.Maneuver
-					transition = &evaluation
-				}
-
 				remainingDistance, err := navigation.DistanceBetween(
 					candidate.Step.NextPosition,
 					input.Destination,
@@ -348,13 +326,18 @@ func BuildIsochroneSearch(
 				if transition != nil {
 					nextStamina = transition.NextStamina
 				}
+				var activeSpeedPenalty *polar.ManeuverPenalty
+				if speedPenalty != nil {
+					activeSpeedPenalty = speedPenalty.RemainingPenalty
+				}
 				state := simulation.BoatState{
-					Position: candidate.Step.NextPosition,
-					Instant:  candidate.Step.NextInstant,
-					Heading:  candidate.Step.Heading,
-					SailID:   candidate.Step.BestSail.SailID,
-					Tack:     candidate.Step.Tack,
-					Stamina:  nextStamina,
+					Position:           candidate.Step.NextPosition,
+					Instant:            candidate.Step.NextInstant,
+					Heading:            candidate.Step.Heading,
+					SailID:             candidate.Step.BestSail.SailID,
+					Tack:               candidate.Step.Tack,
+					Stamina:            nextStamina,
+					ActiveSpeedPenalty: activeSpeedPenalty,
 				}
 				if err := state.Validate(); err != nil {
 					return IsochroneSearch{}, fmt.Errorf(
@@ -372,9 +355,10 @@ func BuildIsochroneSearch(
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
 					),
-					Maneuver:   maneuver,
-					Transition: transition,
-					State:      state,
+					Maneuver:     maneuver,
+					Transition:   transition,
+					SpeedPenalty: speedPenalty,
+					State:        state,
 				})
 			}
 		}
@@ -502,9 +486,12 @@ const maximumStateAwareCellSize = 360 * nauticalMilesPerDegree
 
 type isochroneStateCell struct {
 	spatialCell
-	heading navigation.Heading
-	sailID  polar.SailID
-	tack    navigation.Tack
+	heading                navigation.Heading
+	sailID                 polar.SailID
+	tack                   navigation.Tack
+	hasActiveSpeedPenalty  bool
+	activeSpeedRatio       polar.SpeedRatio
+	activePenaltyRemaining time.Duration
 }
 
 func pruneIsochroneNodes(
@@ -547,6 +534,13 @@ func pruneIsochroneNodes(
 			heading:     node.State.Heading,
 			sailID:      node.State.SailID,
 			tack:        node.State.Tack,
+		}
+		if node.State.ActiveSpeedPenalty != nil {
+			key.hasActiveSpeedPenalty = true
+			key.activeSpeedRatio =
+				node.State.ActiveSpeedPenalty.SpeedRatio
+			key.activePenaltyRemaining =
+				node.State.ActiveSpeedPenalty.Duration
 		}
 		group, exists := groups[key]
 		if !exists {

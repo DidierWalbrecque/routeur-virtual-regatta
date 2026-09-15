@@ -16,6 +16,7 @@ type SpeedPenaltyApplication struct {
 	Distance            navigation.NauticalMiles
 	PenalizedDuration   time.Duration
 	UnpenalizedDuration time.Duration
+	AppliedPenalty      *polar.ManeuverPenalty
 	RemainingPenalty    *polar.ManeuverPenalty
 }
 
@@ -84,6 +85,54 @@ func (evaluation TransitionEvaluation) CombinedSpeedPenalty(
 		)
 	}
 
+	return &combined, nil
+}
+
+// CombineSpeedPenalties combines a penalty already active at the start of a
+// step with a newly triggered one. An explicit rule is required when both are
+// present.
+func CombineSpeedPenalties(
+	active *polar.ManeuverPenalty,
+	triggered *polar.ManeuverPenalty,
+	combine ManeuverSpeedPenaltyCombiner,
+) (*polar.ManeuverPenalty, error) {
+	switch {
+	case active == nil && triggered == nil:
+		return nil, nil
+	case active != nil && triggered == nil:
+		return validatedSpeedPenaltyCopy("pénalité active", active)
+	case active == nil && triggered != nil:
+		return validatedSpeedPenaltyCopy("nouvelle pénalité", triggered)
+	}
+
+	if _, err := validatedSpeedPenaltyCopy("pénalité active", active); err != nil {
+		return nil, err
+	}
+	if _, err := validatedSpeedPenaltyCopy(
+		"nouvelle pénalité",
+		triggered,
+	); err != nil {
+		return nil, err
+	}
+	if combine == nil {
+		return nil, errors.New(
+			"simulation: combinaison de pénalités impossible: règle explicite requise pour superposer une pénalité active et une nouvelle pénalité",
+		)
+	}
+
+	combined, err := combine(*active, *triggered)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"simulation: superposition de pénalités impossible: %w",
+			err,
+		)
+	}
+	if err := validateAppliedSpeedPenalty(combined); err != nil {
+		return nil, fmt.Errorf(
+			"simulation: superposition de pénalités impossible: résultat invalide: %w",
+			err,
+		)
+	}
 	return &combined, nil
 }
 
@@ -158,10 +207,12 @@ func ApplyManeuverSpeedPenalty(
 		return SpeedPenaltyApplication{}, err
 	}
 
+	applied := *penalty
 	result := SpeedPenaltyApplication{
 		Distance:            penalizedDistance + unpenalizedDistance,
 		PenalizedDuration:   penalizedDuration,
 		UnpenalizedDuration: unpenalizedDuration,
+		AppliedPenalty:      &applied,
 	}
 	if penalty.Duration > stepDuration {
 		remaining := *penalty
