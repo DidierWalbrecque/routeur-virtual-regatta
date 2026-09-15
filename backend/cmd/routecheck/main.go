@@ -53,6 +53,7 @@ type options struct {
 	arrivalRadius     navigation.NauticalMiles
 	stamina           simulation.StaminaState
 	initialNavigation *initialNavigationOptions
+	maneuverModel     maneuverModel
 	geoJSONPath       string
 }
 
@@ -92,6 +93,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	maneuverRuntime, err := newManeuverRuntime(
+		options.maneuverModel,
+		boatPolar.Winch,
+	)
+	if err != nil {
+		return err
+	}
 
 	search, err := routing.BuildIsochroneSearch(
 		context.Background(),
@@ -108,8 +116,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 			CellSize:          options.cellSize,
 			MaxCandidates:     options.maxCandidates,
 			ArrivalRadius:     options.arrivalRadius,
-			InitialStamina:    options.stamina,
-			InitialNavigation: initialNavigation,
+			InitialStamina:       options.stamina,
+			InitialNavigation:    initialNavigation,
+			TransitionEvaluator:  maneuverRuntime.evaluator,
+			CombineSpeedPenalties: maneuverRuntime.combineSpeedPenalties,
 		},
 	)
 	if err != nil {
@@ -159,6 +169,7 @@ func writeResult(
 	fmt.Fprintf(stdout, "Départ VR : %s\n", initialPosition)
 	fmt.Fprintf(stdout, "Destination VR : %s\n", destination)
 	fmt.Fprintf(stdout, "Instant initial : %s\n", options.instant.Format(time.RFC3339))
+	fmt.Fprintf(stdout, "Modèle de manœuvres : %s\n", options.maneuverModel)
 	fmt.Fprintf(
 		stdout,
 		"Horizon : %.2f min | pas %.2f min | %d fronts\n",
@@ -378,6 +389,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		"",
 		"nom de la voile actuelle dans la polaire ; nécessite -current-heading",
 	)
+	maneuverModelText := flags.String(
+		"maneuver-model",
+		string(maneuverModelOff),
+		"modèle de manœuvres : off ou experimental-additive",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -517,6 +533,10 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	if err != nil {
 		return options{}, err
 	}
+	maneuverModel, err := parseManeuverModel(*maneuverModelText)
+	if err != nil {
+		return options{}, err
+	}
 
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
@@ -540,6 +560,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.arrivalRadius = arrivalRadiusValue
 	result.stamina = staminaState
 	result.initialNavigation = initialNavigation
+	result.maneuverModel = maneuverModel
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
