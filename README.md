@@ -312,6 +312,7 @@ go run ./cmd/routecheck \
   -max-candidates 500 \
   -arrival-radius 1 \
   -stamina 100 \
+  -maneuver-model experimental-additive \
   -current-heading 321 \
   -current-sail Jib \
   -geojson ../data/routes/route.geojson \
@@ -330,6 +331,8 @@ Les paramètres spécifiques au routage correspondent à :
 - `-arrival-radius` : distance maximale de la destination considérée comme
   une arrivée, par défaut 1 NM ;
 - `-stamina` : réserve initiale du bateau entre 0 et 100, par défaut 100 ;
+- `-maneuver-model` : modèle de manœuvres à utiliser, `off` par défaut ou
+  `experimental-additive` pour activer les pénalités et la consommation ;
 - `-current-heading` : cap actuellement suivi, de 0° inclus à 360° exclus ;
 - `-current-sail` : nom de la voile actuelle tel qu'il apparaît dans la
   polaire, sans distinction entre majuscules et minuscules ;
@@ -349,6 +352,8 @@ dans la polaire et disponible avec les équipements déclarés par `-owned`.
 La commande affiche chaque étape de la route retenue avec le cap, le vent, le
 TWA, l'amure, la voile, la vitesse, la manœuvre détectée, le changement de
 voile, la stamina, la position, la distance restante et la progression globale.
+Lorsqu'une pénalité de vitesse est active, elle affiche également son ratio, sa
+durée appliquée, son reliquat et la vitesse moyenne réellement parcourue.
 Elle indique aussi le nombre de positions conservées dans
 chaque front, la taille de cellule effectivement utilisée et si la destination
 a été atteinte. Le calcul s'arrête au premier front dont le meilleur point
@@ -373,10 +378,18 @@ mais augmentent le temps de calcul et la mémoire utilisés. Commencer avec
 heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.
 
-Il s'agit encore d'une route théorique sans terres ni portes de course. La
-stamina initiale est conservée dans chaque nœud, mais sa consommation et les
-pénalités de manœuvre ne modifient pas encore la route. La commande ne se
-connecte pas à Virtual Regatta et ne commande jamais le bateau.
+Il s'agit encore d'une route théorique sans terres ni portes de course. Avec
+`-maneuver-model off`, les manœuvres restent seulement observées. Le profil
+`experimental-additive` utilise les pénalités de winch de la polaire, les coûts
+de stamina connus de 10 points pour un virement ou un empannage et de 20 points
+pour un changement de voile. Pour permettre les essais avant confirmation de
+la règle Virtual Regatta, il additionne les consommations simultanées, multiplie
+leurs ratios de vitesse et additionne leurs durées. Les coefficients de vent et
+de stamina restent neutres, égaux à 1, et la récupération de stamina n'est pas
+encore appliquée pendant le routage. Ce profil est donc expérimental et ses
+résultats ne doivent pas être considérés comme une reproduction officielle du
+jeu. La commande ne se connecte pas à Virtual Regatta et ne commande jamais le
+bateau.
 
 ## État du projet
 
