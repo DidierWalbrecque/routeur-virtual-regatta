@@ -18,7 +18,7 @@ func TestEvaluateCandidateTransitionAppliesTriggeredPenalty(t *testing.T) {
 		evaluateCandidateTransitionAndPenalty(
 			parent,
 			&candidate,
-			nil,
+			0,
 			&evaluator,
 			nil,
 		)
@@ -68,7 +68,7 @@ func TestEvaluateCandidateTransitionCarriesActivePenalty(t *testing.T) {
 		evaluateCandidateTransitionAndPenalty(
 			parent,
 			&candidate,
-			nil,
+			0,
 			nil,
 			nil,
 		)
@@ -108,7 +108,7 @@ func TestEvaluateCandidateTransitionRequiresRuleForOverlappingPenalties(
 	_, _, _, err := evaluateCandidateTransitionAndPenalty(
 		parent,
 		&candidate,
-		nil,
+		0,
 		&evaluator,
 		nil,
 	)
