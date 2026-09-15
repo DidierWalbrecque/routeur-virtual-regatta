@@ -364,21 +364,24 @@ Calculer une route complète dans une météo qui évolue avec le temps.
 - [x] Déplacer le bateau selon météo, polaire et équipement.
 - [x] Conserver cap, voile, stamina, amure et parent dans chaque nœud.
 - [x] Découper le front d'isochrones en secteurs.
-- [ ] Supprimer les états dominés sans supprimer des réserves de stamina utiles.
+- [x] Supprimer les états dominés sans supprimer des réserves de stamina utiles.
 - [x] Détecter l'arrivée.
 - [x] Reconstruire la route depuis les parents.
-- [ ] Retourner caps, voiles, manœuvres et heures.
+- [x] Retourner caps, voiles, manœuvres et heures.
 - [x] Exporter la route en GeoJSON.
 - [x] Ajouter l'annulation et la progression d'un calcul.
 
 ### État actuel
 
 Le routage en pleine mer produit des fronts successifs, reconstruit la meilleure
-route et limite adaptativement leur taille. Chaque nœud conserve désormais son
-état nautique complet ; la stamina reste inchangée tant que le
-`TransitionEvaluator` n'est pas branché au déplacement. Sur le scénario réel de
-référence de quatre heures, la limite de 500 candidats réduit le temps de calcul
-de 24,832 s à 9,600 s, avec une perte de progression de 0,783 NM.
+route et limite adaptativement leur taille. Chaque nœud conserve son état
+nautique complet, y compris une pénalité de vitesse restante. `routecheck` peut
+activer un profil `experimental-additive` qui branche le `TransitionEvaluator`,
+la consommation de stamina et les pénalités de manœuvre au déplacement. Ce
+profil reste explicitement provisoire tant que les règles de cumul et les
+courbes officielles ne sont pas confirmées. Sur le scénario réel de référence
+de quatre heures, la limite de 500 candidats réduit le temps de calcul de
+24,832 s à 9,600 s, avec une perte de progression de 0,783 NM.
 
 ### Livrable
 
