@@ -165,7 +165,8 @@ func stateAwarePruningNode(
 				NextPosition: position,
 			},
 		},
-		Progress: progress,
+		Progress:       progress,
+		TargetProgress: progress,
 		State: simulation.BoatState{
 			Heading: heading,
 			SailID:  sailID,
