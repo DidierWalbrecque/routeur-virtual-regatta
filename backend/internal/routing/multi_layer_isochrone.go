@@ -40,20 +40,20 @@ type IsochroneSearchInput struct {
 // IsochroneNode represents one retained position and its parent in the
 // preceding frontier. ParentIndex is -1 for the first frontier.
 type IsochroneNode struct {
-	ParentIndex       int
-	Candidate         HeadingCandidate
-	InitialDistance   navigation.NauticalMiles
-	RemainingDistance navigation.NauticalMiles
+	ParentIndex             int
+	Candidate               HeadingCandidate
+	InitialDistance         navigation.NauticalMiles
+	RemainingDistance       navigation.NauticalMiles
 	Progress                DistanceProgress
 	CourseTarget            navigation.Position
 	TargetInitialDistance   navigation.NauticalMiles
 	TargetRemainingDistance navigation.NauticalMiles
 	TargetProgress          DistanceProgress
 	Maneuver                *simulation.ManeuverState
-	Transition        *simulation.TransitionEvaluation
-	SpeedPenalty      *simulation.SpeedPenaltyApplication
-	CourseProgress    CourseProgress
-	State             simulation.BoatState
+	Transition              *simulation.TransitionEvaluation
+	SpeedPenalty            *simulation.SpeedPenaltyApplication
+	CourseProgress          CourseProgress
+	State                   simulation.BoatState
 }
 
 type isochroneParentState struct {
