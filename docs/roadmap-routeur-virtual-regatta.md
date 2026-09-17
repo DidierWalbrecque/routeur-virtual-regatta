@@ -453,6 +453,10 @@ Produire deux stratégies compréhensibles et comparables.
 
 ### Route pratique
 
+Le premier calcul disponible simule chaque cap fixe sur tout l'horizon en
+réévaluant la météo, le TWA, la meilleure voile et la vitesse à chaque pas,
+puis classe les résultats selon leur progression réelle vers la destination.
+
 - Cap et voile fixes pendant environ quatre heures.
 - Aucun automatisme dans la première version.
 - Marge côtière renforcée.
@@ -462,6 +466,7 @@ Produire deux stratégies compréhensibles et comparables.
 
 ### Tâches
 
+- [x] Évaluer et classer une grille de caps fixes sur un horizon sans intervention.
 - [ ] Définir le score de stabilité.
 - [ ] Simuler de petites variations de force et de direction du vent.
 - [ ] Rejeter les trajectoires trop sensibles.
