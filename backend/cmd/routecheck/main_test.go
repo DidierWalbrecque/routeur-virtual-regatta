@@ -21,6 +21,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-polar", "boat.json",
 		"-position", `13°N 07'16" - 121°E 35'12"`,
 		"-destination", `14°N 00'00" - 120°E 00'00"`,
+		"-gate", "porte 1|13.2,121.4|13.3,121.5|either",
 		"-at", "2026-09-05T07:30:00Z",
 		"-minutes", "240",
 		"-step-minutes", "10",
@@ -60,6 +61,15 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		Longitude: 120,
 	}) {
 		t.Errorf("destination = %+v", options.destination)
+	}
+	if len(options.gates) != 1 {
+		t.Fatalf("portes = %d, attendue 1", len(options.gates))
+	}
+	if options.gates[0].Name != "porte 1" {
+		t.Errorf("nom de porte = %q, attendu porte 1", options.gates[0].Name)
+	}
+	if options.gates[0].Direction != routing.GateEitherDirection {
+		t.Errorf("sens de porte = %d, attendu either", options.gates[0].Direction)
 	}
 	if options.totalDuration != 4*time.Hour {
 		t.Errorf("durée totale = %s, attendue 4h", options.totalDuration)
@@ -293,6 +303,14 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			wantErr: "nécessite -land-geojson",
 		},
 		{
+			name: "porte invalide",
+			args: append(
+				append([]string{}, base...),
+				"-gate", "porte|13,121|14,122|nord",
+			),
+			wantErr: "-gate 1",
+		},
+		{
 			name: "équipement inconnu",
 			args: append(
 				append([]string{}, base...),
@@ -399,6 +417,11 @@ func TestWriteResult(t *testing.T) {
 		arrivalRadius:   1,
 		landGeoJSONPath: "data/land.geojson",
 		coastalMargin:   1,
+		gates: []routing.CourseGate{{
+			Name:       "porte test",
+			FirstMark:  navigation.Position{Latitude: 13.2, Longitude: 121.4},
+			SecondMark: navigation.Position{Latitude: 13.3, Longitude: 121.5},
+		}},
 	}
 
 	var output strings.Builder
@@ -427,6 +450,8 @@ func TestWriteResult(t *testing.T) {
 		"Positions conservées par front : 1",
 		"Cellules effectives par front : 1.000",
 		"Terres GeoJSON : data/land.geojson | marge 1.000 NM",
+		"Portes obligatoires : 1",
+		"1. porte test |",
 	} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("sortie absente %q:\n%s", expected, output.String())

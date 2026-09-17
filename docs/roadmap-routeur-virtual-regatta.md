@@ -412,9 +412,14 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 - [x] Détecter l'intersection d'un segment avec la terre.
 - [x] Ajouter une marge côtière configurable en milles nautiques.
 - [x] Gérer les îles, les trous et les détroits représentés par les polygones.
-- [ ] Gérer les portes, bouées et sens de franchissement.
+- [x] Gérer les portes, bouées et sens de franchissement.
 - [ ] Gérer les zones d'exclusion.
 - [x] Tester le contact avec la côte et le passage à l'antiméridien.
+
+Les portes orientées peuvent être fournies plusieurs fois à `routecheck` avec
+`-gate`. Le moteur les valide dans l'ordre, conserve la progression dans chaque
+nœud et vise le centre de la prochaine porte avant de reprendre la destination
+finale.
 
 Le détecteur utilise une approximation plane sur les petits segments produits par
 les isochrones. Natural Earth 1:10m, dans le domaine public, est retenu pour les
