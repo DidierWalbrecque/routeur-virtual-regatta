@@ -38,23 +38,24 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files             filePaths
-	polarPath         string
-	position          navigation.Position
-	destination       navigation.Position
-	instant           time.Time
-	totalDuration     time.Duration
-	stepDuration      time.Duration
-	layerCount        int
-	owned             equipment.EquipmentSet
-	headingSpacing    float64
-	cellSize          navigation.NauticalMiles
-	maxCandidates     int
-	arrivalRadius     navigation.NauticalMiles
-	stamina           simulation.StaminaState
-	initialNavigation *initialNavigationOptions
-	maneuverModel     maneuverModel
-	geoJSONPath       string
+	files               filePaths
+	polarPath           string
+	position            navigation.Position
+	destination         navigation.Position
+	instant             time.Time
+	totalDuration       time.Duration
+	stepDuration        time.Duration
+	layerCount          int
+	owned               equipment.EquipmentSet
+	headingSpacing      float64
+	cellSize            navigation.NauticalMiles
+	maxCandidates       int
+	arrivalRadius       navigation.NauticalMiles
+	stamina             simulation.StaminaState
+	initialNavigation   *initialNavigationOptions
+	maneuverModel       maneuverModel
+	staminaRecoveryRate simulation.StaminaRecoveryRate
+	geoJSONPath         string
 }
 
 func main() {
@@ -96,6 +97,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 	maneuverRuntime, err := newManeuverRuntime(
 		options.maneuverModel,
 		boatPolar.Winch,
+		options.staminaRecoveryRate,
 	)
 	if err != nil {
 		return err
@@ -120,6 +122,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			InitialNavigation:     initialNavigation,
 			TransitionEvaluator:   maneuverRuntime.evaluator,
 			CombineSpeedPenalties: maneuverRuntime.combineSpeedPenalties,
+			StaminaRecoveryRules:  maneuverRuntime.staminaRecoveryRules,
 		},
 	)
 	if err != nil {
@@ -170,6 +173,11 @@ func writeResult(
 	fmt.Fprintf(stdout, "Destination VR : %s\n", destination)
 	fmt.Fprintf(stdout, "Instant initial : %s\n", options.instant.Format(time.RFC3339))
 	fmt.Fprintf(stdout, "Modèle de manœuvres : %s\n", options.maneuverModel)
+	fmt.Fprintf(
+		stdout,
+		"Récupération de stamina : %.3f point(s)/h\n",
+		options.staminaRecoveryRate,
+	)
 	fmt.Fprintf(
 		stdout,
 		"Horizon : %.2f min | pas %.2f min | %d fronts\n",
@@ -394,6 +402,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		string(maneuverModelOff),
 		"modèle de manœuvres : off ou experimental-additive",
 	)
+	staminaRecoveryRate := flags.Float64(
+		"stamina-recovery-rate",
+		0,
+		"récupération de stamina en points par heure sans manœuvre",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -537,6 +550,13 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	if err != nil {
 		return options{}, err
 	}
+	recoveryRate := simulation.StaminaRecoveryRate(*staminaRecoveryRate)
+	if err := recoveryRate.Validate(); err != nil {
+		return options{}, fmt.Errorf(
+			"routecheck: -stamina-recovery-rate invalide: %w",
+			err,
+		)
+	}
 
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
@@ -561,6 +581,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.stamina = staminaState
 	result.initialNavigation = initialNavigation
 	result.maneuverModel = maneuverModel
+	result.staminaRecoveryRate = recoveryRate
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }

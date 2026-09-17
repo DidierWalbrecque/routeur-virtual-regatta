@@ -18,6 +18,7 @@ const (
 type maneuverRuntime struct {
 	evaluator             *simulation.TransitionEvaluator
 	combineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
+	staminaRecoveryRules  *simulation.StaminaRecoveryRules
 }
 
 func parseManeuverModel(value string) (maneuverModel, error) {
@@ -37,9 +38,22 @@ func parseManeuverModel(value string) (maneuverModel, error) {
 func newManeuverRuntime(
 	model maneuverModel,
 	winchProfile polar.WinchProfile,
+	recoveryRate simulation.StaminaRecoveryRate,
 ) (maneuverRuntime, error) {
+	if err := recoveryRate.Validate(); err != nil {
+		return maneuverRuntime{}, fmt.Errorf(
+			"routecheck: taux de récupération de stamina invalide: %w",
+			err,
+		)
+	}
+
 	switch model {
 	case maneuverModelOff:
+		if recoveryRate != 0 {
+			return maneuverRuntime{}, errors.New(
+				"routecheck: -stamina-recovery-rate nécessite -maneuver-model experimental-additive",
+			)
+		}
 		return maneuverRuntime{}, nil
 	case maneuverModelExperimentalAdditive:
 		evaluator := simulation.TransitionEvaluator{
@@ -57,9 +71,13 @@ func newManeuverRuntime(
 			},
 			CombineConsumption: combineExperimentalStaminaConsumption,
 		}
+		recoveryRules := simulation.StaminaRecoveryRules{
+			PointsPerHour: recoveryRate,
+		}
 		return maneuverRuntime{
 			evaluator:             &evaluator,
 			combineSpeedPenalties: combineExperimentalSpeedPenalties,
+			staminaRecoveryRules:  &recoveryRules,
 		}, nil
 	default:
 		return maneuverRuntime{}, errors.New(
