@@ -42,6 +42,7 @@ type options struct {
 	polarPath           string
 	position            navigation.Position
 	destination         navigation.Position
+	gates               []routing.CourseGate
 	instant             time.Time
 	totalDuration       time.Duration
 	stepDuration        time.Duration
@@ -132,6 +133,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			TransitionEvaluator:   maneuverRuntime.evaluator,
 			CombineSpeedPenalties: maneuverRuntime.combineSpeedPenalties,
 			StaminaRecoveryRules:  maneuverRuntime.staminaRecoveryRules,
+			Gates:                 options.gates,
 			Constraints:           constraints,
 		},
 	)
@@ -203,6 +205,44 @@ func writeResult(
 		options.maxCandidates,
 		options.arrivalRadius,
 	)
+	if len(options.gates) > 0 {
+		fmt.Fprintf(
+			stdout,
+			"Portes obligatoires : %d\n",
+			len(options.gates),
+		)
+		for index, gate := range options.gates {
+			firstMark, formatErr := navigation.FormatVirtualRegattaPosition(
+				gate.FirstMark,
+			)
+			if formatErr != nil {
+				return fmt.Errorf(
+					"routecheck: formatage de la première marque de la porte %d impossible: %w",
+					index+1,
+					formatErr,
+				)
+			}
+			secondMark, formatErr := navigation.FormatVirtualRegattaPosition(
+				gate.SecondMark,
+			)
+			if formatErr != nil {
+				return fmt.Errorf(
+					"routecheck: formatage de la seconde marque de la porte %d impossible: %w",
+					index+1,
+					formatErr,
+				)
+			}
+			fmt.Fprintf(
+				stdout,
+				"%d. %s | %s -> %s | %s\n",
+				index+1,
+				gate.Name,
+				firstMark,
+				secondMark,
+				formatCourseGateDirection(gate.Direction),
+			)
+		}
+	}
 	if options.landGeoJSONPath != "" {
 		fmt.Fprintf(
 			stdout,
@@ -322,6 +362,7 @@ func writeResult(
 
 func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result := options{}
+	var gateTexts courseGateTexts
 	flags := flag.NewFlagSet("routecheck", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 
@@ -364,6 +405,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		"destination-longitude",
 		math.NaN(),
 		"longitude de destination en degrés décimaux",
+	)
+	flags.Var(
+		&gateTexts,
+		"gate",
+		"porte obligatoire nom|marque 1|marque 2|sens ; option répétable",
 	)
 	atText := flags.String(
 		"at",
@@ -484,6 +530,10 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		*destinationLatitude,
 		*destinationLongitude,
 	)
+	if err != nil {
+		return options{}, err
+	}
+	gates, err := parseCourseGates(gateTexts)
 	if err != nil {
 		return options{}, err
 	}
@@ -611,6 +661,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.polarPath = *polarPath
 	result.position = position
 	result.destination = destination
+	result.gates = gates
 	result.instant = instant
 	result.totalDuration = time.Duration(*minutes * float64(time.Minute))
 	result.stepDuration = time.Duration(*stepMinutes * float64(time.Minute))
