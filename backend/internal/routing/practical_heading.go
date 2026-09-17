@@ -17,14 +17,15 @@ import (
 // PracticalHeadingInput describes several constant-heading simulations over the
 // same horizon. Weather and boat performance are recalculated at every step.
 type PracticalHeadingInput struct {
-	Position     navigation.Position
-	Destination  navigation.Position
-	Instant      time.Time
-	Duration     time.Duration
-	StepDuration time.Duration
-	Owned        equipment.EquipmentSet
-	FixedSailID  polar.SailID
-	Headings     []navigation.Heading
+	Position          navigation.Position
+	Destination       navigation.Position
+	Instant           time.Time
+	Duration          time.Duration
+	StepDuration      time.Duration
+	Owned             equipment.EquipmentSet
+	FixedSailID       polar.SailID
+	Headings          []navigation.Heading
+	WeatherVariations []PracticalWeatherVariation
 }
 
 // PracticalHeadingCandidate contains one constant-heading simulation and its
@@ -33,6 +34,17 @@ type PracticalHeadingCandidate struct {
 	Heading           navigation.Heading
 	Simulation        simulation.Result
 	InitialDistance   navigation.NauticalMiles
+	RemainingDistance navigation.NauticalMiles
+	Progress          DistanceProgress
+	StabilityScore    float64
+	WeatherScenarios  []PracticalHeadingWeatherScenario
+}
+
+// PracticalHeadingWeatherScenario contains the result obtained by applying a
+// weather variation to one practical heading.
+type PracticalHeadingWeatherScenario struct {
+	Variation         PracticalWeatherVariation
+	Simulation        simulation.Result
 	RemainingDistance navigation.NauticalMiles
 	Progress          DistanceProgress
 	StabilityScore    float64
@@ -89,6 +101,15 @@ func EvaluatePracticalHeadingCandidates(
 		return nil, errors.New(
 			"routing: au moins un cap pratique est requis",
 		)
+	}
+	for index, variation := range input.WeatherVariations {
+		if err := variation.Validate(); err != nil {
+			return nil, fmt.Errorf(
+				"routing: variation météo pratique %d invalide: %w",
+				index+1,
+				err,
+			)
+		}
 	}
 
 	seen := make(map[navigation.Heading]struct{}, len(input.Headings))
@@ -160,7 +181,7 @@ func EvaluatePracticalHeadingCandidates(
 				err,
 			)
 		}
-		candidates = append(candidates, PracticalHeadingCandidate{
+		candidate := PracticalHeadingCandidate{
 			Heading:           heading,
 			Simulation:        result,
 			InitialDistance:   initialDistance,
@@ -169,7 +190,60 @@ func EvaluatePracticalHeadingCandidates(
 				float64(initialDistance - remainingDistance),
 			),
 			StabilityScore: practicalStabilityScore(result),
-		})
+		}
+		for variationIndex, variation := range input.WeatherVariations {
+			variedResult, err := simulation.Run(
+				ctx,
+				practicalWeatherVariationProvider{
+					provider:  weatherProvider,
+					variation: variation,
+				},
+				boatPolar,
+				simulation.Input{
+					Position:     input.Position,
+					Instant:      input.Instant,
+					Heading:      heading,
+					Duration:     input.Duration,
+					StepDuration: input.StepDuration,
+					Owned:        input.Owned,
+					FixedSailID:  input.FixedSailID,
+				},
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"routing: scénario météo %d du cap pratique %d à %.6f° impossible: %w",
+					variationIndex+1,
+					index+1,
+					heading,
+					err,
+				)
+			}
+			variedRemainingDistance, err := navigation.DistanceBetween(
+				variedResult.NextPosition,
+				input.Destination,
+			)
+			if err != nil {
+				return nil, fmt.Errorf(
+					"routing: distance restante du scénario météo %d du cap pratique %d impossible: %w",
+					variationIndex+1,
+					index+1,
+					err,
+				)
+			}
+			candidate.WeatherScenarios = append(
+				candidate.WeatherScenarios,
+				PracticalHeadingWeatherScenario{
+					Variation:         variation,
+					Simulation:        variedResult,
+					RemainingDistance: variedRemainingDistance,
+					Progress: DistanceProgress(
+						float64(initialDistance - variedRemainingDistance),
+					),
+					StabilityScore: practicalStabilityScore(variedResult),
+				},
+			)
+		}
+		candidates = append(candidates, candidate)
 	}
 
 	sort.SliceStable(candidates, func(left, right int) bool {
