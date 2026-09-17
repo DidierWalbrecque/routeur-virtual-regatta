@@ -53,7 +53,7 @@ func TestPolygonSpatialIndexNarrowsCandidates(t *testing.T) {
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			got := constraint.candidatePolygonIndices(test.start, test.end)
+			got := constraint.candidatePolygonIndices(test.start, test.end, 0)
 			if !reflect.DeepEqual(got, test.want) {
 				t.Fatalf("indices = %v, attendus %v", got, test.want)
 			}
@@ -61,11 +61,33 @@ func TestPolygonSpatialIndexNarrowsCandidates(t *testing.T) {
 	}
 }
 
+func TestPolygonSpatialIndexIncludesNeighborWithinMargin(t *testing.T) {
+	polygons := []polygon{
+		{rings: [][]point{squareRing(5.01, 0, 6, 1)}},
+	}
+	constraint := &GeoJSONConstraint{
+		polygons: polygons,
+		index:    newPolygonSpatialIndex(polygons),
+	}
+	start := point{longitude: 4.99, latitude: 0.25}
+	end := point{longitude: 4.99, latitude: 0.75}
+
+	withoutMargin := constraint.candidatePolygonIndices(start, end, 0)
+	if len(withoutMargin) != 0 {
+		t.Fatalf("indices sans marge = %v, attendus vides", withoutMargin)
+	}
+	withMargin := constraint.candidatePolygonIndices(start, end, 2)
+	want := []int{0}
+	if !reflect.DeepEqual(withMargin, want) {
+		t.Fatalf("indices avec marge = %v, attendus %v", withMargin, want)
+	}
+}
+
 func TestPolygonSpatialIndexFallbackChecksEveryPolygon(t *testing.T) {
 	constraint := &GeoJSONConstraint{
 		polygons: []polygon{{}, {}, {}},
 	}
-	got := constraint.candidatePolygonIndices(point{}, point{})
+	got := constraint.candidatePolygonIndices(point{}, point{}, 0)
 	want := []int{0, 1, 2}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("indices = %v, attendus %v", got, want)
