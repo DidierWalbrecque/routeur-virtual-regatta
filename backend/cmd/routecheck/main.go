@@ -56,6 +56,7 @@ type options struct {
 	maneuverModel       maneuverModel
 	staminaRecoveryRate simulation.StaminaRecoveryRate
 	landGeoJSONPath     string
+	coastalMargin       navigation.NauticalMiles
 	geoJSONPath         string
 }
 
@@ -103,7 +104,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
-	constraints, err := loadLandConstraints(options.landGeoJSONPath)
+	constraints, err := loadLandConstraints(
+		options.landGeoJSONPath,
+		options.coastalMargin,
+	)
 	if err != nil {
 		return err
 	}
@@ -200,7 +204,12 @@ func writeResult(
 		options.arrivalRadius,
 	)
 	if options.landGeoJSONPath != "" {
-		fmt.Fprintf(stdout, "Terres GeoJSON : %s\n", options.landGeoJSONPath)
+		fmt.Fprintf(
+			stdout,
+			"Terres GeoJSON : %s | marge %.3f NM\n",
+			options.landGeoJSONPath,
+			options.coastalMargin,
+		)
 	}
 	fmt.Fprintln(stdout, "Route retenue :")
 
@@ -421,6 +430,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		"",
 		"chemin optionnel du fichier GeoJSON contenant les terres",
 	)
+	coastalMargin := flags.Float64(
+		"coastal-margin",
+		0,
+		"distance minimale des côtes en milles nautiques",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -571,6 +585,20 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 			err,
 		)
 	}
+	coastalMarginValue := navigation.NauticalMiles(*coastalMargin)
+	if math.IsNaN(*coastalMargin) ||
+		math.IsInf(*coastalMargin, 0) ||
+		coastalMarginValue < 0 {
+		return options{}, errors.New(
+			"routecheck: -coastal-margin doit être positif ou nul",
+		)
+	}
+	if coastalMarginValue > 0 &&
+		strings.TrimSpace(*landGeoJSONPath) == "" {
+		return options{}, errors.New(
+			"routecheck: -coastal-margin nécessite -land-geojson",
+		)
+	}
 
 	owned, err := equipment.ParseSet(*ownedText)
 	if err != nil {
@@ -597,6 +625,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.maneuverModel = maneuverModel
 	result.staminaRecoveryRate = recoveryRate
 	result.landGeoJSONPath = strings.TrimSpace(*landGeoJSONPath)
+	result.coastalMargin = coastalMarginValue
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
