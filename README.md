@@ -341,8 +341,35 @@ Les paramètres spécifiques au routage correspondent à :
 - `-current-heading` : cap actuellement suivi, de 0° inclus à 360° exclus ;
 - `-current-sail` : nom de la voile actuelle tel qu'il apparaît dans la
   polaire, sans distinction entre majuscules et minuscules ;
+- `-land-geojson` : chemin optionnel d'une `FeatureCollection` GeoJSON
+  contenant les terres sous forme de `Polygon` ou `MultiPolygon` ;
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
+
+### Préparer les côtes Natural Earth
+
+Pour les premiers essais, la source recommandée est **Natural Earth 1:10m
+Land** : elle contient les polygones terrestres et les îles principales, et ses
+données vectorielles sont dans le domaine public.
+
+1. Télécharger l'archive **1:10m Land** depuis
+   [Natural Earth — Physical Vectors](https://www.naturalearthdata.com/downloads/10m-physical-vectors/).
+2. Extraire `ne_10m_land.shp`.
+3. L'exporter en GeoJSON depuis QGIS, ou avec GDAL :
+
+```bash
+mkdir -p ../data/land
+ogr2ogr -f GeoJSON \
+  ../data/land/natural-earth-10m-land.geojson \
+  ne_10m_land.shp
+```
+
+Le fichier obtenu reste local dans `data/land/`. Le routeur refuse tout
+segment qui entre dans un polygone ou touche sa limite. Natural Earth convient
+à un MVP mondial mais ne représente pas tous les petits îlots ni le trait de
+côte avec une précision nautique ; il ne faut donc pas encore utiliser ce
+résultat pour naviguer au ras de la côte. La marge côtière configurable sera
+ajoutée séparément.
 
 La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
@@ -383,7 +410,9 @@ mais augmentent le temps de calcul et la mémoire utilisés. Commencer avec
 heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.
 
-Il s'agit encore d'une route théorique sans terres ni portes de course. Avec
+Sans `-land-geojson`, il s'agit encore d'une route théorique sans terres ni
+portes de course. Avec cette option, les intersections terrestres du fichier
+fourni sont rejetées, mais aucune marge côtière n'est encore appliquée. Avec
 `-maneuver-model off`, les manœuvres restent seulement observées. Le profil
 `experimental-additive` utilise les pénalités de winch de la polaire, les coûts
 de stamina connus de 10 points pour un virement ou un empannage et de 20 points
