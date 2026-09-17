@@ -65,14 +65,14 @@ func TestNextStaminaForStepDoesNotRecoverUnknownManeuverCost(t *testing.T) {
 	}
 }
 
-func TestNextStaminaForStepPreservesStateWithoutRules(t *testing.T) {
+func TestNextStaminaForStepPreservesStateWhenManeuverIsUnknown(t *testing.T) {
 	initial := simulation.StaminaState{Level: 40}
 	got, err := nextStaminaForStep(
 		initial,
 		nil,
 		nil,
 		30*time.Minute,
-		nil,
+		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
 	)
 	if err != nil {
 		t.Fatalf("calcul refusé: %v", err)
@@ -85,7 +85,7 @@ func TestNextStaminaForStepPreservesStateWithoutRules(t *testing.T) {
 func TestNextStaminaForStepRejectsInvalidRecovery(t *testing.T) {
 	_, err := nextStaminaForStep(
 		simulation.StaminaState{Level: 40},
-		nil,
+		&simulation.ManeuverState{Kind: simulation.ManeuverNone},
 		nil,
 		-time.Minute,
 		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
