@@ -32,7 +32,11 @@ func TestParseManeuverModel(t *testing.T) {
 }
 
 func TestNewManeuverRuntimeOff(t *testing.T) {
-	runtime, err := newManeuverRuntime(maneuverModelOff, polar.WinchProfile{})
+	runtime, err := newManeuverRuntime(
+		maneuverModelOff,
+		polar.WinchProfile{},
+		0,
+	)
 	if err != nil {
 		t.Fatalf("modèle désactivé refusé: %v", err)
 	}
@@ -69,6 +73,7 @@ func TestNewManeuverRuntimeExperimentalAdditive(t *testing.T) {
 				Professional: penalty,
 			},
 		},
+		12,
 	)
 	if err != nil {
 		t.Fatalf("construction refusée: %v", err)
@@ -124,6 +129,35 @@ func TestNewManeuverRuntimeExperimentalAdditive(t *testing.T) {
 	}
 }
 
+func TestNewManeuverRuntimeConfiguresStaminaRecovery(t *testing.T) {
+	runtime, err := newManeuverRuntime(
+		maneuverModelExperimentalAdditive,
+		polar.WinchProfile{},
+		12,
+	)
+	if err != nil {
+		t.Fatalf("construction refusée: %v", err)
+	}
+	if runtime.staminaRecoveryRules == nil {
+		t.Fatal("règles de récupération absentes")
+	}
+	if runtime.staminaRecoveryRules.PointsPerHour != 12 {
+		t.Errorf(
+			"récupération = %.3f, attendue 12",
+			runtime.staminaRecoveryRules.PointsPerHour,
+		)
+	}
+
+	_, err = newManeuverRuntime(
+		maneuverModelOff,
+		polar.WinchProfile{},
+		12,
+	)
+	if err == nil || !strings.Contains(err.Error(), "-stamina-recovery-rate") {
+		t.Fatalf("erreur = %v, combinaison invalide attendue", err)
+	}
+}
+
 func TestParseOptionsAcceptsManeuverModel(t *testing.T) {
 	base := []string{
 		"-file", "f003.grb2",
@@ -151,6 +185,8 @@ func TestParseOptionsAcceptsManeuverModel(t *testing.T) {
 			append([]string{}, base...),
 			"-maneuver-model",
 			string(maneuverModelExperimentalAdditive),
+			"-stamina-recovery-rate",
+			"12",
 		),
 		io.Discard,
 	)
@@ -162,6 +198,12 @@ func TestParseOptionsAcceptsManeuverModel(t *testing.T) {
 			"modèle = %q, attendu %q",
 			experimental.maneuverModel,
 			maneuverModelExperimentalAdditive,
+		)
+	}
+	if experimental.staminaRecoveryRate != 12 {
+		t.Errorf(
+			"récupération = %.3f, attendue 12",
+			experimental.staminaRecoveryRate,
 		)
 	}
 
