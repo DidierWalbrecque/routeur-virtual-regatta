@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 )
@@ -98,6 +99,155 @@ func TestEvaluateStep(t *testing.T) {
 			result.NextInstant,
 			wantNextAt,
 		)
+	}
+}
+
+func TestEvaluateStepUsesAutomaticSailWhenFixedSailIDIsZero(t *testing.T) {
+	provider := &testWeatherProvider{
+		wind: navigation.Wind{Speed: 5, Direction: 180},
+	}
+
+	result, err := EvaluateStep(
+		context.Background(),
+		provider,
+		testPolar(),
+		StepInput{
+			Position:    navigation.Position{},
+			Instant:     time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			Heading:     90,
+			Duration:    10 * time.Minute,
+			FixedSailID: 0,
+		},
+	)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if result.BestSail.SailID != 1 {
+		t.Fatalf("voile = %d, attendue 1 en mode automatique", result.BestSail.SailID)
+	}
+}
+
+func TestEvaluateStepUsesFixedSail(t *testing.T) {
+	provider := &testWeatherProvider{
+		wind: navigation.Wind{Speed: 5, Direction: 180},
+	}
+
+	result, err := EvaluateStep(
+		context.Background(),
+		provider,
+		testPolar(),
+		StepInput{
+			Position:    navigation.Position{},
+			Instant:     time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			Heading:     90,
+			Duration:    10 * time.Minute,
+			FixedSailID: 2,
+		},
+	)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if result.BestSail.SailID != 2 {
+		t.Fatalf("voile = %d, attendue 2", result.BestSail.SailID)
+	}
+	assertClose(t, "vitesse de la voile fixe", float64(result.BestSail.Speed), 7)
+}
+
+func TestEvaluateStepFixedSailKeepsEffectiveSpeedOptions(t *testing.T) {
+	provider := &testWeatherProvider{
+		wind: navigation.Wind{Speed: 5, Direction: 180},
+	}
+	boatPolar := testPolar()
+	boatPolar.GlobalSpeedRatio = 1.1
+	boatPolar.Foil = polar.FoilProfile{
+		MaxSpeedRatio: 1.2,
+		TWAMin:        0,
+		TWAMax:        180,
+		TWSMin:        0,
+		TWSMax:        20,
+	}
+	boatPolar.Hull = polar.HullProfile{SpeedRatio: 1.05}
+	owned, err := equipment.NewSet(equipment.Foils, equipment.HullPolish)
+	if err != nil {
+		t.Fatalf("équipements de test invalides: %v", err)
+	}
+
+	result, err := EvaluateStep(
+		context.Background(),
+		provider,
+		boatPolar,
+		StepInput{
+			Position:    navigation.Position{},
+			Instant:     time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			Heading:     90,
+			Duration:    10 * time.Minute,
+			Owned:       owned,
+			FixedSailID: 2,
+		},
+	)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if result.BestSail.SailID != 2 {
+		t.Fatalf("voile = %d, attendue 2", result.BestSail.SailID)
+	}
+	assertClose(
+		t,
+		"vitesse effective de la voile fixe",
+		float64(result.BestSail.Speed),
+		7*1.1*1.2*1.05,
+	)
+}
+
+func TestEvaluateStepRejectsInvalidFixedSail(t *testing.T) {
+	base := StepInput{
+		Position: navigation.Position{},
+		Instant:  time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+		Heading:  90,
+		Duration: 10 * time.Minute,
+	}
+	provider := &testWeatherProvider{
+		wind: navigation.Wind{Speed: 5, Direction: 180},
+	}
+
+	for _, test := range []struct {
+		name      string
+		boatPolar *polar.Polar
+		fixedSail polar.SailID
+		wantErr   string
+	}{
+		{
+			name:      "identifiant négatif",
+			boatPolar: testPolar(),
+			fixedSail: -1,
+			wantErr:   "identifiant de voile fixe positif ou nul",
+		},
+		{
+			name:      "voile inconnue",
+			boatPolar: testPolar(),
+			fixedSail: 99,
+			wantErr:   "voile fixe 99 inconnue",
+		},
+		{
+			name:      "voile indisponible",
+			boatPolar: equipmentAwarePolar(),
+			fixedSail: 3,
+			wantErr:   "voile fixe 3 indisponible avec les équipements possédés",
+		},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			input := base
+			input.FixedSailID = test.fixedSail
+			_, err := EvaluateStep(
+				context.Background(),
+				provider,
+				test.boatPolar,
+				input,
+			)
+			if err == nil || !strings.Contains(err.Error(), test.wantErr) {
+				t.Fatalf("erreur = %v, doit contenir %q", err, test.wantErr)
+			}
+		})
 	}
 }
 
@@ -221,6 +371,38 @@ func TestRunRecalculatesEveryStep(t *testing.T) {
 	}
 }
 
+func TestRunKeepsFixedSailAcrossSteps(t *testing.T) {
+	start := time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC)
+	provider := &sequenceWeatherProvider{
+		winds: []navigation.Wind{
+			{Speed: 2.57222, Direction: 180},
+			{Speed: 7.71666, Direction: 180},
+		},
+	}
+
+	result, err := Run(
+		context.Background(),
+		provider,
+		changingBestSailPolar(),
+		Input{
+			Position:     navigation.Position{},
+			Instant:      start,
+			Heading:      90,
+			Duration:     20 * time.Minute,
+			StepDuration: 10 * time.Minute,
+			FixedSailID:  1,
+		},
+	)
+	if err != nil {
+		t.Fatalf("simulation refusée: %v", err)
+	}
+	for index, step := range result.Steps {
+		if step.BestSail.SailID != 1 {
+			t.Errorf("voile du pas %d = %d, attendue 1", index+1, step.BestSail.SailID)
+		}
+	}
+}
+
 func TestRunUsesOneShortStep(t *testing.T) {
 	provider := &testWeatherProvider{
 		wind: navigation.Wind{Speed: 5, Direction: 180},
@@ -321,6 +503,26 @@ func TestRunReportsFailingStep(t *testing.T) {
 	}
 }
 
+func TestRunPropagatesFixedSailError(t *testing.T) {
+	_, err := Run(
+		context.Background(),
+		&testWeatherProvider{wind: navigation.Wind{Speed: 5, Direction: 180}},
+		testPolar(),
+		Input{
+			Position:     navigation.Position{},
+			Instant:      time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			Heading:      90,
+			Duration:     10 * time.Minute,
+			StepDuration: 10 * time.Minute,
+			FixedSailID:  -1,
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "pas 1") ||
+		!strings.Contains(err.Error(), "identifiant de voile fixe") {
+		t.Fatalf("erreur = %v, doit propager l'erreur de voile fixe", err)
+	}
+}
+
 func testPolar() *polar.Polar {
 	return &polar.Polar{
 		Label:            "Test boat",
@@ -347,6 +549,61 @@ func testPolar() *polar.Polar {
 						{7, 7},
 					},
 				},
+			},
+		},
+	}
+}
+
+type sequenceWeatherProvider struct {
+	winds []navigation.Wind
+	calls int
+}
+
+func (provider *sequenceWeatherProvider) WindAt(
+	_ context.Context,
+	_ navigation.Position,
+	_ time.Time,
+) (navigation.Wind, error) {
+	windIndex := min(provider.calls, len(provider.winds)-1)
+	provider.calls++
+	return provider.winds[windIndex], nil
+}
+
+func equipmentAwarePolar() *polar.Polar {
+	boatPolar := testPolar()
+	boatPolar.Sails = append(boatPolar.Sails, polar.Sail{
+		ID:   3,
+		Name: "LightJib",
+		Speeds: polar.SpeedGrid{Values: [][]polar.BoatSpeed{
+			{9, 9},
+			{9, 9},
+		}},
+	})
+	return boatPolar
+}
+
+func changingBestSailPolar() *polar.Polar {
+	return &polar.Polar{
+		Label:            "Changing best sail",
+		GlobalSpeedRatio: 1,
+		WindSpeeds:       []polar.WindSpeed{0, 20},
+		WindAngles:       []polar.TrueWindAngle{0, 180},
+		Sails: []polar.Sail{
+			{
+				ID:   1,
+				Name: "Jib",
+				Speeds: polar.SpeedGrid{Values: [][]polar.BoatSpeed{
+					{10, 10},
+					{5, 5},
+				}},
+			},
+			{
+				ID:   2,
+				Name: "Spi",
+				Speeds: polar.SpeedGrid{Values: [][]polar.BoatSpeed{
+					{5, 5},
+					{10, 10},
+				}},
 			},
 		},
 	}
