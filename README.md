@@ -304,6 +304,7 @@ go run ./cmd/routecheck \
   -polar ../data/polars/ultim_bp_11.json \
   -position "13°N 07'16\" - 121°E 35'12\"" \
   -destination "14°N 00'00\" - 120°E 00'00\"" \
+  -gate "porte nord|13.2,121.4|13.3,121.5|either" \
   -at 2026-09-05T07:30:00Z \
   -minutes 60 \
   -step-minutes 10 \
@@ -325,6 +326,8 @@ go run ./cmd/routecheck \
 Les paramètres spécifiques au routage correspondent à :
 
 - `-destination` : point recherché au format Virtual Regatta ;
+- `-gate` : porte obligatoire au format
+  `nom|marque 1|marque 2|sens` ; option répétable et respectée dans l'ordre ;
 - `-minutes` : horizon total du calcul, multiple exact du pas ;
 - `-step-minutes` : durée séparant deux fronts d'isochrones ;
 - `-heading-spacing` : écart en degrés entre les caps explorés ;
@@ -381,6 +384,13 @@ représente pas tous les petits îlots ni le trait de côte avec une précision
 nautique : même avec une marge, ce résultat ne constitue pas une garantie de
 navigation sûre au ras de la côte.
 
+Chaque marque d'une `-gate` accepte soit `latitude,longitude` en degrés
+décimaux, soit une position complète au format Virtual Regatta. Le sens vaut
+`either`, `right-to-left` ou `left-to-right`, par rapport à la ligne
+orientée de la première marque vers la seconde. Lorsque plusieurs options
+`-gate` sont fournies, elles doivent être franchies dans leur ordre
+d'apparition avant que la destination puisse être déclarée atteinte.
+
 La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
 position initiale, météo, polaire et équipements utilisent les mêmes formats
@@ -420,8 +430,9 @@ mais augmentent le temps de calcul et la mémoire utilisés. Commencer avec
 heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.
 
-Sans `-land-geojson`, il s'agit encore d'une route théorique sans terres ni
-portes de course. Avec cette option, les intersections terrestres du fichier
+Sans `-land-geojson`, il s'agit encore d'une route théorique sans terres.
+Sans `-gate`, le routeur vise directement la destination. Avec ces options,
+les intersections terrestres du fichier
 fourni et les segments trop proches selon `-coastal-margin` sont rejetés. Avec
 `-maneuver-model off`, les manœuvres restent seulement observées. Le profil
 `experimental-additive` utilise les pénalités de winch de la polaire, les coûts
