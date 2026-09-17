@@ -406,6 +406,7 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 
 - [x] Brancher une interface générique de contrainte sur chaque segment.
 - [x] Choisir Natural Earth 1:10m comme source mondiale pour le MVP.
+- [x] Automatiser son téléchargement et sa validation avant installation locale.
 - [x] Charger et valider des terres locales au format GeoJSON Polygon/MultiPolygon.
 - [x] Brancher facultativement ces terres dans `routecheck`.
 - [x] Détecter l'intersection d'un segment avec la terre.
