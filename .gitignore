@@ -12,6 +12,10 @@ data/weather/*
 data/routes/*
 !data/routes/.gitkeep
 
+# Données terrestres locales
+data/land/*
+!data/land/.gitkeep
+
 # Frontend
 frontend/node_modules/
 frontend/dist/
