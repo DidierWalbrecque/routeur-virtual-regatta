@@ -23,6 +23,7 @@ type PracticalHeadingInput struct {
 	Duration     time.Duration
 	StepDuration time.Duration
 	Owned        equipment.EquipmentSet
+	FixedSailID  polar.SailID
 	Headings     []navigation.Heading
 }
 
@@ -136,6 +137,7 @@ func EvaluatePracticalHeadingCandidates(
 				Duration:     input.Duration,
 				StepDuration: input.StepDuration,
 				Owned:        input.Owned,
+				FixedSailID:  input.FixedSailID,
 			},
 		)
 		if err != nil {
