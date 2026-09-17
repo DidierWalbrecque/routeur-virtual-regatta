@@ -456,6 +456,8 @@ Produire deux stratégies compréhensibles et comparables.
 Le premier calcul disponible simule chaque cap fixe sur tout l'horizon en
 réévaluant la météo, le TWA, la meilleure voile et la vitesse à chaque pas,
 puis classe les résultats selon leur progression réelle vers la destination.
+Cette première brique fige uniquement le cap ; le verrouillage de la voile sera
+ajouté avant de qualifier le résultat de route sans intervention.
 
 - Cap et voile fixes pendant environ quatre heures.
 - Aucun automatisme dans la première version.
