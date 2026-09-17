@@ -82,9 +82,9 @@ func TestLoadGeoJSONFile(t *testing.T) {
 
 func TestDecodeGeoJSONRejectsInvalidDocuments(t *testing.T) {
 	tests := []struct {
-		name    string
+		name     string
 		document string
-		wantErr string
+		wantErr  string
 	}{
 		{
 			name:     "collection vide",

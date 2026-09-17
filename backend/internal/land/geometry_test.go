@@ -26,7 +26,7 @@ func TestGeoJSONConstraintAllowsWaterSegment(t *testing.T) {
 func TestGeoJSONConstraintRejectsLandSegments(t *testing.T) {
 	constraint := squareLandConstraint()
 	tests := []struct {
-		name string
+		name    string
 		segment routing.RouteSegment
 	}{
 		{
