@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 )
@@ -150,6 +151,52 @@ func TestEvaluateStepUsesFixedSail(t *testing.T) {
 		t.Fatalf("voile = %d, attendue 2", result.BestSail.SailID)
 	}
 	assertClose(t, "vitesse de la voile fixe", float64(result.BestSail.Speed), 7)
+}
+
+func TestEvaluateStepFixedSailKeepsEffectiveSpeedOptions(t *testing.T) {
+	provider := &testWeatherProvider{
+		wind: navigation.Wind{Speed: 5, Direction: 180},
+	}
+	boatPolar := testPolar()
+	boatPolar.GlobalSpeedRatio = 1.1
+	boatPolar.Foil = polar.FoilProfile{
+		MaxSpeedRatio: 1.2,
+		TWAMin:        0,
+		TWAMax:        180,
+		TWSMin:        0,
+		TWSMax:        20,
+	}
+	boatPolar.Hull = polar.HullProfile{SpeedRatio: 1.05}
+	owned, err := equipment.NewSet(equipment.Foils, equipment.HullPolish)
+	if err != nil {
+		t.Fatalf("équipements de test invalides: %v", err)
+	}
+
+	result, err := EvaluateStep(
+		context.Background(),
+		provider,
+		boatPolar,
+		StepInput{
+			Position:    navigation.Position{},
+			Instant:     time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			Heading:     90,
+			Duration:    10 * time.Minute,
+			Owned:       owned,
+			FixedSailID: 2,
+		},
+	)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if result.BestSail.SailID != 2 {
+		t.Fatalf("voile = %d, attendue 2", result.BestSail.SailID)
+	}
+	assertClose(
+		t,
+		"vitesse effective de la voile fixe",
+		float64(result.BestSail.Speed),
+		7*1.1*1.2*1.05,
+	)
 }
 
 func TestEvaluateStepRejectsInvalidFixedSail(t *testing.T) {
