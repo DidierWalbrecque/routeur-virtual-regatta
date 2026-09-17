@@ -454,10 +454,14 @@ Produire deux stratégies compréhensibles et comparables.
 ### Route pratique
 
 Le premier calcul disponible simule chaque cap fixe sur tout l'horizon en
-réévaluant la météo, le TWA, la meilleure voile et la vitesse à chaque pas,
-puis classe les résultats selon leur progression réelle vers la destination.
-Cette première brique fige uniquement le cap ; le verrouillage de la voile sera
-ajouté avant de qualifier le résultat de route sans intervention.
+réévaluant la météo, le TWA et la vitesse à chaque pas, puis classe les
+résultats selon leur progression réelle vers la destination. La simulation
+prend en charge une voile fixe ; l'évaluation des caps pratiques lui transmet
+maintenant cette voile pour tous les candidats et tous leurs pas. Lorsqu'aucune
+voile n'est imposée, elle conserve la sélection automatique existante.
+
+Cette brique ne termine pas encore la route pratique sans intervention : le
+score de stabilité et la simulation de variations météo restent à développer.
 
 - Cap et voile fixes pendant environ quatre heures.
 - Aucun automatisme dans la première version.
@@ -469,6 +473,7 @@ ajouté avant de qualifier le résultat de route sans intervention.
 ### Tâches
 
 - [x] Évaluer et classer une grille de caps fixes sur un horizon sans intervention.
+- [x] Propager une voile fixe à chaque simulation de cap pratique.
 - [ ] Définir le score de stabilité.
 - [ ] Simuler de petites variations de force et de direction du vent.
 - [ ] Rejeter les trajectoires trop sensibles.
