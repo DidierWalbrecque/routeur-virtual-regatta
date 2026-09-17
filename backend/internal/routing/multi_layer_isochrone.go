@@ -32,6 +32,7 @@ type IsochroneSearchInput struct {
 	TransitionEvaluator   *simulation.TransitionEvaluator
 	CombineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
 	StaminaRecoveryRules  *simulation.StaminaRecoveryRules
+	Gates                 []CourseGate
 	Constraints           []Constraint
 	Progress              IsochroneProgressReporter
 }
@@ -47,15 +48,17 @@ type IsochroneNode struct {
 	Maneuver          *simulation.ManeuverState
 	Transition        *simulation.TransitionEvaluation
 	SpeedPenalty      *simulation.SpeedPenaltyApplication
+	CourseProgress    CourseProgress
 	State             simulation.BoatState
 }
 
 type isochroneParentState struct {
-	Position     navigation.Position
-	Stamina      simulation.StaminaState
-	BoatState    simulation.BoatState
-	WindAngle    navigation.TrueWindAngle
-	HasBoatState bool
+	Position       navigation.Position
+	Stamina        simulation.StaminaState
+	BoatState      simulation.BoatState
+	WindAngle      navigation.TrueWindAngle
+	CourseProgress CourseProgress
+	HasBoatState   bool
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
@@ -75,6 +78,7 @@ type IsochroneSearch struct {
 	ArrivalRadius  navigation.NauticalMiles
 	InitialStamina simulation.StaminaState
 	InitialState   *simulation.BoatState
+	Gates          []CourseGate
 	MaxCandidates  int
 	Reached        bool
 	Frontiers      []IsochroneFrontier
@@ -168,6 +172,13 @@ func BuildIsochroneSearch(
 			)
 		}
 	}
+	initialCourseProgress := CourseProgress{}
+	if err := initialCourseProgress.Validate(input.Gates); err != nil {
+		return IsochroneSearch{}, fmt.Errorf(
+			"routing: construction des isochrones impossible: parcours invalide: %w",
+			err,
+		)
+	}
 	for index, constraint := range input.Constraints {
 		if constraint == nil {
 			return IsochroneSearch{}, fmt.Errorf(
@@ -219,8 +230,9 @@ func BuildIsochroneSearch(
 	}
 
 	initialParent := isochroneParentState{
-		Position: input.Position,
-		Stamina:  input.InitialStamina,
+		Position:       input.Position,
+		Stamina:        input.InitialStamina,
+		CourseProgress: initialCourseProgress,
 	}
 	var initialState *simulation.BoatState
 	if input.InitialNavigation != nil {
@@ -254,6 +266,7 @@ func BuildIsochroneSearch(
 		ArrivalRadius:  input.ArrivalRadius,
 		InitialStamina: input.InitialStamina,
 		InitialState:   initialState,
+		Gates:          append([]CourseGate(nil), input.Gates...),
 		MaxCandidates:  input.MaxCandidates,
 		Frontiers:      make([]IsochroneFrontier, 0, input.LayerCount),
 	}
@@ -328,16 +341,17 @@ func BuildIsochroneSearch(
 						err,
 					)
 				}
+				segment := RouteSegment{
+					From:       parentState.Position,
+					To:         candidate.Step.NextPosition,
+					StartedAt:  candidate.Step.Instant,
+					FinishedAt: candidate.Step.NextInstant,
+				}
 				if len(input.Constraints) > 0 {
 					allowed, constraintErr := segmentAllowed(
 						ctx,
 						input.Constraints,
-						RouteSegment{
-							From:       parentState.Position,
-							To:         candidate.Step.NextPosition,
-							StartedAt:  candidate.Step.Instant,
-							FinishedAt: candidate.Step.NextInstant,
-						},
+						segment,
 					)
 					if constraintErr != nil {
 						return IsochroneSearch{}, fmt.Errorf(
@@ -350,6 +364,18 @@ func BuildIsochroneSearch(
 					if !allowed {
 						continue
 					}
+				}
+				nextCourseProgress, err := parentState.CourseProgress.Advance(
+					input.Gates,
+					segment,
+				)
+				if err != nil {
+					return IsochroneSearch{}, fmt.Errorf(
+						"routing: construction de la couche %d impossible: progression du parcours au cap %.6f° invalide: %w",
+						layerIndex+1,
+						candidate.Heading,
+						err,
+					)
 				}
 
 				remainingDistance, err := navigation.DistanceBetween(
@@ -408,10 +434,11 @@ func BuildIsochroneSearch(
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
 					),
-					Maneuver:     maneuver,
-					Transition:   transition,
-					SpeedPenalty: speedPenalty,
-					State:        state,
+					Maneuver:       maneuver,
+					Transition:     transition,
+					SpeedPenalty:   speedPenalty,
+					CourseProgress: nextCourseProgress,
+					State:          state,
 				})
 			}
 		}
@@ -438,6 +465,26 @@ func BuildIsochroneSearch(
 		}
 
 		nextInstant := currentInstant.Add(input.StepDuration)
+		search.Reached = false
+		for index := range nodes {
+			complete, completeErr := nodes[index].CourseProgress.Complete(
+				input.Gates,
+			)
+			if completeErr != nil {
+				return search, fmt.Errorf(
+					"routing: construction de la couche %d impossible: progression du parcours du candidat %d invalide: %w",
+					layerIndex+1,
+					index+1,
+					completeErr,
+				)
+			}
+			if complete &&
+				nodes[index].RemainingDistance <= input.ArrivalRadius {
+				nodes[0], nodes[index] = nodes[index], nodes[0]
+				search.Reached = true
+				break
+			}
+		}
 		frontier := IsochroneFrontier{
 			Index:    layerIndex + 1,
 			Instant:  nextInstant,
@@ -445,7 +492,6 @@ func BuildIsochroneSearch(
 			Nodes:    nodes,
 		}
 		search.Frontiers = append(search.Frontiers, frontier)
-		search.Reached = nodes[0].RemainingDistance <= input.ArrivalRadius
 		if input.Progress != nil {
 			input.Progress(IsochroneProgress{
 				CompletedLayers: len(search.Frontiers),
@@ -463,11 +509,12 @@ func BuildIsochroneSearch(
 		parentStates = make([]isochroneParentState, len(nodes))
 		for index, node := range nodes {
 			parentStates[index] = isochroneParentState{
-				Position:     node.State.Position,
-				Stamina:      node.State.Stamina,
-				BoatState:    node.State,
-				WindAngle:    node.Candidate.Step.WindAngle,
-				HasBoatState: true,
+				Position:       node.State.Position,
+				Stamina:        node.State.Stamina,
+				BoatState:      node.State,
+				WindAngle:      node.Candidate.Step.WindAngle,
+				CourseProgress: node.CourseProgress,
+				HasBoatState:   true,
 			}
 		}
 		currentInstant = nextInstant
@@ -552,6 +599,7 @@ type isochroneStateCell struct {
 	hasActiveSpeedPenalty  bool
 	activeSpeedRatio       polar.SpeedRatio
 	activePenaltyRemaining time.Duration
+	nextGateIndex          int
 }
 
 func pruneIsochroneNodes(
@@ -590,10 +638,11 @@ func pruneIsochroneNodes(
 		}
 
 		key := isochroneStateCell{
-			spatialCell: cell,
-			heading:     node.State.Heading,
-			sailID:      node.State.SailID,
-			tack:        node.State.Tack,
+			spatialCell:   cell,
+			heading:       node.State.Heading,
+			sailID:        node.State.SailID,
+			tack:          node.State.Tack,
+			nextGateIndex: node.CourseProgress.NextGateIndex,
 		}
 		if node.State.ActiveSpeedPenalty != nil {
 			key.hasActiveSpeedPenalty = true
@@ -632,6 +681,11 @@ func pruneIsochroneNodes(
 		selected = append(selected, groups[key]...)
 	}
 	sort.SliceStable(selected, func(left, right int) bool {
+		if selected[left].CourseProgress.NextGateIndex !=
+			selected[right].CourseProgress.NextGateIndex {
+			return selected[left].CourseProgress.NextGateIndex >
+				selected[right].CourseProgress.NextGateIndex
+		}
 		if selected[left].Progress != selected[right].Progress {
 			return selected[left].Progress > selected[right].Progress
 		}
