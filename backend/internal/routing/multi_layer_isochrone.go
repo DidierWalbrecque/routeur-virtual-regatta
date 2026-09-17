@@ -48,17 +48,17 @@ type IsochroneNode struct {
 	Maneuver          *simulation.ManeuverState
 	Transition        *simulation.TransitionEvaluation
 	SpeedPenalty      *simulation.SpeedPenaltyApplication
-	CourseProgress     CourseProgress
-	State              simulation.BoatState
+	CourseProgress    CourseProgress
+	State             simulation.BoatState
 }
 
 type isochroneParentState struct {
-	Position     navigation.Position
-	Stamina      simulation.StaminaState
-	BoatState    simulation.BoatState
-	WindAngle     navigation.TrueWindAngle
+	Position       navigation.Position
+	Stamina        simulation.StaminaState
+	BoatState      simulation.BoatState
+	WindAngle      navigation.TrueWindAngle
 	CourseProgress CourseProgress
-	HasBoatState  bool
+	HasBoatState   bool
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
@@ -434,11 +434,11 @@ func BuildIsochroneSearch(
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
 					),
-					Maneuver:     maneuver,
-					Transition:   transition,
-					SpeedPenalty:  speedPenalty,
+					Maneuver:       maneuver,
+					Transition:     transition,
+					SpeedPenalty:   speedPenalty,
 					CourseProgress: nextCourseProgress,
-					State:         state,
+					State:          state,
 				})
 			}
 		}
@@ -509,9 +509,9 @@ func BuildIsochroneSearch(
 		parentStates = make([]isochroneParentState, len(nodes))
 		for index, node := range nodes {
 			parentStates[index] = isochroneParentState{
-				Position:     node.State.Position,
-				Stamina:      node.State.Stamina,
-				BoatState:    node.State,
+				Position:       node.State.Position,
+				Stamina:        node.State.Stamina,
+				BoatState:      node.State,
 				WindAngle:      node.Candidate.Step.WindAngle,
 				CourseProgress: node.CourseProgress,
 				HasBoatState:   true,
@@ -638,10 +638,10 @@ func pruneIsochroneNodes(
 		}
 
 		key := isochroneStateCell{
-			spatialCell:  cell,
-			heading:      node.State.Heading,
-			sailID:       node.State.SailID,
-			tack:         node.State.Tack,
+			spatialCell:   cell,
+			heading:       node.State.Heading,
+			sailID:        node.State.SailID,
+			tack:          node.State.Tack,
 			nextGateIndex: node.CourseProgress.NextGateIndex,
 		}
 		if node.State.ActiveSpeedPenalty != nil {
