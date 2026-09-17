@@ -40,6 +40,7 @@ func newPolygonSpatialIndex(polygons []polygon) polygonSpatialIndex {
 func (constraint *GeoJSONConstraint) candidatePolygonIndices(
 	start,
 	end point,
+	marginNauticalMiles float64,
 ) []int {
 	if constraint.index == nil {
 		result := make([]int, len(constraint.polygons))
@@ -53,6 +54,24 @@ func (constraint *GeoJSONConstraint) candidatePolygonIndices(
 	maxLongitude := math.Max(start.longitude, end.longitude)
 	minLatitude := math.Min(start.latitude, end.latitude)
 	maxLatitude := math.Max(start.latitude, end.latitude)
+
+	latitudeExpansion := marginNauticalMiles / 60
+	maximumAbsoluteLatitude := math.Max(
+		math.Abs(minLatitude-latitudeExpansion),
+		math.Abs(maxLatitude+latitudeExpansion),
+	)
+	if maximumAbsoluteLatitude > 89.999999 {
+		maximumAbsoluteLatitude = 89.999999
+	}
+	longitudeScale := math.Cos(maximumAbsoluteLatitude * math.Pi / 180)
+	longitudeExpansion := marginNauticalMiles / (60 * longitudeScale)
+	if longitudeExpansion > 180 {
+		longitudeExpansion = 180
+	}
+	minLongitude -= longitudeExpansion
+	maxLongitude += longitudeExpansion
+	minLatitude -= latitudeExpansion
+	maxLatitude += latitudeExpansion
 
 	seen := make(map[int]struct{})
 	for _, cell := range cellsForBounds(

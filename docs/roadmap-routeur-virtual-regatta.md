@@ -409,7 +409,7 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 - [x] Charger et valider des terres locales au format GeoJSON Polygon/MultiPolygon.
 - [x] Brancher facultativement ces terres dans `routecheck`.
 - [x] Détecter l'intersection d'un segment avec la terre.
-- [ ] Ajouter une marge côtière configurable.
+- [x] Ajouter une marge côtière configurable en milles nautiques.
 - [x] Gérer les îles, les trous et les détroits représentés par les polygones.
 - [ ] Gérer les portes, bouées et sens de franchissement.
 - [ ] Gérer les zones d'exclusion.
@@ -418,8 +418,9 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 Le détecteur utilise une approximation plane sur les petits segments produits par
 les isochrones. Natural Earth 1:10m, dans le domaine public, est retenu pour les
 essais mondiaux du MVP et peut être fourni à `routecheck` avec
-`-land-geojson`. Sa résolution ne couvre pas tous les petits îlots et aucune
-marge côtière n'est encore appliquée.
+`-land-geojson`. Sa résolution ne couvre pas tous les petits îlots ; une
+marge côtière configurable en milles nautiques réduit le risque sans transformer
+ce jeu de données généraliste en carte nautique.
 
 ### Livrable
 

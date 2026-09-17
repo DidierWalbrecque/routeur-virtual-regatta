@@ -317,6 +317,7 @@ go run ./cmd/routecheck \
   -current-heading 321 \
   -current-sail Jib \
   -land-geojson ../data/land/natural-earth-10m-land.geojson \
+  -coastal-margin 2 \
   -geojson ../data/routes/route.geojson \
   -owned code0,foils
 ```
@@ -344,6 +345,8 @@ Les paramètres spécifiques au routage correspondent à :
   polaire, sans distinction entre majuscules et minuscules ;
 - `-land-geojson` : chemin optionnel d'une `FeatureCollection` GeoJSON
   contenant les terres sous forme de `Polygon` ou `MultiPolygon` ;
+- `-coastal-margin` : distance minimale de la côte en milles nautiques,
+  nulle par défaut et utilisable uniquement avec `-land-geojson` ;
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
 
@@ -366,11 +369,11 @@ ogr2ogr -f GeoJSON \
 ```
 
 Le fichier obtenu reste local dans `data/land/`. Le routeur refuse tout
-segment qui entre dans un polygone ou touche sa limite. Natural Earth convient
-à un MVP mondial mais ne représente pas tous les petits îlots ni le trait de
-côte avec une précision nautique ; il ne faut donc pas encore utiliser ce
-résultat pour naviguer au ras de la côte. La marge côtière configurable sera
-ajoutée séparément.
+segment qui entre dans un polygone, touche sa limite ou passe à moins de la
+distance définie par `-coastal-margin`. Commencer avec 2 NM pour les essais.
+Natural Earth convient à un MVP mondial mais ne représente pas tous les petits
+îlots ni le trait de côte avec une précision nautique : même avec une marge, ce
+résultat ne constitue pas une garantie de navigation sûre au ras de la côte.
 
 La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
@@ -413,7 +416,7 @@ période.
 
 Sans `-land-geojson`, il s'agit encore d'une route théorique sans terres ni
 portes de course. Avec cette option, les intersections terrestres du fichier
-fourni sont rejetées, mais aucune marge côtière n'est encore appliquée. Avec
+fourni et les segments trop proches selon `-coastal-margin` sont rejetés. Avec
 `-maneuver-model off`, les manœuvres restent seulement observées. Le profil
 `experimental-additive` utilise les pénalités de winch de la polaire, les coûts
 de stamina connus de 10 points pour un virement ou un empannage et de 20 points

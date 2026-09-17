@@ -2,6 +2,7 @@ package land
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -118,6 +119,72 @@ func TestGeoJSONConstraintHandlesAntimeridian(t *testing.T) {
 	}
 	if !allowed {
 		t.Fatal("segment éloigné de l'antiméridien refusé")
+	}
+}
+
+func TestGeoJSONConstraintAppliesCoastalMargin(t *testing.T) {
+	base := squareLandConstraint()
+	constraint, err := base.WithCoastalMargin(1)
+	if err != nil {
+		t.Fatalf("marge refusée: %v", err)
+	}
+	if base.CoastalMargin() != 0 {
+		t.Fatalf("marge de la contrainte source = %.3f NM", base.CoastalMargin())
+	}
+	if constraint.CoastalMargin() != 1 {
+		t.Fatalf("marge = %.3f NM, attendue 1", constraint.CoastalMargin())
+	}
+
+	tests := []struct {
+		name    string
+		segment routing.RouteSegment
+		allowed bool
+	}{
+		{
+			name:    "moins d'un mille de la côte",
+			segment: testSegment(-0.01, 4, -0.01, 6),
+		},
+		{
+			name:    "plus d'un mille de la côte",
+			segment: testSegment(-0.05, 4, -0.05, 6),
+			allowed: true,
+		},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			allowed, err := constraint.Allows(
+				context.Background(),
+				test.segment,
+			)
+			if err != nil {
+				t.Fatalf("vérification refusée: %v", err)
+			}
+			if allowed != test.allowed {
+				t.Fatalf(
+					"autorisé = %t, attendu %t",
+					allowed,
+					test.allowed,
+				)
+			}
+		})
+	}
+}
+
+func TestGeoJSONConstraintRejectsInvalidCoastalMargins(t *testing.T) {
+	constraint := squareLandConstraint()
+	for _, margin := range []navigation.NauticalMiles{
+		-1,
+		navigation.NauticalMiles(math.NaN()),
+		navigation.NauticalMiles(math.Inf(1)),
+	} {
+		if _, err := constraint.WithCoastalMargin(margin); err == nil {
+			t.Fatalf("marge %.12f acceptée", margin)
+		}
+	}
+
+	var missing *GeoJSONConstraint
+	if _, err := missing.WithCoastalMargin(1); err == nil {
+		t.Fatal("contrainte absente acceptée")
 	}
 }
 
