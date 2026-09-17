@@ -350,30 +350,36 @@ Les paramètres spécifiques au routage correspondent à :
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
 
-### Préparer les côtes Natural Earth
+### Télécharger les côtes Natural Earth
 
 Pour les premiers essais, la source recommandée est **Natural Earth 1:10m
 Land** : elle contient les polygones terrestres et les îles principales, et ses
-données vectorielles sont dans le domaine public.
+[données vectorielles sont dans le domaine public](https://www.naturalearthdata.com/downloads/10m-physical-vectors/).
 
-1. Télécharger l'archive **1:10m Land** depuis
-   [Natural Earth — Physical Vectors](https://www.naturalearthdata.com/downloads/10m-physical-vectors/).
-2. Extraire `ne_10m_land.shp`.
-3. L'exporter en GeoJSON depuis QGIS, ou avec GDAL :
+Depuis le dossier `backend`, télécharger directement le GeoJSON validé :
 
 ```bash
-mkdir -p ../data/land
-ogr2ogr -f GeoJSON \
-  ../data/land/natural-earth-10m-land.geojson \
-  ne_10m_land.shp
+go run ./cmd/landdownload -output ../data/land
 ```
 
-Le fichier obtenu reste local dans `data/land/`. Le routeur refuse tout
-segment qui entre dans un polygone, touche sa limite ou passe à moins de la
-distance définie par `-coastal-margin`. Commencer avec 2 NM pour les essais.
-Natural Earth convient à un MVP mondial mais ne représente pas tous les petits
-îlots ni le trait de côte avec une précision nautique : même avec une marge, ce
-résultat ne constitue pas une garantie de navigation sûre au ras de la côte.
+La commande utilise une version épinglée du
+[dépôt vectoriel Natural Earth](https://github.com/nvkelso/natural-earth-vector),
+limite la taille reçue, vérifie entièrement les géométries `Polygon` et
+`MultiPolygon`, puis installe atomiquement :
+
+```text
+../data/land/natural-earth-10m-land.geojson
+```
+
+Un fichier local déjà valide est réutilisé sans nouveau téléchargement. Il
+reste dans `data/land/`, qui est ignoré par Git.
+
+Le routeur refuse tout segment qui entre dans un polygone, touche sa limite ou
+passe à moins de la distance définie par `-coastal-margin`. Commencer avec
+2 NM pour les essais. Natural Earth convient à un MVP mondial mais ne
+représente pas tous les petits îlots ni le trait de côte avec une précision
+nautique : même avec une marge, ce résultat ne constitue pas une garantie de
+navigation sûre au ras de la côte.
 
 La destination peut également être fournie en degrés décimaux avec
 `-destination-latitude` et `-destination-longitude`. Les paramètres de
