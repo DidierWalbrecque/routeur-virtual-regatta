@@ -159,7 +159,8 @@ Créer les structures utilisées par tous les modules sans les lier à l'interfa
 - [x] Définir `RaceConfiguration`, `RaceBudget` et `Equipment`.
 - [x] Définir `BoatState`, `StaminaState` et `ManeuverState`.
 - [ ] Définir `RouteRequest`, `RouteNode` et `RouteResult`.
-- [ ] Définir les interfaces `WeatherProvider`, `PolarProvider`, `Constraint` et `Router`.
+- [x] Définir les interfaces `WeatherProvider` et `Constraint`.
+- [ ] Définir les interfaces `PolarProvider` et `Router`.
 - [x] Définir les erreurs métier et les règles de validation des polaires.
 
 ### Livrable
@@ -403,6 +404,7 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 
 ### Tâches
 
+- [x] Brancher une interface générique de contrainte sur chaque segment.
 - [ ] Choisir une source de côtes et de terres.
 - [ ] Détecter l'intersection d'un segment avec la terre.
 - [ ] Ajouter une marge côtière configurable.

@@ -32,6 +32,7 @@ type IsochroneSearchInput struct {
 	TransitionEvaluator   *simulation.TransitionEvaluator
 	CombineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
 	StaminaRecoveryRules  *simulation.StaminaRecoveryRules
+	Constraints           []Constraint
 	Progress              IsochroneProgressReporter
 }
 
@@ -164,6 +165,14 @@ func BuildIsochroneSearch(
 			return IsochroneSearch{}, fmt.Errorf(
 				"routing: construction des isochrones impossible: récupération de stamina invalide: %w",
 				err,
+			)
+		}
+	}
+	for index, constraint := range input.Constraints {
+		if constraint == nil {
+			return IsochroneSearch{}, fmt.Errorf(
+				"routing: construction des isochrones impossible: contrainte %d absente",
+				index+1,
 			)
 		}
 	}
@@ -319,6 +328,30 @@ func BuildIsochroneSearch(
 						err,
 					)
 				}
+				if len(input.Constraints) > 0 {
+					allowed, constraintErr := segmentAllowed(
+						ctx,
+						input.Constraints,
+						RouteSegment{
+							From:       parentState.Position,
+							To:         candidate.Step.NextPosition,
+							StartedAt:  candidate.Step.Instant,
+							FinishedAt: candidate.Step.NextInstant,
+						},
+					)
+					if constraintErr != nil {
+						return IsochroneSearch{}, fmt.Errorf(
+							"routing: construction de la couche %d impossible: contrainte du candidat au cap %.6f° invalide: %w",
+							layerIndex+1,
+							candidate.Heading,
+							constraintErr,
+						)
+					}
+					if !allowed {
+						continue
+					}
+				}
+
 				remainingDistance, err := navigation.DistanceBetween(
 					candidate.Step.NextPosition,
 					input.Destination,
@@ -381,6 +414,13 @@ func BuildIsochroneSearch(
 					State:        state,
 				})
 			}
+		}
+
+		if len(expanded) == 0 {
+			return search, fmt.Errorf(
+				"routing: aucune trajectoire autorisée à la couche %d",
+				layerIndex+1,
+			)
 		}
 
 		nodes, effectiveCellSize, err := pruneIsochroneNodesToLimit(
