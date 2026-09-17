@@ -17,27 +17,32 @@ import (
 // PracticalHeadingInput describes several constant-heading simulations over the
 // same horizon. Weather and boat performance are recalculated at every step.
 type PracticalHeadingInput struct {
-	Position          navigation.Position
-	Destination       navigation.Position
-	Instant           time.Time
-	Duration          time.Duration
-	StepDuration      time.Duration
-	Owned             equipment.EquipmentSet
-	FixedSailID       polar.SailID
-	Headings          []navigation.Heading
-	WeatherVariations []PracticalWeatherVariation
+	Position                navigation.Position
+	Destination             navigation.Position
+	Instant                 time.Time
+	Duration                time.Duration
+	StepDuration            time.Duration
+	Owned                   equipment.EquipmentSet
+	FixedSailID             polar.SailID
+	Headings                []navigation.Heading
+	WeatherVariations       []PracticalWeatherVariation
+	MaxScenarioProgressLoss navigation.NauticalMiles
+	RequireRobustScenarios  bool
 }
 
 // PracticalHeadingCandidate contains one constant-heading simulation and its
 // geographic progress toward the destination.
 type PracticalHeadingCandidate struct {
-	Heading           navigation.Heading
-	Simulation        simulation.Result
-	InitialDistance   navigation.NauticalMiles
-	RemainingDistance navigation.NauticalMiles
-	Progress          DistanceProgress
-	StabilityScore    float64
-	WeatherScenarios  []PracticalHeadingWeatherScenario
+	Heading              navigation.Heading
+	Simulation           simulation.Result
+	InitialDistance      navigation.NauticalMiles
+	RemainingDistance    navigation.NauticalMiles
+	Progress             DistanceProgress
+	StabilityScore       float64
+	WeatherScenarios     []PracticalHeadingWeatherScenario
+	WorstCaseProgress    DistanceProgress
+	ScenarioProgressLoss navigation.NauticalMiles
+	Robust               bool
 }
 
 // PracticalHeadingWeatherScenario contains the result obtained by applying a
@@ -94,6 +99,12 @@ func EvaluatePracticalHeadingCandidates(
 	if err := input.Owned.Validate(); err != nil {
 		return nil, fmt.Errorf(
 			"routing: équipements pratiques invalides: %w",
+			err,
+		)
+	}
+	if err := input.MaxScenarioProgressLoss.Validate(); err != nil {
+		return nil, fmt.Errorf(
+			"routing: perte maximale de progression pratique invalide: %w",
 			err,
 		)
 	}
@@ -243,7 +254,22 @@ func EvaluatePracticalHeadingCandidates(
 				},
 			)
 		}
+		candidate.WorstCaseProgress,
+			candidate.ScenarioProgressLoss,
+			candidate.Robust = practicalRobustness(
+			candidate.Progress,
+			candidate.WeatherScenarios,
+			input.MaxScenarioProgressLoss,
+		)
+		if input.RequireRobustScenarios && !candidate.Robust {
+			continue
+		}
 		candidates = append(candidates, candidate)
+	}
+	if input.RequireRobustScenarios && len(candidates) == 0 {
+		return nil, errors.New(
+			"routing: aucun cap pratique robuste ne respecte la perte maximale de progression",
+		)
 	}
 
 	sort.SliceStable(candidates, func(left, right int) bool {
