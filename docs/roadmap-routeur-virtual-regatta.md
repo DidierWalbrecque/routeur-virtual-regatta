@@ -405,8 +405,9 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 ### Tâches
 
 - [x] Brancher une interface générique de contrainte sur chaque segment.
-- [ ] Choisir une source de côtes et de terres.
+- [x] Choisir Natural Earth 1:10m comme source mondiale pour le MVP.
 - [x] Charger et valider des terres locales au format GeoJSON Polygon/MultiPolygon.
+- [x] Brancher facultativement ces terres dans `routecheck`.
 - [x] Détecter l'intersection d'un segment avec la terre.
 - [ ] Ajouter une marge côtière configurable.
 - [x] Gérer les îles, les trous et les détroits représentés par les polygones.
@@ -415,8 +416,10 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 - [x] Tester le contact avec la côte et le passage à l'antiméridien.
 
 Le détecteur utilise une approximation plane sur les petits segments produits par
-les isochrones. La source de côtes réelle, sa licence, sa résolution et son
-branchement dans `routecheck` restent à traiter séparément.
+les isochrones. Natural Earth 1:10m, dans le domaine public, est retenu pour les
+essais mondiaux du MVP et peut être fourni à `routecheck` avec
+`-land-geojson`. Sa résolution ne couvre pas tous les petits îlots et aucune
+marge côtière n'est encore appliquée.
 
 ### Livrable
 

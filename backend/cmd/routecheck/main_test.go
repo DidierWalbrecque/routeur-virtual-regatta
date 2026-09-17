@@ -28,6 +28,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-cell-size", "2.5",
 		"-max-candidates", "100",
 		"-arrival-radius", "0.5",
+		"-land-geojson", "data/land.geojson",
 		"-geojson", "out/route.geojson",
 		"-owned", "code0,foils",
 	}, io.Discard)
@@ -86,6 +87,12 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 			options.arrivalRadius,
 		)
 	}
+	if options.landGeoJSONPath != "data/land.geojson" {
+		t.Errorf(
+			"terres GeoJSON = %q, attendues data/land.geojson",
+			options.landGeoJSONPath,
+		)
+	}
 	if options.geoJSONPath != "out/route.geojson" {
 		t.Errorf(
 			"GeoJSON = %q, attendu out/route.geojson",
@@ -135,6 +142,12 @@ func TestParseOptionsAcceptsDecimalPositionsAndDefaults(t *testing.T) {
 		t.Errorf(
 			"rayon d'arrivée = %.3f NM, attendu 1",
 			options.arrivalRadius,
+		)
+	}
+	if options.landGeoJSONPath != "" {
+		t.Errorf(
+			"terres GeoJSON par défaut = %q, attendues vides",
+			options.landGeoJSONPath,
 		)
 	}
 	if options.geoJSONPath != "" {
@@ -344,16 +357,17 @@ func TestWriteResult(t *testing.T) {
 		},
 	}
 	options := options{
-		position:       position,
-		destination:    destination,
-		instant:        instant,
-		totalDuration:  10 * time.Minute,
-		stepDuration:   10 * time.Minute,
-		layerCount:     1,
-		headingSpacing: 10,
-		cellSize:       1,
-		maxCandidates:  500,
-		arrivalRadius:  1,
+		position:        position,
+		destination:     destination,
+		instant:         instant,
+		totalDuration:   10 * time.Minute,
+		stepDuration:    10 * time.Minute,
+		layerCount:      1,
+		headingSpacing:  10,
+		cellSize:        1,
+		maxCandidates:   500,
+		arrivalRadius:   1,
+		landGeoJSONPath: "data/land.geojson",
 	}
 
 	var output strings.Builder
@@ -381,6 +395,7 @@ func TestWriteResult(t *testing.T) {
 		"Destination atteinte : non",
 		"Positions conservées par front : 1",
 		"Cellules effectives par front : 1.000",
+		"Terres GeoJSON : data/land.geojson",
 	} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("sortie absente %q:\n%s", expected, output.String())

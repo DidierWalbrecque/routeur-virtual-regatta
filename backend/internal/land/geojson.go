@@ -22,6 +22,7 @@ type polygon struct {
 // GeoJSONConstraint rejects route segments touching a terrestrial polygon.
 type GeoJSONConstraint struct {
 	polygons []polygon
+	index    polygonSpatialIndex
 }
 
 type featureCollection struct {
@@ -116,7 +117,10 @@ func DecodeGeoJSON(reader io.Reader) (*GeoJSONConstraint, error) {
 	if len(polygons) == 0 {
 		return nil, errors.New("land: aucun polygone terrestre décodé")
 	}
-	return &GeoJSONConstraint{polygons: polygons}, nil
+	return &GeoJSONConstraint{
+		polygons: polygons,
+		index:    newPolygonSpatialIndex(polygons),
+	}, nil
 }
 
 // PolygonCount returns the number of decoded terrestrial polygons.
