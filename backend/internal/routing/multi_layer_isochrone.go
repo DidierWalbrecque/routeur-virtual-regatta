@@ -44,8 +44,12 @@ type IsochroneNode struct {
 	Candidate         HeadingCandidate
 	InitialDistance   navigation.NauticalMiles
 	RemainingDistance navigation.NauticalMiles
-	Progress          DistanceProgress
-	Maneuver          *simulation.ManeuverState
+	Progress                DistanceProgress
+	CourseTarget            navigation.Position
+	TargetInitialDistance   navigation.NauticalMiles
+	TargetRemainingDistance navigation.NauticalMiles
+	TargetProgress          DistanceProgress
+	Maneuver                *simulation.ManeuverState
 	Transition        *simulation.TransitionEvaluation
 	SpeedPenalty      *simulation.SpeedPenaltyApplication
 	CourseProgress    CourseProgress
@@ -229,6 +233,37 @@ func BuildIsochroneSearch(
 		)
 	}
 
+	courseTargets := make([]navigation.Position, len(input.Gates)+1)
+	targetInitialDistances := make(
+		[]navigation.NauticalMiles,
+		len(courseTargets),
+	)
+	for nextGateIndex := range courseTargets {
+		courseTarget, targetErr := (CourseProgress{
+			NextGateIndex: nextGateIndex,
+		}).Target(input.Gates, input.Destination)
+		if targetErr != nil {
+			return IsochroneSearch{}, fmt.Errorf(
+				"routing: construction des isochrones impossible: cible de parcours %d invalide: %w",
+				nextGateIndex+1,
+				targetErr,
+			)
+		}
+		targetInitialDistance, distanceErr := navigation.DistanceBetween(
+			input.Position,
+			courseTarget,
+		)
+		if distanceErr != nil {
+			return IsochroneSearch{}, fmt.Errorf(
+				"routing: construction des isochrones impossible: distance initiale vers la cible de parcours %d impossible: %w",
+				nextGateIndex+1,
+				distanceErr,
+			)
+		}
+		courseTargets[nextGateIndex] = courseTarget
+		targetInitialDistances[nextGateIndex] = targetInitialDistance
+	}
+
 	initialParent := isochroneParentState{
 		Position:       input.Position,
 		Stamina:        input.InitialStamina,
@@ -390,6 +425,21 @@ func BuildIsochroneSearch(
 					)
 				}
 
+				courseTarget := courseTargets[nextCourseProgress.NextGateIndex]
+				targetInitialDistance :=
+					targetInitialDistances[nextCourseProgress.NextGateIndex]
+				targetRemainingDistance, err := navigation.DistanceBetween(
+					candidate.Step.NextPosition,
+					courseTarget,
+				)
+				if err != nil {
+					return IsochroneSearch{}, fmt.Errorf(
+						"routing: construction de la couche %d impossible: distance vers la cible de parcours impossible: %w",
+						layerIndex+1,
+						err,
+					)
+				}
+
 				nextStamina, err := nextStaminaForStep(
 					parentState.Stamina,
 					maneuver,
@@ -433,6 +483,12 @@ func BuildIsochroneSearch(
 					RemainingDistance: remainingDistance,
 					Progress: DistanceProgress(
 						float64(initialDistance - remainingDistance),
+					),
+					CourseTarget:            courseTarget,
+					TargetInitialDistance:   targetInitialDistance,
+					TargetRemainingDistance: targetRemainingDistance,
+					TargetProgress: DistanceProgress(
+						float64(targetInitialDistance - targetRemainingDistance),
 					),
 					Maneuver:       maneuver,
 					Transition:     transition,
@@ -686,6 +742,11 @@ func pruneIsochroneNodes(
 			return selected[left].CourseProgress.NextGateIndex >
 				selected[right].CourseProgress.NextGateIndex
 		}
+		if selected[left].TargetProgress !=
+			selected[right].TargetProgress {
+			return selected[left].TargetProgress >
+				selected[right].TargetProgress
+		}
 		if selected[left].Progress != selected[right].Progress {
 			return selected[left].Progress > selected[right].Progress
 		}
@@ -711,6 +772,6 @@ func isochroneNodeDominates(
 	left,
 	right IsochroneNode,
 ) bool {
-	return left.Progress >= right.Progress &&
+	return left.TargetProgress >= right.TargetProgress &&
 		left.State.Stamina.Level >= right.State.Stamina.Level
 }
