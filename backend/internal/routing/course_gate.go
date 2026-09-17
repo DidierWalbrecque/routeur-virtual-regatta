@@ -102,11 +102,26 @@ func (gate CourseGate) Validate() error {
 func (gate CourseGate) Evaluate(
 	segment RouteSegment,
 ) (GateCrossingStatus, error) {
-	if err := gate.Validate(); err != nil {
+	evaluation, err := gate.evaluateCrossing(segment)
+	if err != nil {
 		return GateNotCrossed, err
 	}
+	return evaluation.status, nil
+}
+
+type gateCrossingEvaluation struct {
+	status         GateCrossingStatus
+	routeParameter float64
+}
+
+func (gate CourseGate) evaluateCrossing(
+	segment RouteSegment,
+) (gateCrossingEvaluation, error) {
+	if err := gate.Validate(); err != nil {
+		return gateCrossingEvaluation{}, err
+	}
 	if err := segment.Validate(); err != nil {
-		return GateNotCrossed, fmt.Errorf(
+		return gateCrossingEvaluation{}, fmt.Errorf(
 			"routing: segment soumis à la porte %q invalide: %w",
 			gate.Name,
 			err,
@@ -115,15 +130,15 @@ func (gate CourseGate) Evaluate(
 
 	gateEnd, err := projectGatePosition(gate.FirstMark, gate.SecondMark)
 	if err != nil {
-		return GateNotCrossed, err
+		return gateCrossingEvaluation{}, err
 	}
 	routeStart, err := projectGatePosition(gate.FirstMark, segment.From)
 	if err != nil {
-		return GateNotCrossed, err
+		return gateCrossingEvaluation{}, err
 	}
 	routeEnd, err := projectGatePosition(gate.FirstMark, segment.To)
 	if err != nil {
-		return GateNotCrossed, err
+		return gateCrossingEvaluation{}, err
 	}
 
 	startSide := crossGatePoints(gateEnd, routeStart)
@@ -131,7 +146,7 @@ func (gate CourseGate) Evaluate(
 	if math.Abs(startSide) <= gateGeometryEpsilon ||
 		math.Abs(endSide) <= gateGeometryEpsilon ||
 		startSide*endSide >= 0 {
-		return GateNotCrossed, nil
+		return gateCrossingEvaluation{status: GateNotCrossed}, nil
 	}
 
 	routeVector := gatePoint{
@@ -140,7 +155,7 @@ func (gate CourseGate) Evaluate(
 	}
 	denominator := crossGatePoints(routeVector, gateEnd)
 	if math.Abs(denominator) <= gateGeometryEpsilon {
-		return GateNotCrossed, nil
+		return gateCrossingEvaluation{status: GateNotCrossed}, nil
 	}
 	fromRouteToGate := gatePoint{
 		x: -routeStart.x,
@@ -154,18 +169,22 @@ func (gate CourseGate) Evaluate(
 		routeParameter >= 1-gateGeometryEpsilon ||
 		gateParameter < -gateGeometryEpsilon ||
 		gateParameter > 1+gateGeometryEpsilon {
-		return GateNotCrossed, nil
+		return gateCrossingEvaluation{status: GateNotCrossed}, nil
 	}
 
 	actualDirection := GateLeftToRight
 	if startSide < 0 && endSide > 0 {
 		actualDirection = GateRightToLeft
 	}
+	status := GateCrossedWrongDirection
 	if gate.Direction == GateEitherDirection ||
 		gate.Direction == actualDirection {
-		return GateCrossedAllowed, nil
+		status = GateCrossedAllowed
 	}
-	return GateCrossedWrongDirection, nil
+	return gateCrossingEvaluation{
+		status:         status,
+		routeParameter: routeParameter,
+	}, nil
 }
 
 type gatePoint struct {
