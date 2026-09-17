@@ -31,6 +31,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-arrival-radius", "0.5",
 		"-land-geojson", "data/land.geojson",
 		"-coastal-margin", "2",
+		"-exclusion-geojson", "data/exclusions.geojson",
 		"-geojson", "out/route.geojson",
 		"-owned", "code0,foils",
 	}, io.Discard)
@@ -110,6 +111,12 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 			options.coastalMargin,
 		)
 	}
+	if options.exclusionGeoJSONPath != "data/exclusions.geojson" {
+		t.Errorf(
+			"zones d'exclusion = %q, attendues data/exclusions.geojson",
+			options.exclusionGeoJSONPath,
+		)
+	}
 	if options.geoJSONPath != "out/route.geojson" {
 		t.Errorf(
 			"GeoJSON = %q, attendu out/route.geojson",
@@ -171,6 +178,12 @@ func TestParseOptionsAcceptsDecimalPositionsAndDefaults(t *testing.T) {
 		t.Errorf(
 			"marge côtière par défaut = %.3f NM, attendue 0",
 			options.coastalMargin,
+		)
+	}
+	if options.exclusionGeoJSONPath != "" {
+		t.Errorf(
+			"zones d'exclusion par défaut = %q, attendues vides",
+			options.exclusionGeoJSONPath,
 		)
 	}
 	if options.geoJSONPath != "" {
@@ -405,18 +418,19 @@ func TestWriteResult(t *testing.T) {
 		},
 	}
 	options := options{
-		position:        position,
-		destination:     destination,
-		instant:         instant,
-		totalDuration:   10 * time.Minute,
-		stepDuration:    10 * time.Minute,
-		layerCount:      1,
-		headingSpacing:  10,
-		cellSize:        1,
-		maxCandidates:   500,
-		arrivalRadius:   1,
-		landGeoJSONPath: "data/land.geojson",
-		coastalMargin:   1,
+		position:             position,
+		destination:          destination,
+		instant:              instant,
+		totalDuration:        10 * time.Minute,
+		stepDuration:         10 * time.Minute,
+		layerCount:           1,
+		headingSpacing:       10,
+		cellSize:             1,
+		maxCandidates:        500,
+		arrivalRadius:        1,
+		landGeoJSONPath:      "data/land.geojson",
+		coastalMargin:        1,
+		exclusionGeoJSONPath: "data/exclusions.geojson",
 		gates: []routing.CourseGate{{
 			Name:       "porte test",
 			FirstMark:  navigation.Position{Latitude: 13.2, Longitude: 121.4},
@@ -450,6 +464,7 @@ func TestWriteResult(t *testing.T) {
 		"Positions conservées par front : 1",
 		"Cellules effectives par front : 1.000",
 		"Terres GeoJSON : data/land.geojson | marge 1.000 NM",
+		"Zones d'exclusion GeoJSON : data/exclusions.geojson",
 		"Portes obligatoires : 1",
 		"1. porte test |",
 	} {

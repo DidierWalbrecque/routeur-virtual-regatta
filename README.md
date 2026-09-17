@@ -350,8 +350,18 @@ Les paramètres spécifiques au routage correspondent à :
   contenant les terres sous forme de `Polygon` ou `MultiPolygon` ;
 - `-coastal-margin` : distance minimale de la côte en milles nautiques,
   nulle par défaut et utilisable uniquement avec `-land-geojson` ;
+- `-exclusion-geojson` : chemin optionnel d'une `FeatureCollection`
+  GeoJSON contenant les zones interdites de la course sous forme de
+  `Polygon` ou `MultiPolygon` ;
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
+
+Pour ajouter des zones interdites propres à une course, créer une
+`FeatureCollection` GeoJSON locale puis compléter la commande avec :
+
+```bash
+-exclusion-geojson ../data/course/exclusions.geojson
+```
 
 ### Télécharger les côtes Natural Earth
 
@@ -431,8 +441,10 @@ heures, utiliser `-minutes 240` avec des fichiers GRIB2 couvrant toute cette
 période.
 
 Sans `-land-geojson`, il s'agit encore d'une route théorique sans terres.
-Sans `-gate`, le routeur vise directement la destination. Avec ces options,
-les intersections terrestres du fichier
+Sans `-gate`, le routeur vise directement la destination. Le fichier fourni
+avec `-exclusion-geojson` ajoute des polygones interdits propres à la course ;
+tout segment qui entre dans une zone ou touche sa limite est rejeté. Avec les
+options de terres, les intersections terrestres du fichier
 fourni et les segments trop proches selon `-coastal-margin` sont rejetés. Avec
 `-maneuver-model off`, les manœuvres restent seulement observées. Le profil
 `experimental-additive` utilise les pénalités de winch de la polaire, les coûts

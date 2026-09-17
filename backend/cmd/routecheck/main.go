@@ -38,27 +38,28 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files               filePaths
-	polarPath           string
-	position            navigation.Position
-	destination         navigation.Position
-	gates               []routing.CourseGate
-	instant             time.Time
-	totalDuration       time.Duration
-	stepDuration        time.Duration
-	layerCount          int
-	owned               equipment.EquipmentSet
-	headingSpacing      float64
-	cellSize            navigation.NauticalMiles
-	maxCandidates       int
-	arrivalRadius       navigation.NauticalMiles
-	stamina             simulation.StaminaState
-	initialNavigation   *initialNavigationOptions
-	maneuverModel       maneuverModel
-	staminaRecoveryRate simulation.StaminaRecoveryRate
-	landGeoJSONPath     string
-	coastalMargin       navigation.NauticalMiles
-	geoJSONPath         string
+	files                filePaths
+	polarPath            string
+	position             navigation.Position
+	destination          navigation.Position
+	gates                []routing.CourseGate
+	instant              time.Time
+	totalDuration        time.Duration
+	stepDuration         time.Duration
+	layerCount           int
+	owned                equipment.EquipmentSet
+	headingSpacing       float64
+	cellSize             navigation.NauticalMiles
+	maxCandidates        int
+	arrivalRadius        navigation.NauticalMiles
+	stamina              simulation.StaminaState
+	initialNavigation    *initialNavigationOptions
+	maneuverModel        maneuverModel
+	staminaRecoveryRate  simulation.StaminaRecoveryRate
+	landGeoJSONPath      string
+	coastalMargin        navigation.NauticalMiles
+	exclusionGeoJSONPath string
+	geoJSONPath          string
 }
 
 func main() {
@@ -112,6 +113,13 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	exclusionConstraints, err := loadExclusionConstraints(
+		options.exclusionGeoJSONPath,
+	)
+	if err != nil {
+		return err
+	}
+	constraints = append(constraints, exclusionConstraints...)
 
 	search, err := routing.BuildIsochroneSearch(
 		context.Background(),
@@ -249,6 +257,13 @@ func writeResult(
 			"Terres GeoJSON : %s | marge %.3f NM\n",
 			options.landGeoJSONPath,
 			options.coastalMargin,
+		)
+	}
+	if options.exclusionGeoJSONPath != "" {
+		fmt.Fprintf(
+			stdout,
+			"Zones d'exclusion GeoJSON : %s\n",
+			options.exclusionGeoJSONPath,
 		)
 	}
 	fmt.Fprintln(stdout, "Route retenue :")
@@ -481,6 +496,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		0,
 		"distance minimale des côtes en milles nautiques",
 	)
+	exclusionGeoJSONPath := flags.String(
+		"exclusion-geojson",
+		"",
+		"chemin optionnel du fichier GeoJSON contenant les zones d'exclusion",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -677,6 +697,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.staminaRecoveryRate = recoveryRate
 	result.landGeoJSONPath = strings.TrimSpace(*landGeoJSONPath)
 	result.coastalMargin = coastalMarginValue
+	result.exclusionGeoJSONPath = strings.TrimSpace(*exclusionGeoJSONPath)
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
