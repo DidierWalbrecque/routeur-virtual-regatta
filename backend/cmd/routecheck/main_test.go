@@ -29,6 +29,7 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 		"-max-candidates", "100",
 		"-arrival-radius", "0.5",
 		"-land-geojson", "data/land.geojson",
+		"-coastal-margin", "2",
 		"-geojson", "out/route.geojson",
 		"-owned", "code0,foils",
 	}, io.Discard)
@@ -93,6 +94,12 @@ func TestParseOptionsAcceptsVirtualRegattaPositions(t *testing.T) {
 			options.landGeoJSONPath,
 		)
 	}
+	if options.coastalMargin != 2 {
+		t.Errorf(
+			"marge côtière = %.3f NM, attendue 2",
+			options.coastalMargin,
+		)
+	}
 	if options.geoJSONPath != "out/route.geojson" {
 		t.Errorf(
 			"GeoJSON = %q, attendu out/route.geojson",
@@ -148,6 +155,12 @@ func TestParseOptionsAcceptsDecimalPositionsAndDefaults(t *testing.T) {
 		t.Errorf(
 			"terres GeoJSON par défaut = %q, attendues vides",
 			options.landGeoJSONPath,
+		)
+	}
+	if options.coastalMargin != 0 {
+		t.Errorf(
+			"marge côtière par défaut = %.3f NM, attendue 0",
+			options.coastalMargin,
 		)
 	}
 	if options.geoJSONPath != "" {
@@ -263,6 +276,23 @@ func TestParseOptionsRejectsInvalidArguments(t *testing.T) {
 			wantErr: "-arrival-radius",
 		},
 		{
+			name: "marge côtière négative",
+			args: append(
+				append([]string{}, base...),
+				"-land-geojson", "land.geojson",
+				"-coastal-margin", "-1",
+			),
+			wantErr: "-coastal-margin",
+		},
+		{
+			name: "marge côtière sans terres",
+			args: append(
+				append([]string{}, base...),
+				"-coastal-margin", "1",
+			),
+			wantErr: "nécessite -land-geojson",
+		},
+		{
 			name: "équipement inconnu",
 			args: append(
 				append([]string{}, base...),
@@ -368,6 +398,7 @@ func TestWriteResult(t *testing.T) {
 		maxCandidates:   500,
 		arrivalRadius:   1,
 		landGeoJSONPath: "data/land.geojson",
+		coastalMargin:   1,
 	}
 
 	var output strings.Builder
@@ -395,7 +426,7 @@ func TestWriteResult(t *testing.T) {
 		"Destination atteinte : non",
 		"Positions conservées par front : 1",
 		"Cellules effectives par front : 1.000",
-		"Terres GeoJSON : data/land.geojson",
+		"Terres GeoJSON : data/land.geojson | marge 1.000 NM",
 	} {
 		if !strings.Contains(output.String(), expected) {
 			t.Errorf("sortie absente %q:\n%s", expected, output.String())
