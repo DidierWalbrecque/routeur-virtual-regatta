@@ -463,8 +463,8 @@ voile n'est imposée, elle conserve la sélection automatique existante.
 Cette brique ne termine pas encore la route pratique sans intervention : le
 score de stabilité mesure désormais la régularité de la vitesse effective entre
 les pas. Des scénarios de variations de force et de direction du vent sont
-simulés pour chaque cap ; leur exploitation pour rejeter les trajectoires trop
-sensibles reste à développer.
+simulés pour chaque cap. Une perte maximale de progression configurable permet
+désormais d'écarter les trajectoires trop sensibles.
 
 - Cap et voile fixes pendant environ quatre heures.
 - Aucun automatisme dans la première version.
@@ -479,7 +479,7 @@ sensibles reste à développer.
 - [x] Propager une voile fixe à chaque simulation de cap pratique.
 - [x] Définir un score de stabilité fondé sur la régularité de la vitesse.
 - [x] Simuler des variations de force et de direction du vent.
-- [ ] Rejeter les trajectoires trop sensibles.
+- [x] Rejeter les trajectoires trop sensibles selon une perte de progression configurable.
 - [ ] Calculer l'autonomie sans intervention.
 - [ ] Comparer heure d'arrivée, manœuvres, stamina et risque.
 - [ ] Expliquer le compromis entre les deux résultats.
