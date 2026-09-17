@@ -38,21 +38,21 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files             filePaths
-	polarPath         string
-	position          navigation.Position
-	destination       navigation.Position
-	instant           time.Time
-	totalDuration     time.Duration
-	stepDuration      time.Duration
-	layerCount        int
-	owned             equipment.EquipmentSet
-	headingSpacing    float64
-	cellSize          navigation.NauticalMiles
-	maxCandidates     int
-	arrivalRadius     navigation.NauticalMiles
-	stamina           simulation.StaminaState
-	initialNavigation *initialNavigationOptions
+	files               filePaths
+	polarPath           string
+	position            navigation.Position
+	destination         navigation.Position
+	instant             time.Time
+	totalDuration       time.Duration
+	stepDuration        time.Duration
+	layerCount          int
+	owned               equipment.EquipmentSet
+	headingSpacing      float64
+	cellSize            navigation.NauticalMiles
+	maxCandidates       int
+	arrivalRadius       navigation.NauticalMiles
+	stamina             simulation.StaminaState
+	initialNavigation   *initialNavigationOptions
 	maneuverModel       maneuverModel
 	staminaRecoveryRate simulation.StaminaRecoveryRate
 	geoJSONPath         string
