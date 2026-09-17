@@ -11,9 +11,9 @@ import (
 
 // RouteSegment describes one simulated movement submitted to route constraints.
 type RouteSegment struct {
-	From      navigation.Position
-	To        navigation.Position
-	StartedAt time.Time
+	From       navigation.Position
+	To         navigation.Position
+	StartedAt  time.Time
 	FinishedAt time.Time
 }
 

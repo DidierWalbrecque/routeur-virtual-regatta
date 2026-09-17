@@ -114,8 +114,8 @@ func TestSegmentAllowedRejectsInvalidInputs(t *testing.T) {
 			wantErr:     "contrainte 1",
 		},
 		{
-			name:    "position invalide",
-			ctx:     context.Background(),
+			name: "position invalide",
+			ctx:  context.Background(),
 			segment: RouteSegment{
 				From:       navigation.Position{Latitude: 91},
 				To:         valid.To,
@@ -125,8 +125,8 @@ func TestSegmentAllowedRejectsInvalidInputs(t *testing.T) {
 			wantErr: "départ",
 		},
 		{
-			name:    "ordre temporel invalide",
-			ctx:     context.Background(),
+			name: "ordre temporel invalide",
+			ctx:  context.Background(),
 			segment: RouteSegment{
 				From:       valid.From,
 				To:         valid.To,
