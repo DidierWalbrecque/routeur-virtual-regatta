@@ -8,6 +8,8 @@ import (
 	"io"
 	"math"
 	"os"
+
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 )
 
 type point struct {
@@ -21,8 +23,9 @@ type polygon struct {
 
 // GeoJSONConstraint rejects route segments touching a terrestrial polygon.
 type GeoJSONConstraint struct {
-	polygons []polygon
-	index    polygonSpatialIndex
+	polygons      []polygon
+	index         polygonSpatialIndex
+	coastalMargin navigation.NauticalMiles
 }
 
 type featureCollection struct {
@@ -121,6 +124,34 @@ func DecodeGeoJSON(reader io.Reader) (*GeoJSONConstraint, error) {
 		polygons: polygons,
 		index:    newPolygonSpatialIndex(polygons),
 	}, nil
+}
+
+// WithCoastalMargin returns an independent constraint using the requested
+// minimum distance from every coastline.
+func (constraint *GeoJSONConstraint) WithCoastalMargin(
+	margin navigation.NauticalMiles,
+) (*GeoJSONConstraint, error) {
+	if constraint == nil {
+		return nil, errors.New("land: contrainte GeoJSON requise")
+	}
+	value := float64(margin)
+	if math.IsNaN(value) || math.IsInf(value, 0) || margin < 0 {
+		return nil, fmt.Errorf(
+			"land: marge côtière %.12f NM invalide",
+			value,
+		)
+	}
+	result := *constraint
+	result.coastalMargin = margin
+	return &result, nil
+}
+
+// CoastalMargin returns the configured minimum distance from coastlines.
+func (constraint *GeoJSONConstraint) CoastalMargin() navigation.NauticalMiles {
+	if constraint == nil {
+		return 0
+	}
+	return constraint.coastalMargin
 }
 
 // PolygonCount returns the number of decoded terrestrial polygons.
