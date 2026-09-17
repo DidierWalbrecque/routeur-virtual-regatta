@@ -377,9 +377,11 @@ Le routage en pleine mer produit des fronts successifs, reconstruit la meilleure
 route et limite adaptativement leur taille. Chaque nœud conserve son état
 nautique complet, y compris une pénalité de vitesse restante. `routecheck` peut
 activer un profil `experimental-additive` qui branche le `TransitionEvaluator`,
-la consommation de stamina et les pénalités de manœuvre au déplacement. Ce
-profil reste explicitement provisoire tant que les règles de cumul et les
-courbes officielles ne sont pas confirmées. Sur le scénario réel de référence
+la consommation de stamina et les pénalités de manœuvre au déplacement. La
+récupération entre deux manœuvres est intégrée avec un taux configurable, nul
+par défaut. Ce profil reste explicitement provisoire tant que les règles de
+cumul, le taux de récupération et les courbes officielles ne sont pas
+confirmés. Sur le scénario réel de référence
 de quatre heures, la limite de 500 candidats réduit le temps de calcul de
 24,832 s à 9,600 s, avec une perte de progression de 0,783 NM.
 
