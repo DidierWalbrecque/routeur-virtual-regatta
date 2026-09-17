@@ -55,6 +55,7 @@ type options struct {
 	initialNavigation   *initialNavigationOptions
 	maneuverModel       maneuverModel
 	staminaRecoveryRate simulation.StaminaRecoveryRate
+	landGeoJSONPath     string
 	geoJSONPath         string
 }
 
@@ -102,6 +103,10 @@ func run(args []string, stdout, stderr io.Writer) error {
 	if err != nil {
 		return err
 	}
+	constraints, err := loadLandConstraints(options.landGeoJSONPath)
+	if err != nil {
+		return err
+	}
 
 	search, err := routing.BuildIsochroneSearch(
 		context.Background(),
@@ -123,6 +128,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			TransitionEvaluator:   maneuverRuntime.evaluator,
 			CombineSpeedPenalties: maneuverRuntime.combineSpeedPenalties,
 			StaminaRecoveryRules:  maneuverRuntime.staminaRecoveryRules,
+			Constraints:           constraints,
 		},
 	)
 	if err != nil {
@@ -193,6 +199,9 @@ func writeResult(
 		options.maxCandidates,
 		options.arrivalRadius,
 	)
+	if options.landGeoJSONPath != "" {
+		fmt.Fprintf(stdout, "Terres GeoJSON : %s\n", options.landGeoJSONPath)
+	}
 	fmt.Fprintln(stdout, "Route retenue :")
 
 	for index, routeStep := range route.Steps {
@@ -407,6 +416,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		0,
 		"récupération de stamina en points par heure sans manœuvre",
 	)
+	landGeoJSONPath := flags.String(
+		"land-geojson",
+		"",
+		"chemin optionnel du fichier GeoJSON contenant les terres",
+	)
 	geoJSONPath := flags.String(
 		"geojson",
 		"",
@@ -582,6 +596,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.initialNavigation = initialNavigation
 	result.maneuverModel = maneuverModel
 	result.staminaRecoveryRate = recoveryRate
+	result.landGeoJSONPath = strings.TrimSpace(*landGeoJSONPath)
 	result.geoJSONPath = strings.TrimSpace(*geoJSONPath)
 	return result, nil
 }
