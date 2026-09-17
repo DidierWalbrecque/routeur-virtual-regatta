@@ -396,7 +396,7 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 
 ## Phase 9 — Ajouter les terres et les contraintes de course
 
-**Statut : à faire**
+**Statut : en cours**
 
 ### Objectif
 
@@ -406,12 +406,17 @@ Le moteur atteint une destination simple et améliore le temps par rapport à un
 
 - [x] Brancher une interface générique de contrainte sur chaque segment.
 - [ ] Choisir une source de côtes et de terres.
-- [ ] Détecter l'intersection d'un segment avec la terre.
+- [x] Charger et valider des terres locales au format GeoJSON Polygon/MultiPolygon.
+- [x] Détecter l'intersection d'un segment avec la terre.
 - [ ] Ajouter une marge côtière configurable.
-- [ ] Gérer les îles et détroits.
+- [x] Gérer les îles, les trous et les détroits représentés par les polygones.
 - [ ] Gérer les portes, bouées et sens de franchissement.
 - [ ] Gérer les zones d'exclusion.
-- [ ] Tester les cas proches de la côte et de l'antiméridien.
+- [x] Tester le contact avec la côte et le passage à l'antiméridien.
+
+Le détecteur utilise une approximation plane sur les petits segments produits par
+les isochrones. La source de côtes réelle, sa licence, sa résolution et son
+branchement dans `routecheck` restent à traiter séparément.
 
 ### Livrable
 
