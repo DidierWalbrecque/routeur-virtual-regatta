@@ -313,6 +313,7 @@ go run ./cmd/routecheck \
   -arrival-radius 1 \
   -stamina 100 \
   -maneuver-model experimental-additive \
+  -stamina-recovery-rate 0 \
   -current-heading 321 \
   -current-sail Jib \
   -geojson ../data/routes/route.geojson \
@@ -333,6 +334,10 @@ Les paramètres spécifiques au routage correspondent à :
 - `-stamina` : réserve initiale du bateau entre 0 et 100, par défaut 100 ;
 - `-maneuver-model` : modèle de manœuvres à utiliser, `off` par défaut ou
   `experimental-additive` pour activer les pénalités et la consommation ;
+- `-stamina-recovery-rate` : récupération pendant un pas sans virement,
+  empannage ni changement de voile, en points de stamina par heure ; valeur
+  expérimentale nulle par défaut et utilisable uniquement avec
+  `experimental-additive` ;
 - `-current-heading` : cap actuellement suivi, de 0° inclus à 360° exclus ;
 - `-current-sail` : nom de la voile actuelle tel qu'il apparaît dans la
   polaire, sans distinction entre majuscules et minuscules ;
@@ -385,8 +390,10 @@ de stamina connus de 10 points pour un virement ou un empannage et de 20 points
 pour un changement de voile. Pour permettre les essais avant confirmation de
 la règle Virtual Regatta, il additionne les consommations simultanées, multiplie
 leurs ratios de vitesse et additionne leurs durées. Les coefficients de vent et
-de stamina restent neutres, égaux à 1, et la récupération de stamina n'est pas
-encore appliquée pendant le routage. Ce profil est donc expérimental et ses
+de stamina restent neutres, égaux à 1. La récupération peut être testée avec
+`-stamina-recovery-rate`, mais son taux est nul par défaut et doit rester
+considéré comme une hypothèse configurable tant qu'il n'est pas confirmé par
+des mesures ou une source officielle. Ce profil est donc expérimental et ses
 résultats ne doivent pas être considérés comme une reproduction officielle du
 jeu. La commande ne se connecte pas à Virtual Regatta et ne commande jamais le
 bateau.
