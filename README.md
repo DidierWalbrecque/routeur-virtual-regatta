@@ -52,6 +52,27 @@ Pour arrêter le serveur dans les deux terminaux :
 Ctrl + C
 ```
 
+## Utiliser l'interface locale des caps pratiques
+
+Lancer l'API, depuis un premier terminal à la racine du dépôt :
+
+```powershell
+go run -C backend ./cmd/api
+```
+
+Dans un second terminal, lancer l'interface :
+
+```powershell
+Set-Location .\frontend
+npm install
+npm run dev
+```
+
+Ouvrir ensuite l'adresse affichée par Vite, habituellement
+`http://localhost:5173`. L'interface transmet les chemins locaux des fichiers
+GRIB et de la polaire à l'API exécutée sur la même machine, puis affiche les
+caps pratiques classés. Elle ne se connecte pas à Virtual Regatta.
+
 ## Démarrer avec Docker Compose
 
 Les commandes suivantes doivent être exécutées depuis la racine du projet.

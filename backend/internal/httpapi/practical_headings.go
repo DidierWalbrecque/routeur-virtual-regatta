@@ -30,8 +30,9 @@ type practicalHeadingsRequest struct {
 }
 
 type positionRequest struct {
-	Latitude  float64 `json:"latitude"`
-	Longitude float64 `json:"longitude"`
+	Latitude       float64 `json:"latitude"`
+	Longitude      float64 `json:"longitude"`
+	VirtualRegatta string  `json:"virtualRegatta"`
 }
 
 type practicalHeadingsResponse struct {
@@ -89,10 +90,20 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		writeJSONError(response, http.StatusBadRequest, "chargement polaire impossible: "+err.Error())
 		return
 	}
+	position, err := parsePositionRequest(payload.Position)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "position de départ invalide: "+err.Error())
+		return
+	}
+	destination, err := parsePositionRequest(payload.Destination)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "destination invalide: "+err.Error())
+		return
+	}
 	candidates, err := routing.EvaluatePracticalHeadingCandidates(
 		request.Context(), weatherProvider, boatPolar, routing.PracticalHeadingInput{
-			Position:    navigation.Position{Latitude: navigation.Latitude(payload.Position.Latitude), Longitude: navigation.Longitude(payload.Position.Longitude)},
-			Destination: navigation.Position{Latitude: navigation.Latitude(payload.Destination.Latitude), Longitude: navigation.Longitude(payload.Destination.Longitude)},
+			Position:    position,
+			Destination: destination,
 			Instant:     instant, Duration: time.Duration(payload.DurationMinutes * float64(time.Minute)), StepDuration: time.Duration(payload.StepMinutes * float64(time.Minute)),
 			Owned: owned, FixedSailID: payload.FixedSailID, Headings: headings, WeatherVariations: payload.WeatherVariations,
 			MaxScenarioProgressLoss: navigation.NauticalMiles(payload.MaxScenarioProgressLossNM), RequireRobustScenarios: payload.RequireRobustScenarios,
@@ -113,6 +124,17 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		})
 	}
 	writeJSON(response, http.StatusOK, result)
+}
+
+func parsePositionRequest(request positionRequest) (navigation.Position, error) {
+	if strings.TrimSpace(request.VirtualRegatta) != "" {
+		return navigation.ParseVirtualRegattaPosition(request.VirtualRegatta)
+	}
+	position := navigation.Position{Latitude: navigation.Latitude(request.Latitude), Longitude: navigation.Longitude(request.Longitude)}
+	if err := position.Validate(); err != nil {
+		return navigation.Position{}, err
+	}
+	return position, nil
 }
 
 func writeJSONError(response http.ResponseWriter, status int, message string) {
