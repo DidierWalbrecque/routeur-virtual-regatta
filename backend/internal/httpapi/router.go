@@ -6,6 +6,7 @@ import "net/http"
 func NewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
+	mux.HandleFunc("POST /api/practical-headings", practicalHeadingsHandler)
 
 	return mux
 }

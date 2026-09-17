@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -38,6 +39,23 @@ func TestHealthReturnsOK(t *testing.T) {
 			body,
 			expectedBody,
 		)
+	}
+}
+
+func TestPracticalHeadingsRejectsInvalidRequest(t *testing.T) {
+	for _, body := range []string{"{", `{}`} {
+		request := httptest.NewRequest(
+			http.MethodPost,
+			"/api/practical-headings",
+			bytes.NewBufferString(body),
+		)
+		response := httptest.NewRecorder()
+
+		NewHandler().ServeHTTP(response, request)
+
+		if response.Code != http.StatusBadRequest {
+			t.Errorf("corps %q : statut = %d, attendu %d", body, response.Code, http.StatusBadRequest)
+		}
 	}
 }
 
