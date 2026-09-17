@@ -20,10 +20,12 @@ func nextStaminaForStep(
 		}
 		current = transition.NextStamina
 	}
-	if maneuver != nil &&
-		(maneuver.Kind == simulation.ManeuverTack ||
-			maneuver.Kind == simulation.ManeuverGybe ||
-			maneuver.SailChanged) {
+	if maneuver == nil {
+		return current, nil
+	}
+	if maneuver.Kind == simulation.ManeuverTack ||
+		maneuver.Kind == simulation.ManeuverGybe ||
+		maneuver.SailChanged {
 		return current, nil
 	}
 	if rules == nil {
