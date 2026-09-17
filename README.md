@@ -316,6 +316,7 @@ go run ./cmd/routecheck \
   -stamina-recovery-rate 0 \
   -current-heading 321 \
   -current-sail Jib \
+  -land-geojson ../data/land/natural-earth-10m-land.geojson \
   -geojson ../data/routes/route.geojson \
   -owned code0,foils
 ```
