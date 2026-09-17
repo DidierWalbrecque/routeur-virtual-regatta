@@ -54,7 +54,12 @@ func (constraint *GeoJSONConstraint) Allows(
 			err,
 		)
 	}
-	for _, index := range constraint.candidatePolygonIndices(start, end) {
+	margin := float64(constraint.coastalMargin)
+	for _, index := range constraint.candidatePolygonIndices(
+		start,
+		end,
+		margin,
+	) {
 		if err := ctx.Err(); err != nil {
 			return false, fmt.Errorf(
 				"land: vérification interrompue au polygone %d: %w",
@@ -62,12 +67,21 @@ func (constraint *GeoJSONConstraint) Allows(
 				err,
 			)
 		}
+		value := constraint.polygons[index]
 		if segmentTouchesPolygon(
 			start,
 			end,
-			constraint.polygons[index],
+			value,
 			referenceLongitude,
 		) {
+			return false, nil
+		}
+		if margin > 0 && segmentDistanceToPolygon(
+			start,
+			end,
+			value,
+			referenceLongitude,
+		) <= margin+geometryEpsilon {
 			return false, nil
 		}
 	}
@@ -155,6 +169,105 @@ func segmentsIntersect(a, b, c, d point) bool {
 			pointOnSegment(a, c, d) ||
 		math.Abs(orientation4) <= geometryEpsilon &&
 			pointOnSegment(b, c, d)
+}
+
+type projectedPoint struct {
+	x float64
+	y float64
+}
+
+func segmentDistanceToPolygon(
+	start,
+	end point,
+	value polygon,
+	referenceLongitude float64,
+) float64 {
+	referenceLatitude := (start.latitude + end.latitude) / 2
+	projectedStart := projectPoint(
+		start,
+		referenceLongitude,
+		referenceLatitude,
+	)
+	projectedEnd := projectPoint(
+		end,
+		referenceLongitude,
+		referenceLatitude,
+	)
+	minimum := math.Inf(1)
+	for _, ring := range value.rings {
+		unwrapped := unwrapRing(ring, referenceLongitude)
+		for index := 1; index < len(unwrapped); index++ {
+			edgeStart := projectPoint(
+				unwrapped[index-1],
+				referenceLongitude,
+				referenceLatitude,
+			)
+			edgeEnd := projectPoint(
+				unwrapped[index],
+				referenceLongitude,
+				referenceLatitude,
+			)
+			minimum = math.Min(
+				minimum,
+				projectedSegmentDistance(
+					projectedStart,
+					projectedEnd,
+					edgeStart,
+					edgeEnd,
+				),
+			)
+		}
+	}
+	return minimum
+}
+
+func projectPoint(
+	value point,
+	referenceLongitude,
+	referenceLatitude float64,
+) projectedPoint {
+	longitudeScale := math.Cos(referenceLatitude * math.Pi / 180)
+	return projectedPoint{
+		x: (value.longitude - referenceLongitude) * 60 * longitudeScale,
+		y: (value.latitude - referenceLatitude) * 60,
+	}
+}
+
+func projectedSegmentDistance(
+	a,
+	b,
+	c,
+	d projectedPoint,
+) float64 {
+	return math.Min(
+		math.Min(
+			projectedPointToSegmentDistance(a, c, d),
+			projectedPointToSegmentDistance(b, c, d),
+		),
+		math.Min(
+			projectedPointToSegmentDistance(c, a, b),
+			projectedPointToSegmentDistance(d, a, b),
+		),
+	)
+}
+
+func projectedPointToSegmentDistance(
+	value,
+	start,
+	end projectedPoint,
+) float64 {
+	deltaX := end.x - start.x
+	deltaY := end.y - start.y
+	lengthSquared := deltaX*deltaX + deltaY*deltaY
+	if lengthSquared == 0 {
+		return math.Hypot(value.x-start.x, value.y-start.y)
+	}
+	position := ((value.x-start.x)*deltaX +
+		(value.y-start.y)*deltaY) / lengthSquared
+	position = math.Max(0, math.Min(1, position))
+	closestX := start.x + position*deltaX
+	closestY := start.y + position*deltaY
+	return math.Hypot(value.x-closestX, value.y-closestY)
 }
 
 func orientation(a, b, c point) float64 {
