@@ -48,7 +48,13 @@ func (constraint *GeoJSONConstraint) Allows(
 	}
 	referenceLongitude := (start.longitude + end.longitude) / 2
 
-	for index, polygon := range constraint.polygons {
+	if err := ctx.Err(); err != nil {
+		return false, fmt.Errorf(
+			"land: vérification interrompue: %w",
+			err,
+		)
+	}
+	for _, index := range constraint.candidatePolygonIndices(start, end) {
 		if err := ctx.Err(); err != nil {
 			return false, fmt.Errorf(
 				"land: vérification interrompue au polygone %d: %w",
@@ -59,7 +65,7 @@ func (constraint *GeoJSONConstraint) Allows(
 		if segmentTouchesPolygon(
 			start,
 			end,
-			polygon,
+			constraint.polygons[index],
 			referenceLongitude,
 		) {
 			return false, nil
