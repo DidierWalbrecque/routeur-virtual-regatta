@@ -74,6 +74,12 @@ func TestEvaluatePracticalHeadingCandidates(t *testing.T) {
 			best.InitialDistance,
 		)
 	}
+	if best.StabilityScore != 1 {
+		t.Errorf(
+			"score de stabilité = %.6f, attendu 1 pour une vitesse constante",
+			best.StabilityScore,
+		)
+	}
 	for index := 1; index < len(candidates); index++ {
 		if candidates[index-1].Progress < candidates[index].Progress {
 			t.Fatal("les caps pratiques ne sont pas classés par progression")

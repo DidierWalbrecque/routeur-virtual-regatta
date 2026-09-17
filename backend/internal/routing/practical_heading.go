@@ -35,6 +35,7 @@ type PracticalHeadingCandidate struct {
 	InitialDistance   navigation.NauticalMiles
 	RemainingDistance navigation.NauticalMiles
 	Progress          DistanceProgress
+	StabilityScore    float64
 }
 
 // EvaluatePracticalHeadingCandidates simulates every supplied heading for the
@@ -167,6 +168,7 @@ func EvaluatePracticalHeadingCandidates(
 			Progress: DistanceProgress(
 				float64(initialDistance - remainingDistance),
 			),
+			StabilityScore: practicalStabilityScore(result),
 		})
 	}
 
