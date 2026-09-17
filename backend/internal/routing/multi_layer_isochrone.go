@@ -31,6 +31,7 @@ type IsochroneSearchInput struct {
 	InitialNavigation     *InitialNavigationState
 	TransitionEvaluator   *simulation.TransitionEvaluator
 	CombineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
+	StaminaRecoveryRules  *simulation.StaminaRecoveryRules
 	Progress              IsochroneProgressReporter
 }
 
@@ -157,6 +158,14 @@ func BuildIsochroneSearch(
 			"routing: construction des isochrones impossible: stamina initiale invalide: %w",
 			err,
 		)
+	}
+	if input.StaminaRecoveryRules != nil {
+		if err := input.StaminaRecoveryRules.Validate(); err != nil {
+			return IsochroneSearch{}, fmt.Errorf(
+				"routing: construction des isochrones impossible: récupération de stamina invalide: %w",
+				err,
+			)
+		}
 	}
 
 	headings, err := GenerateHeadingGrid(input.HeadingSpacing)
@@ -322,9 +331,20 @@ func BuildIsochroneSearch(
 					)
 				}
 
-				nextStamina := parentState.Stamina
-				if transition != nil {
-					nextStamina = transition.NextStamina
+				nextStamina, err := nextStaminaForStep(
+					parentState.Stamina,
+					maneuver,
+					transition,
+					input.StepDuration,
+					input.StaminaRecoveryRules,
+				)
+				if err != nil {
+					return IsochroneSearch{}, fmt.Errorf(
+						"routing: construction de la couche %d impossible: stamina du candidat au cap %.6f° invalide: %w",
+						layerIndex+1,
+						candidate.Heading,
+						err,
+					)
 				}
 				var activeSpeedPenalty *polar.ManeuverPenalty
 				if speedPenalty != nil {
