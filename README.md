@@ -319,7 +319,6 @@ go run ./cmd/routecheck \
   -current-sail Jib \
   -land-geojson ../data/land/natural-earth-10m-land.geojson \
   -coastal-margin 2 \
-  -exclusion-geojson ../data/course/exclusions.geojson \
   -geojson ../data/routes/route.geojson \
   -owned code0,foils
 ```
@@ -356,6 +355,13 @@ Les paramètres spécifiques au routage correspondent à :
   `Polygon` ou `MultiPolygon` ;
 - `-geojson` : chemin optionnel du fichier GeoJSON à produire. Le dossier
   parent est créé automatiquement.
+
+Pour ajouter des zones interdites propres à une course, créer une
+`FeatureCollection` GeoJSON locale puis compléter la commande avec :
+
+```bash
+-exclusion-geojson ../data/course/exclusions.geojson
+```
 
 ### Télécharger les côtes Natural Earth
 
