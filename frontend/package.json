@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
+    "maplibre-gl": "^6.10.0",
     "react": "latest",
     "react-dom": "latest",
     "typescript": "latest",

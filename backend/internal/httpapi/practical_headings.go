@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"math"
 	"net/http"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
@@ -36,7 +38,22 @@ type positionRequest struct {
 }
 
 type practicalHeadingsResponse struct {
-	Candidates []practicalCandidateResponse `json:"candidates"`
+	Position    positionRequest              `json:"position"`
+	Destination positionRequest              `json:"destination"`
+	Candidates  []practicalCandidateResponse `json:"candidates"`
+	Isochrones  []isochroneFrontierResponse  `json:"isochrones"`
+	Route       []routePointResponse         `json:"route"`
+}
+
+type isochroneFrontierResponse struct {
+	Instant   time.Time         `json:"instant"`
+	Positions []positionRequest `json:"positions"`
+}
+type routePointResponse struct {
+	Position positionRequest `json:"position"`
+	Heading  float64         `json:"heading"`
+	Sail     string          `json:"sail"`
+	Instant  time.Time       `json:"instant"`
 }
 
 type practicalCandidateResponse struct {
@@ -113,7 +130,13 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		writeJSONError(response, http.StatusBadRequest, "calcul pratique impossible: "+err.Error())
 		return
 	}
-	result := practicalHeadingsResponse{Candidates: make([]practicalCandidateResponse, 0, len(candidates))}
+	result := practicalHeadingsResponse{
+		Position:    positionRequest{Latitude: float64(position.Latitude), Longitude: float64(position.Longitude)},
+		Destination: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)},
+		Candidates:  make([]practicalCandidateResponse, 0, len(candidates)),
+		Isochrones:  make([]isochroneFrontierResponse, 0),
+		Route:       make([]routePointResponse, 0),
+	}
 	for _, candidate := range candidates {
 		lastStep := candidate.Simulation.Steps[len(candidate.Simulation.Steps)-1]
 		result.Candidates = append(result.Candidates, practicalCandidateResponse{
@@ -122,6 +145,33 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			NextPosition: positionRequest{Latitude: float64(candidate.Simulation.NextPosition.Latitude), Longitude: float64(candidate.Simulation.NextPosition.Longitude)},
 			NextInstant:  candidate.Simulation.NextInstant, Sail: lastStep.BestSail.SailName, SpeedKnots: float64(lastStep.BestSail.Speed),
 		})
+	}
+	isochroneStep := 30 * time.Minute
+	layerCount := int(math.Ceil(time.Duration(payload.DurationMinutes*float64(time.Minute)).Minutes() / isochroneStep.Minutes()))
+	if layerCount > 0 {
+		search, err := routing.BuildIsochroneSearch(request.Context(), weatherProvider, boatPolar, routing.IsochroneSearchInput{
+			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
+			Owned: owned, HeadingSpacing: 15, CellSize: navigation.NauticalMiles(0.5), MaxCandidates: 100,
+			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: simulation.StaminaState{Level: 100},
+		})
+		if err != nil {
+			writeJSONError(response, http.StatusBadRequest, "calcul des isochrones impossible: "+err.Error())
+			return
+		}
+		for _, frontier := range search.Frontiers {
+			layer := isochroneFrontierResponse{Instant: frontier.Instant, Positions: make([]positionRequest, 0, len(frontier.Nodes))}
+			for _, node := range frontier.Nodes {
+				layer.Positions = append(layer.Positions, positionRequest{Latitude: float64(node.Candidate.Step.NextPosition.Latitude), Longitude: float64(node.Candidate.Step.NextPosition.Longitude)})
+			}
+			result.Isochrones = append(result.Isochrones, layer)
+		}
+		bestRoute, err := search.ReconstructBestRoute()
+		if err == nil {
+			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(bestRoute.Origin.Latitude), Longitude: float64(bestRoute.Origin.Longitude)}, Instant: bestRoute.StartedAt})
+			for _, routeStep := range bestRoute.Steps {
+				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Instant: routeStep.Node.Candidate.Step.NextInstant})
+			}
+		}
 	}
 	writeJSON(response, http.StatusOK, result)
 }
