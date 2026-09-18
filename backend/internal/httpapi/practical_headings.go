@@ -48,6 +48,7 @@ type practicalHeadingsResponse struct {
 type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
 	Positions []positionRequest `json:"positions"`
+	Contour   []positionRequest `json:"contour"`
 }
 type routePointResponse struct {
 	Position positionRequest `json:"position"`
@@ -146,7 +147,7 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			NextInstant:  candidate.Simulation.NextInstant, Sail: lastStep.BestSail.SailName, SpeedKnots: float64(lastStep.BestSail.Speed),
 		})
 	}
-	isochroneStep := 30 * time.Minute
+	isochroneStep := 10 * time.Minute
 	layerCount := int(math.Ceil(time.Duration(payload.DurationMinutes*float64(time.Minute)).Minutes() / isochroneStep.Minutes()))
 	if layerCount > 0 {
 		search, err := routing.BuildIsochroneSearch(request.Context(), weatherProvider, boatPolar, routing.IsochroneSearchInput{
@@ -159,9 +160,17 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			return
 		}
 		for _, frontier := range search.Frontiers {
-			layer := isochroneFrontierResponse{Instant: frontier.Instant, Positions: make([]positionRequest, 0, len(frontier.Nodes))}
+			layer := isochroneFrontierResponse{Instant: frontier.Instant, Positions: make([]positionRequest, 0, len(frontier.Nodes)), Contour: make([]positionRequest, 0)}
 			for _, node := range frontier.Nodes {
 				layer.Positions = append(layer.Positions, positionRequest{Latitude: float64(node.Candidate.Step.NextPosition.Latitude), Longitude: float64(node.Candidate.Step.NextPosition.Longitude)})
+			}
+			contour, err := frontier.Contour(position, 36)
+			if err != nil {
+				writeJSONError(response, http.StatusBadRequest, "contour d’isochrone impossible: "+err.Error())
+				return
+			}
+			for _, contourPosition := range contour {
+				layer.Contour = append(layer.Contour, positionRequest{Latitude: float64(contourPosition.Latitude), Longitude: float64(contourPosition.Longitude)})
 			}
 			result.Isochrones = append(result.Isochrones, layer)
 		}
