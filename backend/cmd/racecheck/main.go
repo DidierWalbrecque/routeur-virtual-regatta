@@ -35,14 +35,16 @@ func (paths *filePaths) String() string {
 }
 
 type options struct {
-	files       filePaths
-	polarPath   string
-	position    navigation.Position
-	instant     time.Time
-	heading     navigation.Heading
-	minutes     float64
-	stepMinutes float64
-	owned       equipment.EquipmentSet
+	files          filePaths
+	polarPath      string
+	position       navigation.Position
+	instant        time.Time
+	heading        navigation.Heading
+	minutes        float64
+	stepMinutes    float64
+	owned          equipment.EquipmentSet
+	actualPosition *navigation.Position
+	actualSail     string
 }
 
 func main() {
@@ -156,6 +158,28 @@ func run(args []string, stdout, stderr io.Writer) error {
 		result.NextPosition.Latitude,
 		result.NextPosition.Longitude,
 	)
+	if options.actualPosition != nil {
+		actualPosition, err := navigation.FormatVirtualRegattaPosition(*options.actualPosition)
+		if err != nil {
+			return fmt.Errorf("racecheck: formatage de la position relevée impossible: %w", err)
+		}
+		positionError, err := navigation.DistanceBetween(result.NextPosition, *options.actualPosition)
+		if err != nil {
+			return fmt.Errorf("racecheck: calcul de l'écart de position impossible: %w", err)
+		}
+		actualDistance, err := navigation.DistanceBetween(options.position, *options.actualPosition)
+		if err != nil {
+			return fmt.Errorf("racecheck: calcul de la distance réelle impossible: %w", err)
+		}
+		fmt.Fprintln(stdout, "\nCalibration contre le relevé Virtual Regatta")
+		fmt.Fprintf(stdout, "Position relevée VR : %s\n", actualPosition)
+		fmt.Fprintf(stdout, "Écart simulation/réel : %.6f NM\n", positionError)
+		fmt.Fprintf(stdout, "Vitesse moyenne simulée : %.6f nd\n", float64(result.Distance)/options.minutes*60)
+		fmt.Fprintf(stdout, "Vitesse moyenne réelle : %.6f nd\n", float64(actualDistance)/options.minutes*60)
+		if options.actualSail != "" {
+			fmt.Fprintf(stdout, "Voile relevée : %s | prévue : %s | identique : %t\n", options.actualSail, lastStep.BestSail.SailName, strings.EqualFold(options.actualSail, lastStep.BestSail.SailName))
+		}
+	}
 
 	return nil
 }
@@ -215,6 +239,8 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		"",
 		"équipements possédés séparés par des virgules",
 	)
+	actualPositionText := flags.String("actual-position", "", "position relevée au format Virtual Regatta")
+	actualSail := flags.String("actual-sail", "", "voile réellement observée")
 
 	if err := flags.Parse(args); err != nil {
 		return options{}, fmt.Errorf(
@@ -293,6 +319,14 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 			err,
 		)
 	}
+	var actualPosition *navigation.Position
+	if strings.TrimSpace(*actualPositionText) != "" {
+		parsed, err := navigation.ParseVirtualRegattaPosition(*actualPositionText)
+		if err != nil {
+			return options{}, fmt.Errorf("racecheck: position relevée Virtual Regatta invalide: %w", err)
+		}
+		actualPosition = &parsed
+	}
 
 	result.polarPath = *polarPath
 	result.position = position
@@ -301,6 +335,8 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.minutes = *minutes
 	result.stepMinutes = *stepMinutes
 	result.owned = owned
+	result.actualPosition = actualPosition
+	result.actualSail = strings.TrimSpace(*actualSail)
 	return result, nil
 }
 

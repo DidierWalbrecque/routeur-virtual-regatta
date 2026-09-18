@@ -481,6 +481,24 @@ résultats ne doivent pas être considérés comme une reproduction officielle d
 jeu. La commande ne se connecte pas à Virtual Regatta et ne commande jamais le
 bateau.
 
+## Calibrer le routeur avec un relevé Virtual Regatta
+
+Ajouter `-actual-position` à `racecheck` après un relevé à 30 minutes, 1 heure
+ou 4 heures. Le rapport indique l'écart de position, les vitesses moyennes
+simulée et réelle, et compare la voile si `-actual-sail` est fourni.
+
+```bash
+go run ./cmd/racecheck \
+  -file ../data/weather/f000.grb2 -file ../data/weather/f003.grb2 \
+  -polar ../data/polars/ultim_bp_11.json \
+  -position '13°N 07'16" - 121°E 35'12"' \
+  -actual-position '13°N 10'00" - 121°E 37'30"' \
+  -at 2026-04-29T09:00:00Z -heading 90 -minutes 30 -actual-sail Jib
+```
+
+Conserver le même cap, les mêmes équipements et des GRIB couvrant toute la
+période pour que l'écart soit interprétable.
+
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.

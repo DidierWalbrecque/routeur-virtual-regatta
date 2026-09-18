@@ -58,6 +58,25 @@ func TestParseOptionsAcceptsVirtualRegattaPosition(t *testing.T) {
 	}
 }
 
+func TestParseOptionsAcceptsCalibrationObservation(t *testing.T) {
+	options, err := parseOptions([]string{
+		"-file", "f000.grb2",
+		"-polar", "boat.json",
+		"-position", "13°N 07'16\" - 121°E 35'12\"",
+		"-actual-position", "13°N 10'00\" - 121°E 37'30\"",
+		"-actual-sail", "Jib",
+		"-at", "2026-09-05T07:30:00Z",
+		"-heading", "90",
+		"-minutes", "30",
+	}, io.Discard)
+	if err != nil {
+		t.Fatalf("arguments refusés: %v", err)
+	}
+	if options.actualPosition == nil || options.actualSail != "Jib" {
+		t.Fatalf("relevé = %+v, voile = %q", options.actualPosition, options.actualSail)
+	}
+}
+
 func TestParseOptionsAcceptsDecimalPosition(t *testing.T) {
 	options, err := parseOptions([]string{
 		"-file", "f003.grb2",
