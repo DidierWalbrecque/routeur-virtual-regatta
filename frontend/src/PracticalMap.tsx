@@ -1,6 +1,4 @@
 import { useEffect, useRef } from "react";
-import * as maplibregl from "maplibre-gl";
-import "maplibre-gl/dist/maplibre-gl.css";
 
 type Point = { latitude: number; longitude: number };
 type Isochrone = { instant: string; positions: Point[]; contour: Point[] };
@@ -41,48 +39,57 @@ export function PracticalMap({ position, destination, isochrones, route, started
   const root = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (!root.current) return;
-    const map = new maplibregl.Map({
-      container: root.current,
-      style: {
-        version: 8,
-        sources: {
-          openstreetmap: {
-            type: "raster",
-            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
-            tileSize: 256,
-            attribution: "© OpenStreetMap contributors",
+    let disposed = false;
+    let map: import("maplibre-gl").Map | undefined;
+
+    async function initializeMap() {
+      const maplibregl = await import("maplibre-gl");
+      await import("maplibre-gl/dist/maplibre-gl.css");
+      if (!root.current || disposed) return;
+
+      const mapInstance = new maplibregl.Map({
+        container: root.current,
+        style: {
+          version: 8,
+          sources: {
+            openstreetmap: {
+              type: "raster",
+              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tileSize: 256,
+              attribution: "© OpenStreetMap contributors",
+            },
           },
+          layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
         },
-        layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
-      },
-      center: [position.longitude, position.latitude],
-      zoom: 4,
-    });
-    map.on("load", () => {
+        center: [position.longitude, position.latitude],
+        zoom: 4,
+      });
+      map = mapInstance;
+      mapInstance.on("load", () => {
       const bounds = [position, destination, ...route, ...isochrones.flatMap((isochrone) => isochrone.positions)].reduce(
         (value, point) => value.extend([point.longitude, point.latitude]),
         new maplibregl.LngLatBounds([position.longitude, position.latitude], [position.longitude, position.latitude]),
       );
       if (route.length > 1) {
-        map.addSource("best-route", {
+        mapInstance.addSource("best-route", {
           type: "geojson",
           data: {
             type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: route.map((point) => [point.longitude, point.latitude]) },
           },
         });
-        map.addLayer({
+        mapInstance.addLayer({
           id: "best-route",
           type: "line",
           source: "best-route", paint: { "line-color": "#f59f00", "line-width": 5, "line-opacity": 0.9 },
         });
-        route.forEach((point, index) => new maplibregl.Marker({ color: "#f59f00", scale: index === 0 ? 0.7 : 0.85 }).setLngLat([point.longitude, point.latitude]).setPopup(new maplibregl.Popup().setText(`Route optimale — étape ${index}`)).addTo(map));
+        route.forEach((point, index) => new maplibregl.Marker({ color: "#f59f00", scale: index === 0 ? 0.7 : 0.85 }).setLngLat([point.longitude, point.latitude]).setPopup(new maplibregl.Popup().setText(`Route optimale — étape ${index}`)).addTo(mapInstance));
       }
       const overlay = document.createElementNS("http://www.w3.org/2000/svg", "svg");
       overlay.setAttribute("aria-label", "Contours des isochrones");
       overlay.style.cssText = "position:absolute;inset:0;pointer-events:none;z-index:2";
-      map.getCanvasContainer().appendChild(overlay);
+      mapInstance.getCanvasContainer().appendChild(overlay);
       const drawIsochrones = () => {
-        const { clientWidth: width, clientHeight: height } = map.getContainer();
+        const { clientWidth: width, clientHeight: height } = mapInstance.getContainer();
         overlay.setAttribute("viewBox", `0 0 ${width} ${height}`);
         overlay.setAttribute("width", String(width));
         overlay.setAttribute("height", String(height));
@@ -92,9 +99,9 @@ export function PracticalMap({ position, destination, isochrones, route, started
           const minutes = startedAt ? Math.round((Date.parse(isochrone.instant) - Date.parse(startedAt)) / 60000) : NaN;
           const major = Number.isFinite(minutes) && minutes % 30 === 0;
           if (!isochrone.contour || isochrone.contour.length < 4) return;
-          const origin = map.project([position.longitude, position.latitude]);
-          const target = map.project([destination.longitude, destination.latitude]);
-          const points = forwardArc(isochrone.contour.map((point) => map.project([point.longitude, point.latitude])), { x: target.x - origin.x, y: target.y - origin.y });
+          const origin = mapInstance.project([position.longitude, position.latitude]);
+          const target = mapInstance.project([destination.longitude, destination.latitude]);
+          const points = forwardArc(isochrone.contour.map((point) => mapInstance.project([point.longitude, point.latitude])), { x: target.x - origin.x, y: target.y - origin.y });
           if (points.length < 2) return;
           const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
           path.setAttribute("d", roundedContour(points));
@@ -117,7 +124,7 @@ export function PracticalMap({ position, destination, isochrones, route, started
           }
         });
         if (route.length > 1) {
-          const routePoints = route.map((point) => map.project([point.longitude, point.latitude]));
+          const routePoints = route.map((point) => mapInstance.project([point.longitude, point.latitude]));
           const routeLine = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
           routeLine.setAttribute("points", routePoints.map((point) => `${point.x},${point.y}`).join(" "));
           routeLine.setAttribute("fill", "none");
@@ -128,14 +135,20 @@ export function PracticalMap({ position, destination, isochrones, route, started
           overlay.appendChild(routeLine);
         }
       };
-      map.on("move", drawIsochrones);
-      map.on("resize", drawIsochrones);
+      mapInstance.on("move", drawIsochrones);
+      mapInstance.on("resize", drawIsochrones);
       drawIsochrones();
-      new maplibregl.Marker({ color: "#1971c2" }).setLngLat([position.longitude, position.latitude]).setPopup(new maplibregl.Popup().setText("Départ")).addTo(map);
-      new maplibregl.Marker({ color: "#6741d9" }).setLngLat([destination.longitude, destination.latitude]).setPopup(new maplibregl.Popup().setText("Destination")).addTo(map);
-      map.fitBounds(bounds, { padding: 50, maxZoom: 10 });
-    });
-    return () => map.remove();
+      new maplibregl.Marker({ color: "#1971c2" }).setLngLat([position.longitude, position.latitude]).setPopup(new maplibregl.Popup().setText("Départ")).addTo(mapInstance);
+      new maplibregl.Marker({ color: "#6741d9" }).setLngLat([destination.longitude, destination.latitude]).setPopup(new maplibregl.Popup().setText("Destination")).addTo(mapInstance);
+      mapInstance.fitBounds(bounds, { padding: 50, maxZoom: 10 });
+      });
+    }
+
+    void initializeMap();
+    return () => {
+      disposed = true;
+      map?.remove();
+    };
   }, [position, destination, isochrones, route, startedAt]);
   return <section className="map-section"><h2>Carte des caps pratiques</h2><p>{isochrones.length} front{isochrones.length > 1 ? "s" : ""} d’isochrone calculé{isochrones.length > 1 ? "s" : ""}</p><div className="map" ref={root} /></section>;
 }
