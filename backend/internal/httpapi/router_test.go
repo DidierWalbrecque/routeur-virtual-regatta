@@ -73,3 +73,14 @@ func TestHealthRejectsPost(t *testing.T) {
 		)
 	}
 }
+
+func TestWeatherRefreshRejectsInvalidJSON(t *testing.T) {
+	request := httptest.NewRequest(http.MethodPost, "/api/weather/refresh", bytes.NewBufferString("{"))
+	response := httptest.NewRecorder()
+
+	NewHandler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("statut = %d, attendu %d", response.Code, http.StatusBadRequest)
+	}
+}

@@ -162,6 +162,28 @@ func (constraint *GeoJSONConstraint) PolygonCount() int {
 	return len(constraint.polygons)
 }
 
+// Contains reports whether a position is on a terrestrial polygon or its
+// boundary. It is used to reject invalid route endpoints before calculation.
+func (constraint *GeoJSONConstraint) Contains(position navigation.Position) (bool, error) {
+	if constraint == nil {
+		return false, errors.New("land: contrainte GeoJSON requise")
+	}
+	if err := position.Validate(); err != nil {
+		return false, fmt.Errorf("land: position invalide: %w", err)
+	}
+	value := point{longitude: float64(position.Longitude), latitude: float64(position.Latitude)}
+	for _, polygon := range constraint.polygons {
+		rings := make([][]point, len(polygon.rings))
+		for index, ring := range polygon.rings {
+			rings[index] = unwrapRing(ring, value.longitude)
+		}
+		if pointInPolygon(value, rings) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func decodeGeometry(value geometry) ([]polygon, error) {
 	switch value.Type {
 	case "Polygon":
