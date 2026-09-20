@@ -77,6 +77,28 @@ Les données suivantes devront être chargées une seule fois et réutilisées :
 Le cache devra être invalidé lorsqu'un fichier est remplacé ou lorsqu'un
 nouveau run météo est téléchargé.
 
+La mise en cache doit accélérer les calculs répétés, en particulier lors des
+tests de plusieurs caps ou de plusieurs stratégies sur une même zone météo.
+Elle réduira le temps de chargement des données, mais ne supprimera pas le
+coût principal de la simulation des caps et des isochrones.
+
+Priorité recommandée :
+
+1. mettre en cache les grilles GRIB décodées ;
+2. mettre en cache la carte terrestre Natural Earth ;
+3. mettre en cache la polaire ;
+4. optimiser ensuite la simulation elle-même.
+
+Le cache devra être invalidé lorsque :
+
+- un fichier GRIB est remplacé ;
+- une nouvelle exécution météo est téléchargée ;
+- la polaire est modifiée ;
+- la carte terrestre est modifiée.
+
+Les tests devront mesurer séparément le temps de chargement des données et le
+temps de calcul de la route, avant et après activation du cache.
+
 ### Optimiser les contraintes terrestres
 
 Pour réduire le coût des vérifications :
@@ -124,7 +146,7 @@ Le mode précis reste le mode par défaut pour préserver le comportement
 existant. Le mode rapide est recommandé pour une destination courte ou pour
 comparer rapidement plusieurs stratégies.
 
-L'API accepte le champ JSON suivant :
+L'API accepte les champs JSON suivants :
 
 ```json
 {"mode":"quick"}
