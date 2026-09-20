@@ -78,7 +78,6 @@ function App() {
   const [fixedSailID, setFixedSailID] = useState("0");
   const [maxLoss, setMaxLoss] = useState("0");
   const [robustOnly, setRobustOnly] = useState(false);
-  const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [route, setRoute] = useState<Result | null>(null);
   const [error, setError] = useState("");
   const [weatherStatus, setWeatherStatus] = useState("");
@@ -98,7 +97,7 @@ function App() {
     } catch (reason) { setWeatherStatus(""); setError(reason instanceof Error ? reason.message : "Erreur réseau"); }
   }
   async function submit(event: FormEvent) {
-    event.preventDefault(); setLoading(true); setError(""); setCandidates([]); setRoute(null);
+    event.preventDefault(); setLoading(true); setError(""); setRoute(null);
     let instantISO: string;
     try {
       validateCalculationInputs(weatherFiles, polarPath, duration, step, headings);
@@ -116,7 +115,7 @@ function App() {
       const response = await fetch("/api/practical-headings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Calcul refusé");
-      setCandidates(body.candidates); setRoute(body);
+      setRoute(body);
     } catch (reason) { setError(reason instanceof Error ? reason.message : "Erreur réseau"); }
     finally { setLoading(false); }
   }
@@ -130,7 +129,6 @@ function App() {
       <button disabled={loading}>{loading ? "Calcul en cours…" : "Calculer les caps"}</button>{error && <p className="error">{error}</p>}
     </form>
     {mapPosition && mapDestination ? <Suspense fallback={<section className="map-section"><h2>Carte des caps pratiques</h2><p>Chargement de la carte…</p></section>}><PracticalMap position={mapPosition} destination={mapDestination} isochrones={route?.isochrones ?? []} route={route?.route.map((point) => point.position) ?? []} startedAt={route?.route[0]?.instant} /></Suspense> : <p className="map-hint">Renseignez le départ et la destination au format Virtual Regatta pour afficher la carte.</p>}
-    {candidates.length > 0 && <section className="results"><h2>Résultats classés</h2><div className="table-wrap"><table><thead><tr><th>Cap</th><th>Progression</th><th>Voile</th><th>Vitesse</th><th>Stabilité</th><th>Pire scénario</th><th>Robuste</th></tr></thead><tbody>{candidates.map((candidate) => <tr key={candidate.heading}><td>{candidate.heading.toFixed(0)}°</td><td>{candidate.progressNM.toFixed(2)} NM</td><td>{candidate.sail}</td><td>{candidate.speedKnots.toFixed(2)} nd</td><td>{(candidate.stabilityScore * 100).toFixed(0)} %</td><td>{candidate.worstCaseProgressNM.toFixed(2)} NM <small>(−{candidate.scenarioProgressLossNM.toFixed(2)})</small></td><td>{candidate.robust ? "Oui" : "Non"}</td></tr>)}</tbody></table></div></section>}
     {route && route.route.length > 0 && <section className="results"><h2>Points de la route optimale</h2><div className="table-wrap"><table><thead><tr><th>Étape</th><th>Coordonnées Virtual Regatta</th><th>Cap</th><th>Voile</th></tr></thead><tbody>{route.route.map((point, index) => <tr key={`${point.position.latitude}-${point.position.longitude}`}><td>{index === 0 ? "Départ" : `Point ${index}`}</td><td>{formatVirtualRegattaPosition(point.position)}</td><td>{index === 0 ? "—" : `${point.heading.toFixed(0)}°`}</td><td>{index === 0 ? "—" : point.sail}</td></tr>)}</tbody></table></div></section>}
   </main>;
 }
