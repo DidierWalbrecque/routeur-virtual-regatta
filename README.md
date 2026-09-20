@@ -73,6 +73,13 @@ Ouvrir ensuite l'adresse affichée par Vite, habituellement
 GRIB et de la polaire à l'API exécutée sur la même machine, puis affiche les
 caps pratiques classés. Elle ne se connecte pas à Virtual Regatta.
 
+Les chemins météo ne sont volontairement pas préremplis : ils dépendent du run
+GFS téléchargé pour le test. Saisir un fichier GRIB2 par ligne et utiliser le
+chemin de la polaire, par exemple `../data/polars/ultim_bp_11.json` lorsque
+l'API est lancée depuis `backend`. L'interface refuse les fichiers manquants,
+les durées ou pas invalides et les caps hors de l'intervalle 0-359 degrés avant
+d'envoyer la demande à l'API.
+
 ## Démarrer avec Docker Compose
 
 Les commandes suivantes doivent être exécutées depuis la racine du projet.
