@@ -94,3 +94,21 @@ Pour réduire le coût des vérifications :
 - vérifier que l'optimisation ne produit aucun segment terrestre ;
 - mesurer l'écart de progression entre le mode rapide et le mode précis ;
 - conserver un temps de référence sur le scénario de course réel.
+
+Les benchmarks Go de référence peuvent être lancés depuis `backend`.
+
+Bash :
+
+```bash
+go test ./internal/routing -run '^$' -bench 'BenchmarkBuildIsochroneSearch' -benchmem -count=3
+```
+
+PowerShell :
+
+```powershell
+go test ./internal/routing -run '^$' -bench 'BenchmarkBuildIsochroneSearch' -benchmem -count=3
+```
+
+Le résultat à conserver avant toute optimisation est le temps moyen des deux
+benchmarks et leur consommation mémoire. Une optimisation sera retenue si elle
+réduit le temps sans autoriser de segment interdit.
