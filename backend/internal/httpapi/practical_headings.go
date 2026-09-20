@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"encoding/json"
+	"fmt"
 	"math"
 	"net/http"
 	"strings"
@@ -30,6 +31,7 @@ type practicalHeadingsRequest struct {
 	WeatherVariations         []routing.PracticalWeatherVariation `json:"weatherVariations"`
 	MaxScenarioProgressLossNM float64                             `json:"maxScenarioProgressLossNM"`
 	RequireRobustScenarios    bool                                `json:"requireRobustScenarios"`
+	Mode                      string                              `json:"mode"`
 }
 
 type positionRequest struct {
@@ -47,6 +49,25 @@ type practicalHeadingsResponse struct {
 }
 
 const landGeoJSONPath = "../data/land/natural-earth-10m-land.geojson"
+
+type calculationProfile struct {
+	IsochroneStep     time.Duration
+	HeadingSpacing    float64
+	CellSize          navigation.NauticalMiles
+	MaxCandidates     int
+	IncludeIsochrones bool
+}
+
+func calculationProfileFor(mode string) (calculationProfile, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", "precise":
+		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 15, CellSize: 0.5, MaxCandidates: 100, IncludeIsochrones: true}, nil
+	case "quick":
+		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 50, IncludeIsochrones: true}, nil
+	default:
+		return calculationProfile{}, fmt.Errorf("mode de calcul %q invalide: quick ou precise attendu", mode)
+	}
+}
 
 type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
@@ -86,6 +107,11 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 	instant, err := time.Parse(time.RFC3339, payload.Instant)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "instant RFC3339 invalide: "+err.Error())
+		return
+	}
+	profile, err := calculationProfileFor(payload.Mode)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, err.Error())
 		return
 	}
 	if len(payload.WeatherFiles) == 0 || strings.TrimSpace(payload.PolarPath) == "" {
@@ -171,12 +197,16 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			NextInstant:  candidate.Simulation.NextInstant, Sail: lastStep.BestSail.SailName, SpeedKnots: float64(lastStep.BestSail.Speed),
 		})
 	}
-	isochroneStep := 10 * time.Minute
+	if !profile.IncludeIsochrones {
+		writeJSON(response, http.StatusOK, result)
+		return
+	}
+	isochroneStep := profile.IsochroneStep
 	layerCount := int(math.Ceil(time.Duration(payload.DurationMinutes*float64(time.Minute)).Minutes() / isochroneStep.Minutes()))
 	if layerCount > 0 {
 		search, err := routing.BuildIsochroneSearch(request.Context(), weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
-			Owned: owned, HeadingSpacing: 15, CellSize: navigation.NauticalMiles(0.5), MaxCandidates: 100,
+			Owned: owned, HeadingSpacing: profile.HeadingSpacing, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
 			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: simulation.StaminaState{Level: 100},
 			Constraints: []routing.Constraint{landConstraint},
 		})

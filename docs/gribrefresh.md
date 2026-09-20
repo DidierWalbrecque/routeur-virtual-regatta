@@ -8,13 +8,13 @@ récent n'est pas encore publié par NOAA.
 Depuis le dossier `backend`, PowerShell :
 
 ```powershell
-go run ./cmd/gribrefresh -hours 0,3,6,9,12 -output ../data/weather
+go run ./cmd/gribrefresh -hours 0,3,6,9,12,15,18,21,24 -output ../data/weather
 ```
 
 Depuis le dossier `backend`, Bash :
 
 ```bash
-go run ./cmd/gribrefresh -hours 0,3,6,9,12 -output ../data/weather
+go run ./cmd/gribrefresh -hours 0,3,6,9,12,15,18,21,24 -output ../data/weather
 ```
 
 La recherche couvre les 48 dernières heures par défaut. Cette période peut

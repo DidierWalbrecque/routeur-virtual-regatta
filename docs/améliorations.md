@@ -112,3 +112,22 @@ go test ./internal/routing -run '^$' -bench 'BenchmarkBuildIsochroneSearch' -ben
 Le résultat à conserver avant toute optimisation est le temps moyen des deux
 benchmarks et leur consommation mémoire. Une optimisation sera retenue si elle
 réduit le temps sans autoriser de segment interdit.
+
+## Modes de calcul
+
+Le mode `precise` conserve le calcul complet avec isochrones, caps espacés de
+15 degrés et jusqu'à 100 candidats. Le mode `quick` conserve une route
+affichable avec des isochrones simplifiés, des caps espacés de 30 degrés et
+jusqu'à 50 candidats.
+
+Le mode précis reste le mode par défaut pour préserver le comportement
+existant. Le mode rapide est recommandé pour une destination courte ou pour
+comparer rapidement plusieurs stratégies.
+
+L'API accepte le champ JSON suivant :
+
+```json
+{"mode":"quick"}
+```
+
+Les valeurs permises sont `quick` et `precise`.

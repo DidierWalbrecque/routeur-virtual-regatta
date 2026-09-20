@@ -74,6 +74,7 @@ function App() {
   const [owned, setOwned] = useState<string[]>([]);
   const [duration, setDuration] = useState("240");
   const [step, setStep] = useState("10");
+  const [mode, setMode] = useState<"quick" | "precise">("precise");
   const [fixedSailID, setFixedSailID] = useState("0");
   const [maxLoss, setMaxLoss] = useState("0");
   const [robustOnly, setRobustOnly] = useState(false);
@@ -89,7 +90,7 @@ function App() {
   async function refreshWeather() {
     setWeatherStatus("Actualisation météo en cours…"); setError("");
     try {
-      const response = await fetch("/api/weather/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ forecastHours: [0, 3, 6, 9, 12], lookbackHours: 48 }) });
+      const response = await fetch("/api/weather/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ forecastHours: [0, 3, 6, 9, 12, 15, 18, 21, 24], lookbackHours: 48 }) });
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Actualisation météo refusée");
       setWeatherFiles(body.files.join("\n"));
@@ -108,7 +109,7 @@ function App() {
       weatherFiles: weatherFiles.split(/\r?\n/).map((value) => value.trim()).filter(Boolean), polarPath,
       position: { virtualRegatta: start }, destination: { virtualRegatta: destination },
       instant: instantISO, durationMinutes: Number(duration), stepMinutes: Number(step),
-      headings: headings.split(",").map((value) => Number(value.trim())).filter(Number.isFinite), owned,
+      headings: headings.split(",").map((value) => Number(value.trim())).filter(Number.isFinite), owned, mode,
       fixedSailID: Number(fixedSailID), maxScenarioProgressLossNM: Number(maxLoss), requireRobustScenarios: robustOnly,
     };
     try {
@@ -123,6 +124,7 @@ function App() {
     <header><p className="eyebrow">Routeur Virtual Regatta</p><h1>Caps pratiques</h1><p>Comparez les caps fixes sur quatre heures, avec la météo et les équipements réellement disponibles.</p></header>
     <form onSubmit={submit}>
       <button type="button" onClick={refreshWeather}>Actualiser les GRIB</button>{weatherStatus && <p>{weatherStatus}</p>}
+      <label>Mode de calcul <select value={mode} onChange={(event) => setMode(event.target.value as "quick" | "precise")}><option value="quick">Rapide — isochrones simplifiés</option><option value="precise">Précis — isochrones détaillés</option></select></label><p>{mode === "quick" ? "Le mode rapide génère une route simplifiée avec moins de caps." : "Le mode précis génère la route par isochrones détaillés."}</p>
       <section><h2>Données de calcul</h2><label>Fichiers GRIB <textarea required value={weatherFiles} onChange={(event) => setWeatherFiles(event.target.value)} placeholder="C:\\...\\data\\weather\\gfs.YYYYMMDDHH.f000.grb2\nUn chemin par ligne" /></label><label>Polaire <input required value={polarPath} onChange={(event) => setPolarPath(event.target.value)} placeholder="../data/polars/ultim_bp_11.json" /></label><label>Position actuelle Virtual Regatta <input required value={start} onChange={(event) => setStart(event.target.value)} placeholder={'13°N 07\'16" - 121°E 35\'12"'} /></label><label>Destination Virtual Regatta <input required value={destination} onChange={(event) => setDestination(event.target.value)} placeholder={'16°N 20\'00" - 61°W 30\'00"'} /></label><label>Départ (heure locale, JJ/MM/AAAA HH:MM) <input required value={instant} onChange={(event) => setInstant(event.target.value)} placeholder="29/04/2026 11:00" /></label></section>
       <section><h2>Stratégie pratique</h2><div className="grid"><label>Durée (min) <input type="number" min="1" value={duration} onChange={(event) => setDuration(event.target.value)} /></label><label>Pas (min) <input type="number" min="1" value={step} onChange={(event) => setStep(event.target.value)} /></label><label>Voile fixe (0 = auto) <input type="number" min="0" value={fixedSailID} onChange={(event) => setFixedSailID(event.target.value)} /></label><label>Perte max. (NM) <input type="number" min="0" step="any" value={maxLoss} onChange={(event) => setMaxLoss(event.target.value)} /></label></div><label>Caps (degrés, séparés par des virgules) <input required value={headings} onChange={(event) => setHeadings(event.target.value)} /></label><div className="checks">{equipment.map((item) => <label key={item}><input type="checkbox" checked={owned.includes(item)} onChange={() => toggleEquipment(item)} /> {item}</label>)}</div><label className="checks"><input type="checkbox" checked={robustOnly} onChange={(event) => setRobustOnly(event.target.checked)} /> Ne conserver que les caps robustes</label></section>
       <button disabled={loading}>{loading ? "Calcul en cours…" : "Calculer les caps"}</button>{error && <p className="error">{error}</p>}

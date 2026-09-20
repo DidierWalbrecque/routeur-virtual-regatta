@@ -80,7 +80,7 @@ func parseOptions(args []string) (options, error) {
 	flags.SetOutput(io.Discard)
 	date := flags.String("date", "", "date du run GFS au format YYYYMMDD; avec -cycle pour forcer un run")
 	cycle := flags.String("cycle", "", "cycle GFS 00, 06, 12 ou 18; avec -date pour forcer un run")
-	hours := flags.String("hours", "0,3,6,9,12", "échéances séparées par des virgules")
+	hours := flags.String("hours", "0,3,6,9,12,15,18,21,24", "échéances séparées par des virgules")
 	output := flags.String("output", "../data/weather", "dossier de destination")
 	lookback := flags.Int("lookback-hours", 48, "durée de recherche vers le passé")
 	if err := flags.Parse(args); err != nil {

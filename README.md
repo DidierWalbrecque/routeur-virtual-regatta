@@ -81,10 +81,11 @@ peut être déclenchée directement avec `curl` :
 ```bash
 curl -X POST http://localhost:8080/api/weather/refresh \
   -H "Content-Type: application/json" \
-  -d '{"forecastHours":[0,3,6,9,12],"lookbackHours":48}'
+  -d '{"forecastHours":[0,3,6,9,12,15,18,21,24],"lookbackHours":48}'
 ```
 
-La requête demande les échéances `f000`, `f003`, `f006`, `f009` et `f012`.
+La requête demande les échéances `f000` à `f024` par pas de trois heures,
+afin de couvrir un calcul pratique de quatre heures.
 `lookbackHours` indique à l'API de rechercher un run GFS disponible dans les
 48 dernières heures. L'API essaie les cycles récents et revient au run
 précédent si le dernier n'est pas encore publié par NOAA.
@@ -93,7 +94,7 @@ PowerShell équivalent :
 
 ```powershell
 $body = @{
-    forecastHours = @(0, 3, 6, 9, 12)
+    forecastHours = @(0, 3, 6, 9, 12, 15, 18, 21, 24)
     lookbackHours = 48
 } | ConvertTo-Json
 

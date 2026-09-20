@@ -29,8 +29,8 @@ func TestParseOptionsDefaults(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(intStrings(options.forecastHours), ","); got != "0,3,6,9,12" {
-		t.Fatalf("échéances = %q, attendu 0,3,6,9,12", got)
+	if got := strings.Join(intStrings(options.forecastHours), ","); got != "0,3,6,9,12,15,18,21,24" {
+		t.Fatalf("échéances = %q, attendu 0,3,6,9,12,15,18,21,24", got)
 	}
 	if options.lookbackHours != 48 || options.outputDirectory != "../data/weather" {
 		t.Fatalf("options par défaut inattendues: %+v", options)
