@@ -84,3 +84,23 @@ func TestWeatherRefreshRejectsInvalidJSON(t *testing.T) {
 		t.Fatalf("statut = %d, attendu %d", response.Code, http.StatusBadRequest)
 	}
 }
+
+func TestCalculationProfiles(t *testing.T) {
+	quick, err := calculationProfileFor("quick")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !quick.IncludeIsochrones || quick.HeadingSpacing != 30 || quick.MaxCandidates != 50 {
+		t.Fatalf("profil rapide inattendu: %+v", quick)
+	}
+	precise, err := calculationProfileFor("precise")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !precise.IncludeIsochrones || precise.HeadingSpacing != 15 || precise.MaxCandidates != 100 {
+		t.Fatalf("profil précis inattendu: %+v", precise)
+	}
+	if _, err := calculationProfileFor("unknown"); err == nil {
+		t.Fatal("un profil inconnu devait être refusé")
+	}
+}

@@ -28,7 +28,7 @@ func weatherRefreshHandler(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	if len(payload.ForecastHours) == 0 {
-		payload.ForecastHours = []int{0, 3, 6, 9, 12}
+		payload.ForecastHours = []int{0, 3, 6, 9, 12, 15, 18, 21, 24}
 	}
 	if payload.LookbackHours == 0 {
 		payload.LookbackHours = 48
