@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/land"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
@@ -44,6 +45,8 @@ type practicalHeadingsResponse struct {
 	Isochrones  []isochroneFrontierResponse  `json:"isochrones"`
 	Route       []routePointResponse         `json:"route"`
 }
+
+const landGeoJSONPath = "../data/land/natural-earth-10m-land.geojson"
 
 type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
@@ -118,6 +121,27 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		writeJSONError(response, http.StatusBadRequest, "destination invalide: "+err.Error())
 		return
 	}
+	landConstraint, err := land.LoadGeoJSONFile(landGeoJSONPath)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "données terrestres indisponibles: "+err.Error())
+		return
+	}
+	landConstraint, err = landConstraint.WithCoastalMargin(navigation.NauticalMiles(2))
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "marge côtière impossible: "+err.Error())
+		return
+	}
+	for label, point := range map[string]navigation.Position{"départ": position, "destination": destination} {
+		onLand, err := landConstraint.Contains(point)
+		if err != nil {
+			writeJSONError(response, http.StatusBadRequest, "vérification terrestre impossible pour le "+label+": "+err.Error())
+			return
+		}
+		if onLand {
+			writeJSONError(response, http.StatusBadRequest, "le point de "+label+" se trouve sur une terre ou la côte")
+			return
+		}
+	}
 	candidates, err := routing.EvaluatePracticalHeadingCandidates(
 		request.Context(), weatherProvider, boatPolar, routing.PracticalHeadingInput{
 			Position:    position,
@@ -154,6 +178,7 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
 			Owned: owned, HeadingSpacing: 15, CellSize: navigation.NauticalMiles(0.5), MaxCandidates: 100,
 			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: simulation.StaminaState{Level: 100},
+			Constraints: []routing.Constraint{landConstraint},
 		})
 		if err != nil {
 			writeJSONError(response, http.StatusBadRequest, "calcul des isochrones impossible: "+err.Error())

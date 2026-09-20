@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
 )
 
@@ -170,5 +171,31 @@ func TestDecodeGeoJSONRejectsTrailingContent(t *testing.T) {
 	_, err := DecodeGeoJSON(strings.NewReader(document))
 	if err == nil || !strings.Contains(err.Error(), "inattendu") {
 		t.Fatalf("erreur = %v, contenu final invalide attendu", err)
+	}
+}
+
+func TestGeoJSONConstraintContainsRejectsLandAndBoundary(t *testing.T) {
+	constraint, err := DecodeGeoJSON(strings.NewReader(`{"type":"FeatureCollection","features":[{"type":"Feature","geometry":{"type":"Polygon","coordinates":[[[10,10],[11,10],[11,11],[10,11],[10,10]]]}}]}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		name  string
+		point navigation.Position
+		want  bool
+	}{
+		{name: "inside", point: navigation.Position{Latitude: 10.5, Longitude: 10.5}, want: true},
+		{name: "boundary", point: navigation.Position{Latitude: 10, Longitude: 10.5}, want: true},
+		{name: "water", point: navigation.Position{Latitude: 9.5, Longitude: 10.5}, want: false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			got, err := constraint.Contains(test.point)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got != test.want {
+				t.Fatalf("Contains() = %v, attendu %v", got, test.want)
+			}
+		})
 	}
 }

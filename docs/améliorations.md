@@ -1,0 +1,96 @@
+# Améliorations prévues
+
+## Accélérer le calcul des routes
+
+Le calcul actuel peut devenir long car l'API évalue les caps pratiques sur
+quatre heures, génère une recherche par isochrones indépendante et applique
+les contraintes terrestres à de nombreux segments.
+
+### Réglages immédiats
+
+Pour une destination courte, par exemple environ 10 NM :
+
+```text
+Durée : 60 minutes
+Pas : 10 minutes
+Caps espacés de 30 degrés
+Mode : caps pratiques uniquement
+```
+
+Exemple de caps :
+
+```text
+0,30,60,90,120,150,180,210,240,270,300,330
+```
+
+Pour une course longue, conserver un réglage plus précis :
+
+```text
+Durée : 240 minutes
+Pas : 10 minutes
+Caps espacés de 15 degrés
+```
+
+### Mode rapide et mode précis
+
+Ajouter deux profils de calcul :
+
+- **Rapide** : caps tous les 30 degrés, pas de 15 minutes, maximum 50
+  candidats et horizon adapté à la distance ;
+- **Précis** : caps tous les 15 degrés, pas de 10 minutes et maximum 100 à
+  500 candidats selon la puissance disponible.
+
+### Calcul adaptatif
+
+Le routeur devra pouvoir :
+
+- adapter l'horizon à la distance de la destination ;
+- arrêter le calcul dès que la destination est atteinte ;
+- commencer avec une grille de caps espacée ;
+- affiner uniquement autour des meilleurs caps, par exemple 75, 90 et 105
+  degrés après un premier passage à 30 degrés.
+
+Cette approche doit réduire le temps de calcul sans supprimer les alternatives
+pertinentes.
+
+### Éviter les calculs en double
+
+L'API calcule actuellement les caps pratiques puis une recherche par
+isochrones indépendante. Ajouter un choix entre :
+
+- caps pratiques uniquement ;
+- route par isochrones uniquement ;
+- les deux calculs.
+
+Le mode « caps pratiques uniquement » doit être privilégié pour les tests
+rapides et les destinations courtes.
+
+### Mettre les données en cache
+
+Les données suivantes devront être chargées une seule fois et réutilisées :
+
+- la carte terrestre Natural Earth ;
+- les grilles GRIB décodées ;
+- les polaires ;
+- les configurations de course.
+
+Le cache devra être invalidé lorsqu'un fichier est remplacé ou lorsqu'un
+nouveau run météo est téléchargé.
+
+### Optimiser les contraintes terrestres
+
+Pour réduire le coût des vérifications :
+
+- utiliser une grille spatiale adaptée à la zone de course ;
+- simplifier les polygones pour le filtrage préliminaire ;
+- appliquer la géométrie détaillée uniquement aux routes conservées ;
+- conserver une marge côtière de sécurité dans la validation finale.
+
+### Tests de performance à ajouter
+
+- mesurer le temps avec des caps espacés de 30, 15 et 5 degrés ;
+- comparer les horizons de 60 et 240 minutes ;
+- comparer avec et sans cache des GRIB et des terres ;
+- vérifier que l'optimisation ne produit aucun segment terrestre ;
+- mesurer l'écart de progression entre le mode rapide et le mode précis ;
+- conserver un temps de référence sur le scénario de course réel.

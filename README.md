@@ -73,6 +73,53 @@ Ouvrir ensuite l'adresse affichée par Vite, habituellement
 GRIB et de la polaire à l'API exécutée sur la même machine, puis affiche les
 caps pratiques classés. Elle ne se connecte pas à Virtual Regatta.
 
+### Actualiser les GRIB depuis l'API
+
+Lorsque l'API est lancée sur `http://localhost:8080`, la même actualisation
+peut être déclenchée directement avec `curl` :
+
+```bash
+curl -X POST http://localhost:8080/api/weather/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"forecastHours":[0,3,6,9,12],"lookbackHours":48}'
+```
+
+La requête demande les échéances `f000`, `f003`, `f006`, `f009` et `f012`.
+`lookbackHours` indique à l'API de rechercher un run GFS disponible dans les
+48 dernières heures. L'API essaie les cycles récents et revient au run
+précédent si le dernier n'est pas encore publié par NOAA.
+
+PowerShell équivalent :
+
+```powershell
+$body = @{
+    forecastHours = @(0, 3, 6, 9, 12)
+    lookbackHours = 48
+} | ConvertTo-Json
+
+Invoke-RestMethod `
+  -Uri http://localhost:8080/api/weather/refresh `
+  -Method Post `
+  -ContentType "application/json" `
+  -Body $body
+```
+
+Exemple de réponse :
+
+```json
+{"run":"2026092012","files":["..\\data\\weather\\gfs.2026092012.f000.grb2","..\\data\\weather\\gfs.2026092012.f003.grb2","..\\data\\weather\\gfs.2026092012.f006.grb2","..\\data\\weather\\gfs.2026092012.f009.grb2","..\\data\\weather\\gfs.2026092012.f012.grb2"],"refreshed":"2026-09-20T19:44:17Z"}
+```
+
+Dans cette réponse :
+
+- `run` est le run GFS retenu, ici le 20 septembre 2026 à 12 UTC ;
+- `files` contient les chemins des fichiers GRIB validés et installés dans
+  `data/weather` ;
+- `refreshed` est l'heure UTC à laquelle l'actualisation a été terminée.
+
+Les fichiers retournés peuvent ensuite être transmis à `racecheck`,
+`routecheck` ou à l'interface web.
+
 Les chemins météo ne sont volontairement pas préremplis : ils dépendent du run
 GFS téléchargé pour le test. Saisir un fichier GRIB2 par ligne et utiliser le
 chemin de la polaire, par exemple `../data/polars/ultim_bp_11.json` lorsque
