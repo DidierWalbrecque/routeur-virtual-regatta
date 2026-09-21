@@ -323,36 +323,33 @@ func BuildIsochroneSearch(
 			len(parentStates)*len(headings),
 		)
 
-		for parentIndex, parentState := range parentStates {
-			if err := ctx.Err(); err != nil {
+		parentCandidates, err := evaluateParentHeadingCandidates(
+			ctx,
+			weatherProvider,
+			boatPolar,
+			parentStates,
+			currentInstant,
+			input.StepDuration,
+			input.Owned,
+			headings,
+		)
+		if err != nil {
+			if contextErr := ctx.Err(); contextErr != nil {
 				return search, fmt.Errorf(
-					"routing: construction interrompue à la couche %d avant le parent %d: %w",
+					"routing: construction interrompue à la couche %d: %w",
 					layerIndex+1,
-					parentIndex+1,
-					err,
+					contextErr,
 				)
 			}
-
-			candidates, err := EvaluateHeadingCandidates(
-				ctx,
-				weatherProvider,
-				boatPolar,
-				HeadingCandidatesInput{
-					Position: parentState.Position,
-					Instant:  currentInstant,
-					Duration: input.StepDuration,
-					Owned:    input.Owned,
-					Headings: headings,
-				},
+			return search, fmt.Errorf(
+				"routing: construction de la couche %d impossible: développement d'un parent impossible: %w",
+				layerIndex+1,
+				err,
 			)
-			if err != nil {
-				return search, fmt.Errorf(
-					"routing: construction de la couche %d impossible: développement du parent %d impossible: %w",
-					layerIndex+1,
-					parentIndex+1,
-					err,
-				)
-			}
+		}
+
+		for parentIndex, parentState := range parentStates {
+			candidates := parentCandidates[parentIndex]
 
 			lineageParent := parentIndex
 			if layerIndex == 0 {
