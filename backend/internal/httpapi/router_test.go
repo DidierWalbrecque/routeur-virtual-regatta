@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 )
 
 func TestHealthReturnsOK(t *testing.T) {
@@ -102,5 +104,27 @@ func TestCalculationProfiles(t *testing.T) {
 	}
 	if _, err := calculationProfileFor("unknown"); err == nil {
 		t.Fatal("un profil inconnu devait être refusé")
+	}
+}
+
+func TestRouteStepPassesDestination(t *testing.T) {
+	from := navigation.Position{Latitude: 0, Longitude: 0}
+	destination := navigation.Position{Latitude: 0, Longitude: 0.01}
+	beyond := navigation.Position{Latitude: 0, Longitude: 0.02}
+	before := navigation.Position{Latitude: 0, Longitude: 0.005}
+
+	passes, err := routeStepPassesDestination(from, beyond, destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !passes {
+		t.Fatal("un point dépassant la destination devait être détecté")
+	}
+	passes, err = routeStepPassesDestination(from, before, destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if passes {
+		t.Fatal("un point avant la destination ne devait pas être détecté")
 	}
 }

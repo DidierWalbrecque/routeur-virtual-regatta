@@ -50,6 +50,11 @@ Le routeur devra pouvoir :
 - affiner uniquement autour des meilleurs caps, par exemple 75, 90 et 105
   degrés après un premier passage à 30 degrés.
 
+Lorsqu'un isochrone atteint le rayon d'arrivée, la recherche interne peut
+s'arrêter pour éviter les calculs inutiles. La réponse ajoute toutefois un
+point terminal exactement sur la destination, après validation de la dernière
+approche par la contrainte terrestre.
+
 Cette approche doit réduire le temps de calcul sans supprimer les alternatives
 pertinentes.
 
