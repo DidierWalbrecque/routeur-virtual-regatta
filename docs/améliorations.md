@@ -50,6 +50,21 @@ Le routeur devra pouvoir :
 - affiner uniquement autour des meilleurs caps, par exemple 75, 90 et 105
   degrés après un premier passage à 30 degrés.
 
+La première étape adapte l'horizon des isochrones à la distance de la
+destination et à la vitesse maximale de la polaire, avec une marge de sécurité
+de 60 minutes. La durée demandée reste une limite supérieure. Les longues
+destinations conservent donc l'horizon demandé, tandis que les destinations
+courtes évitent de calculer des couches inutiles.
+
+Lorsqu'une contrainte terrestre est active, l'horizon demandé est conservé :
+un détour nécessaire pour contourner une île peut être beaucoup plus long que
+la distance directe.
+
+Si la destination n'est pas atteinte dans cet horizon, l'API retourne tout de
+même la meilleure route calculée et indique `destinationReached: false`. Le
+point terminal exact `Arrivée` n'est ajouté que lorsque la destination est
+réellement atteinte.
+
 Lorsqu'un isochrone atteint le rayon d'arrivée, la recherche interne peut
 s'arrêter pour éviter les calculs inutiles. La réponse ajoute toutefois un
 point terminal exactement sur la destination, après validation de la dernière

@@ -531,8 +531,24 @@ func BuildIsochroneSearch(
 					completeErr,
 				)
 			}
-			if complete &&
-				nodes[index].RemainingDistance <= input.ArrivalRadius {
+			if complete && nodes[index].RemainingDistance <= input.ArrivalRadius {
+				finalSegment := RouteSegment{
+					From:       nodes[index].State.Position,
+					To:         input.Destination,
+					StartedAt:  nodes[index].State.Instant,
+					FinishedAt: nodes[index].State.Instant.Add(input.StepDuration),
+				}
+				allowed, constraintErr := segmentAllowed(ctx, input.Constraints, finalSegment)
+				if constraintErr != nil {
+					return search, fmt.Errorf(
+						"routing: vérification de l'approche finale à la couche %d impossible: %w",
+						layerIndex+1,
+						constraintErr,
+					)
+				}
+				if !allowed {
+					continue
+				}
 				nodes[0], nodes[index] = nodes[index], nodes[0]
 				search.Reached = true
 				break

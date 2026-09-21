@@ -6,8 +6,10 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 )
 
 func TestHealthReturnsOK(t *testing.T) {
@@ -126,5 +128,19 @@ func TestRouteStepPassesDestination(t *testing.T) {
 	}
 	if passes {
 		t.Fatal("un point avant la destination ne devait pas être détecté")
+	}
+}
+
+func TestAdaptiveIsochroneDurationRespectsRequestedLimit(t *testing.T) {
+	requested := 240 * time.Minute
+	short := adaptiveIsochroneDuration(10, requested, polar.BoatSpeed(40))
+	if short >= requested {
+		t.Fatalf("une courte destination devait réduire l horizon: %s", short)
+	}
+	if got := adaptiveIsochroneDuration(1000, requested, polar.BoatSpeed(40)); got != requested {
+		t.Fatalf("une longue destination devait conserver la limite: %s", got)
+	}
+	if got := adaptiveIsochroneDuration(10, requested, 0); got != requested {
+		t.Fatalf("une vitesse invalide devait conserver la limite: %s", got)
 	}
 }
