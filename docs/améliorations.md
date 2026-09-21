@@ -140,6 +140,12 @@ Pour réduire le coût des vérifications :
 - appliquer la géométrie détaillée uniquement aux routes conservées ;
 - conserver une marge côtière de sécurité dans la validation finale.
 
+Le contrôle géométrique réutilise maintenant les anneaux dépliés d'un polygone
+pour vérifier à la fois l'intersection et la distance à la côte. Cela évite de
+parcourir et projeter deux fois les mêmes coordonnées pour chaque segment.
+La validation finale reste inchangée : tout segment qui touche une terre ou
+qui entre dans la marge côtière est refusé.
+
 ### Paralléliser l'expansion des isochrones
 
 L'expansion des différents parents d'une couche d'isochrone est indépendante
