@@ -9,12 +9,10 @@ import (
 	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
-	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/land"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/navigation"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
-	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
 type practicalHeadingsRequest struct {
@@ -46,6 +44,18 @@ type practicalHeadingsResponse struct {
 	Candidates  []practicalCandidateResponse `json:"candidates"`
 	Isochrones  []isochroneFrontierResponse  `json:"isochrones"`
 	Route       []routePointResponse         `json:"route"`
+	Performance performanceResponse          `json:"performance"`
+}
+
+type performanceResponse struct {
+	TotalMilliseconds     float64 `json:"totalMilliseconds"`
+	WeatherMilliseconds   float64 `json:"weatherMilliseconds"`
+	PolarMilliseconds     float64 `json:"polarMilliseconds"`
+	LandMilliseconds      float64 `json:"landMilliseconds"`
+	PracticalMilliseconds float64 `json:"practicalMilliseconds"`
+	IsochroneMilliseconds float64 `json:"isochroneMilliseconds"`
+	CacheHits             int     `json:"cacheHits"`
+	CacheMisses           int     `json:"cacheMisses"`
 }
 
 const landGeoJSONPath = "../data/land/natural-earth-10m-land.geojson"
@@ -96,6 +106,7 @@ type practicalCandidateResponse struct {
 }
 
 func practicalHeadingsHandler(response http.ResponseWriter, request *http.Request) {
+	totalStarted := time.Now()
 	var payload practicalHeadingsRequest
 	decoder := json.NewDecoder(http.MaxBytesReader(response, request.Body, 1<<20))
 	decoder.DisallowUnknownFields()
@@ -127,12 +138,16 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 	for index, heading := range payload.Headings {
 		headings[index] = navigation.Heading(heading)
 	}
-	weatherProvider, err := weather.LoadGRIB2WeatherProvider(payload.WeatherFiles...)
+	weatherStarted := time.Now()
+	weatherProvider, weatherStats, err := loadCachedWeatherProvider(payload.WeatherFiles...)
+	weatherMilliseconds := elapsedMilliseconds(weatherStarted)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "chargement météo impossible: "+err.Error())
 		return
 	}
-	boatPolar, err := polar.LoadFile(payload.PolarPath)
+	polarStarted := time.Now()
+	boatPolar, polarHit, err := loadCachedPolar(payload.PolarPath)
+	polarMilliseconds := elapsedMilliseconds(polarStarted)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "chargement polaire impossible: "+err.Error())
 		return
@@ -147,7 +162,9 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		writeJSONError(response, http.StatusBadRequest, "destination invalide: "+err.Error())
 		return
 	}
-	landConstraint, err := land.LoadGeoJSONFile(landGeoJSONPath)
+	landStarted := time.Now()
+	landConstraint, landHit, err := loadCachedLand(landGeoJSONPath)
+	landMilliseconds := elapsedMilliseconds(landStarted)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "données terrestres indisponibles: "+err.Error())
 		return
@@ -168,6 +185,7 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			return
 		}
 	}
+	practicalStarted := time.Now()
 	candidates, err := routing.EvaluatePracticalHeadingCandidates(
 		request.Context(), weatherProvider, boatPolar, routing.PracticalHeadingInput{
 			Position:    position,
@@ -181,6 +199,7 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		writeJSONError(response, http.StatusBadRequest, "calcul pratique impossible: "+err.Error())
 		return
 	}
+	practicalMilliseconds := elapsedMilliseconds(practicalStarted)
 	result := practicalHeadingsResponse{
 		Position:    positionRequest{Latitude: float64(position.Latitude), Longitude: float64(position.Longitude)},
 		Destination: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)},
@@ -188,6 +207,21 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		Isochrones:  make([]isochroneFrontierResponse, 0),
 		Route:       make([]routePointResponse, 0),
 	}
+	result.Performance.CacheHits = weatherStats.Hits
+	result.Performance.CacheMisses = weatherStats.Misses
+	if polarHit {
+		result.Performance.CacheHits++
+	} else {
+		result.Performance.CacheMisses++
+	}
+	if landHit {
+		result.Performance.CacheHits++
+	} else {
+		result.Performance.CacheMisses++
+	}
+	result.Performance.WeatherMilliseconds = weatherMilliseconds
+	result.Performance.PolarMilliseconds = polarMilliseconds
+	result.Performance.LandMilliseconds = landMilliseconds
 	for _, candidate := range candidates {
 		lastStep := candidate.Simulation.Steps[len(candidate.Simulation.Steps)-1]
 		result.Candidates = append(result.Candidates, practicalCandidateResponse{
@@ -197,11 +231,14 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			NextInstant:  candidate.Simulation.NextInstant, Sail: lastStep.BestSail.SailName, SpeedKnots: float64(lastStep.BestSail.Speed),
 		})
 	}
+	result.Performance.PracticalMilliseconds = practicalMilliseconds
 	if !profile.IncludeIsochrones {
+		result.Performance.TotalMilliseconds = elapsedMilliseconds(totalStarted)
 		writeJSON(response, http.StatusOK, result)
 		return
 	}
 	isochroneStep := profile.IsochroneStep
+	isochroneStarted := time.Now()
 	layerCount := int(math.Ceil(time.Duration(payload.DurationMinutes*float64(time.Minute)).Minutes() / isochroneStep.Minutes()))
 	if layerCount > 0 {
 		search, err := routing.BuildIsochroneSearch(request.Context(), weatherProvider, boatPolar, routing.IsochroneSearchInput{
@@ -236,8 +273,14 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Instant: routeStep.Node.Candidate.Step.NextInstant})
 			}
 		}
+		result.Performance.IsochroneMilliseconds = elapsedMilliseconds(isochroneStarted)
 	}
+	result.Performance.TotalMilliseconds = elapsedMilliseconds(totalStarted)
 	writeJSON(response, http.StatusOK, result)
+}
+
+func elapsedMilliseconds(start time.Time) float64 {
+	return float64(time.Since(start).Microseconds()) / 1000
 }
 
 func parsePositionRequest(request positionRequest) (navigation.Position, error) {

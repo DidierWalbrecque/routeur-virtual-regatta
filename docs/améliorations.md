@@ -67,6 +67,11 @@ rapides et les destinations courtes.
 
 ### Mettre les données en cache
 
+Une première version du cache est maintenant utilisée par l'API pour les
+chargements de GRIB, de polaire et de carte terrestre. Elle réutilise les
+données tant que la taille et la date de modification des fichiers restent
+identiques.
+
 Les données suivantes devront être chargées une seule fois et réutilisées :
 
 - la carte terrestre Natural Earth ;
@@ -77,10 +82,11 @@ Les données suivantes devront être chargées une seule fois et réutilisées :
 Le cache devra être invalidé lorsqu'un fichier est remplacé ou lorsqu'un
 nouveau run météo est téléchargé.
 
-La mise en cache doit accélérer les calculs répétés, en particulier lors des
-tests de plusieurs caps ou de plusieurs stratégies sur une même zone météo.
-Elle réduira le temps de chargement des données, mais ne supprimera pas le
-coût principal de la simulation des caps et des isochrones.
+La mise en cache doit réduire le temps de chargement des données lors des
+calculs répétés, en particulier lors des tests de plusieurs caps sur une même
+zone météo. Elle ne supprimera pas le coût principal de la simulation des caps
+et des isochrones ; un gain visible dans le temps total ne doit donc pas être
+supposé sans mesure.
 
 Priorité recommandée :
 
@@ -97,7 +103,33 @@ Le cache devra être invalidé lorsque :
 - la carte terrestre est modifiée.
 
 Les tests devront mesurer séparément le temps de chargement des données et le
-temps de calcul de la route, avant et après activation du cache.
+temps de calcul de la route, avant et après activation du cache. Le second
+calcul doit rester fonctionnel et identique au premier ; le bénéfice du cache
+doit être confirmé par ces mesures et non par une impression visuelle.
+
+L'API expose maintenant ces mesures dans `performance` : temps total, temps de
+chargement météo, polaire et carte terrestre, temps des caps pratiques, temps
+des isochrones, ainsi que le nombre de lectures servies par le cache et de
+rechargements effectués. Ces informations sont également affichées dans
+l'interface après chaque calcul.
+
+### Nettoyer les anciens fichiers GRIB
+
+Le téléchargement d'un nouveau run météo ne doit pas laisser s'accumuler
+indéfiniment les anciens fichiers GRIB dans `data/weather`.
+
+Après un téléchargement réussi, le routeur devra :
+
+- identifier le run météo conservé comme courant ;
+- supprimer les fichiers GRIB des anciens runs qui ne sont plus utilisés ;
+- conserver tous les horizons du run courant nécessaires aux calculs ;
+- ne supprimer aucun fichier si le nouveau téléchargement est incomplet ou en
+  échec.
+
+Le nettoyage devra être explicite et contrôlé afin d'éviter de supprimer un
+fichier encore utilisé par une simulation en cours. Un test devra vérifier que
+les anciens fichiers sont supprimés après un téléchargement complet et qu'ils
+restent présents après un téléchargement partiellement échoué.
 
 ### Optimiser les contraintes terrestres
 
