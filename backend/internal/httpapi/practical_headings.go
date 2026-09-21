@@ -89,6 +89,7 @@ type routePointResponse struct {
 	Heading  float64         `json:"heading"`
 	Sail     string          `json:"sail"`
 	Instant  time.Time       `json:"instant"`
+	Terminal bool            `json:"terminal"`
 }
 
 type practicalCandidateResponse struct {
@@ -268,15 +269,71 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		}
 		bestRoute, err := search.ReconstructBestRoute()
 		if err == nil {
+			routeSteps := bestRoute.Steps
+			if len(routeSteps) > 0 {
+				previousPosition := bestRoute.Origin
+				if len(routeSteps) > 1 {
+					previousPosition = routeSteps[len(routeSteps)-2].Node.Candidate.Step.NextPosition
+				}
+				lastPosition := routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextPosition
+				passesDestination, distanceErr := routeStepPassesDestination(previousPosition, lastPosition, destination)
+				if distanceErr != nil {
+					writeJSONError(response, http.StatusBadRequest, "vérification du dernier point impossible: "+distanceErr.Error())
+					return
+				}
+				if passesDestination {
+					routeSteps = routeSteps[:len(routeSteps)-1]
+				}
+			}
 			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(bestRoute.Origin.Latitude), Longitude: float64(bestRoute.Origin.Longitude)}, Instant: bestRoute.StartedAt})
-			for _, routeStep := range bestRoute.Steps {
+			for _, routeStep := range routeSteps {
 				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Instant: routeStep.Node.Candidate.Step.NextInstant})
 			}
+			lastPosition := bestRoute.Origin
+			lastInstant := bestRoute.StartedAt
+			if len(routeSteps) > 0 {
+				lastPosition = routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextPosition
+				lastInstant = routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextInstant
+			}
+			if lastPosition != destination {
+				finalSegment := routing.RouteSegment{From: lastPosition, To: destination, StartedAt: lastInstant, FinishedAt: lastInstant.Add(profile.IsochroneStep)}
+				allowed, constraintErr := landConstraint.Allows(request.Context(), finalSegment)
+				if constraintErr != nil {
+					writeJSONError(response, http.StatusBadRequest, "vérification de l’arrivée impossible: "+constraintErr.Error())
+					return
+				}
+				if !allowed {
+					writeJSONError(response, http.StatusBadRequest, "la dernière approche de la destination traverse une terre ou la côte")
+					return
+				}
+			}
+			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
 		}
 		result.Performance.IsochroneMilliseconds = elapsedMilliseconds(isochroneStarted)
 	}
 	result.Performance.TotalMilliseconds = elapsedMilliseconds(totalStarted)
 	writeJSON(response, http.StatusOK, result)
+}
+
+func routeStepPassesDestination(from, to, destination navigation.Position) (bool, error) {
+	fromToDestination, err := navigation.DistanceBetween(from, destination)
+	if err != nil {
+		return false, err
+	}
+	destinationToTo, err := navigation.DistanceBetween(destination, to)
+	if err != nil {
+		return false, err
+	}
+	fromToTo, err := navigation.DistanceBetween(from, to)
+	if err != nil {
+		return false, err
+	}
+	const (
+		arrivalRadiusNM     = 1.0
+		progressToleranceNM = 0.05
+	)
+	return destinationToTo <= arrivalRadiusNM &&
+		float64(fromToDestination)+progressToleranceNM < float64(fromToTo), nil
 }
 
 func elapsedMilliseconds(start time.Time) float64 {
