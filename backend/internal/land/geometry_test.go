@@ -24,6 +24,24 @@ func TestGeoJSONConstraintAllowsWaterSegment(t *testing.T) {
 	}
 }
 
+func BenchmarkGeoJSONConstraintAllows(b *testing.B) {
+	constraint, err := squareLandConstraint().WithCoastalMargin(2)
+	if err != nil {
+		b.Fatal(err)
+	}
+	segment := testSegment(-0.05, 5, -0.05, 6)
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		allowed, err := constraint.Allows(context.Background(), segment)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if !allowed {
+			b.Fatal("segment maritime refusé")
+		}
+	}
+}
+
 func TestGeoJSONConstraintRejectsLandSegments(t *testing.T) {
 	constraint := squareLandConstraint()
 	tests := []struct {

@@ -68,24 +68,56 @@ func (constraint *GeoJSONConstraint) Allows(
 			)
 		}
 		value := constraint.polygons[index]
-		if segmentTouchesPolygon(
+		forbidden, err := segmentForbiddenByPolygon(
 			start,
 			end,
 			value,
 			referenceLongitude,
-		) {
-			return false, nil
+			margin,
+		)
+		if err != nil {
+			return false, err
 		}
-		if margin > 0 && segmentDistanceToPolygon(
-			start,
-			end,
-			value,
-			referenceLongitude,
-		) <= margin+geometryEpsilon {
+		if forbidden {
 			return false, nil
 		}
 	}
 	return true, nil
+}
+
+func segmentForbiddenByPolygon(
+	start,
+	end point,
+	value polygon,
+	referenceLongitude,
+	margin float64,
+) (bool, error) {
+	rings := make([][]point, len(value.rings))
+	for index, ring := range value.rings {
+		rings[index] = unwrapRing(ring, referenceLongitude)
+		if segmentIntersectsRing(start, end, rings[index]) {
+			return true, nil
+		}
+	}
+	if pointInPolygon(start, rings) || pointInPolygon(end, rings) {
+		return true, nil
+	}
+	if margin <= 0 {
+		return false, nil
+	}
+
+	referenceLatitude := (start.latitude + end.latitude) / 2
+	projectedStart := projectPoint(start, referenceLongitude, referenceLatitude)
+	projectedEnd := projectPoint(end, referenceLongitude, referenceLatitude)
+	minimum := math.Inf(1)
+	for _, ring := range rings {
+		for index := 1; index < len(ring); index++ {
+			edgeStart := projectPoint(ring[index-1], referenceLongitude, referenceLatitude)
+			edgeEnd := projectPoint(ring[index], referenceLongitude, referenceLatitude)
+			minimum = math.Min(minimum, projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd))
+		}
+	}
+	return minimum <= margin+geometryEpsilon, nil
 }
 
 func segmentTouchesPolygon(
