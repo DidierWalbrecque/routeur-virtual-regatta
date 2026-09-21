@@ -115,6 +115,9 @@ l'interface après chaque calcul.
 
 ### Nettoyer les anciens fichiers GRIB
 
+Le nettoyage automatique est maintenant effectué après chaque téléchargement
+complet réussi, par l'API et par la commande `gribrefresh`.
+
 Le téléchargement d'un nouveau run météo ne doit pas laisser s'accumuler
 indéfiniment les anciens fichiers GRIB dans `data/weather`.
 
