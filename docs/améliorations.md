@@ -140,6 +140,22 @@ Pour réduire le coût des vérifications :
 - appliquer la géométrie détaillée uniquement aux routes conservées ;
 - conserver une marge côtière de sécurité dans la validation finale.
 
+### Paralléliser l'expansion des isochrones
+
+L'expansion des différents parents d'une couche d'isochrone est indépendante
+pendant l'évaluation des caps. Cette étape est maintenant exécutée en
+parallèle, avec un nombre de workers adapté au nombre de processeurs
+disponibles.
+
+Les résultats sont ensuite regroupés dans l'ordre des parents. Le traitement
+des transitions, des contraintes terrestres et de l'élagage reste déterministe
+et séquentiel, afin de préserver la sécurité des routes et la reproductibilité
+des résultats.
+
+Le benchmark de référence montre une réduction du temps d'environ 30 % sans
+contrainte et d'environ 45 % avec contrainte sur la machine de développement.
+Ces valeurs doivent être confirmées avec le scénario réel de course.
+
 ### Tests de performance à ajouter
 
 - mesurer le temps avec des caps espacés de 30, 15 et 5 degrés ;
