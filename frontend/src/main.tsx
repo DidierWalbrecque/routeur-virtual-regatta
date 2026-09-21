@@ -8,7 +8,8 @@ type Candidate = { heading: number; progressNM: number; remainingDistanceNM: num
 type Point = { latitude: number; longitude: number };
 type Isochrone = { instant: string; positions: Point[]; contour: Point[] };
 type RoutePoint = { position: Point; heading: number; sail: string; instant: string };
-type Result = { position: Point; destination: Point; candidates: Candidate[]; isochrones: Isochrone[]; route: RoutePoint[] };
+type Performance = { totalMilliseconds: number; weatherMilliseconds: number; polarMilliseconds: number; landMilliseconds: number; practicalMilliseconds: number; isochroneMilliseconds: number; cacheHits: number; cacheMisses: number };
+type Result = { position: Point; destination: Point; candidates: Candidate[]; isochrones: Isochrone[]; route: RoutePoint[]; performance: Performance };
 const equipment = ["light", "heavy", "code0", "foils", "hull_polish", "pro_winches"];
 
 function formatLocalDate(value: Date) {
@@ -129,6 +130,7 @@ function App() {
       <button disabled={loading}>{loading ? "Calcul en cours…" : "Calculer les caps"}</button>{error && <p className="error">{error}</p>}
     </form>
     {mapPosition && mapDestination ? <Suspense fallback={<section className="map-section"><h2>Carte des caps pratiques</h2><p>Chargement de la carte…</p></section>}><PracticalMap position={mapPosition} destination={mapDestination} isochrones={route?.isochrones ?? []} route={route?.route.map((point) => point.position) ?? []} startedAt={route?.route[0]?.instant} /></Suspense> : <p className="map-hint">Renseignez le départ et la destination au format Virtual Regatta pour afficher la carte.</p>}
+    {route && <section className="results"><h2>Performance du calcul</h2><p>Total : {route.performance.totalMilliseconds.toFixed(0)} ms · météo : {route.performance.weatherMilliseconds.toFixed(0)} ms · caps : {route.performance.practicalMilliseconds.toFixed(0)} ms · isochrones : {route.performance.isochroneMilliseconds.toFixed(0)} ms · cache : {route.performance.cacheHits} hit(s), {route.performance.cacheMisses} rechargement(s)</p></section>}
     {route && route.route.length > 0 && <section className="results"><h2>Points de la route optimale</h2><div className="table-wrap"><table><thead><tr><th>Étape</th><th>Coordonnées Virtual Regatta</th><th>Cap</th><th>Voile</th></tr></thead><tbody>{route.route.map((point, index) => <tr key={`${point.position.latitude}-${point.position.longitude}`}><td>{index === 0 ? "Départ" : `Point ${index}`}</td><td>{formatVirtualRegattaPosition(point.position)}</td><td>{index === 0 ? "—" : `${point.heading.toFixed(0)}°`}</td><td>{index === 0 ? "—" : point.sail}</td></tr>)}</tbody></table></div></section>}
   </main>;
 }
