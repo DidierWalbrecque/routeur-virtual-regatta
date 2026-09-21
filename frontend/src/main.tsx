@@ -94,7 +94,7 @@ function App() {
       const body = await response.json();
       if (!response.ok) throw new Error(body.error ?? "Actualisation météo refusée");
       setWeatherFiles(body.files.join("\n"));
-      setWeatherStatus(`Run ${body.run} disponible (${body.files.length} fichier(s)).`);
+      setWeatherStatus(`Run ${body.run} disponible (${body.files.length} fichier(s), ${body.removedFiles?.length ?? 0} ancien(s) supprimé(s)).`);
     } catch (reason) { setWeatherStatus(""); setError(reason instanceof Error ? reason.message : "Erreur réseau"); }
   }
   async function submit(event: FormEvent) {

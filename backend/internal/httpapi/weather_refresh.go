@@ -14,9 +14,10 @@ type weatherRefreshRequest struct {
 }
 
 type weatherRefreshResponse struct {
-	Run       string   `json:"run"`
-	Files     []string `json:"files"`
-	Refreshed string   `json:"refreshed"`
+	Run          string   `json:"run"`
+	Files        []string `json:"files"`
+	RemovedFiles []string `json:"removedFiles"`
+	Refreshed    string   `json:"refreshed"`
 }
 
 func weatherRefreshHandler(response http.ResponseWriter, request *http.Request) {
@@ -42,7 +43,7 @@ func weatherRefreshHandler(response http.ResponseWriter, request *http.Request) 
 		return
 	}
 	writeJSON(response, http.StatusOK, weatherRefreshResponse{
-		Run: result.Run.Date.Format("20060102") + formatCycle(result.Run.Cycle), Files: result.Files, Refreshed: time.Now().UTC().Format(time.RFC3339),
+		Run: result.Run.Date.Format("20060102") + formatCycle(result.Run.Cycle), Files: result.Files, RemovedFiles: result.RemovedFiles, Refreshed: time.Now().UTC().Format(time.RFC3339),
 	})
 }
 

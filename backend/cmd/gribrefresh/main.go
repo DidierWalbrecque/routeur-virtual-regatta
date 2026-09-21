@@ -48,7 +48,11 @@ func run(args []string, stdout io.Writer, client downloader, now func() time.Tim
 		fmt.Fprintf(stdout, "Recherche du run GFS %s...\n", candidateLabel(candidate))
 		paths, err := downloadRun(context.Background(), client, candidate, options, stdout)
 		if err == nil {
-			fmt.Fprintf(stdout, "Run disponible : %s | %d fichier(s)\n", candidateLabel(candidate), len(paths))
+			removed, cleanupErr := weather.RemoveOldGFSFiles(options.outputDirectory, candidate)
+			if cleanupErr != nil {
+				return cleanupErr
+			}
+			fmt.Fprintf(stdout, "Run disponible : %s | %d fichier(s) | %d ancien(s) supprimé(s)\n", candidateLabel(candidate), len(paths), len(removed))
 			return nil
 		}
 		fmt.Fprintf(stdout, "Run indisponible : %v\n", err)
