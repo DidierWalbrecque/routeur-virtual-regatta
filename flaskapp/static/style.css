@@ -1,0 +1,265 @@
+html,
+body {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+#map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+#map-error {
+  display: none;
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 2;
+  padding: 10px 14px;
+  border-radius: 6px;
+  color: #ffffff;
+  background: #b42318;
+  font: 14px system-ui, sans-serif;
+}
+
+#map-error.visible {
+  display: block;
+}
+
+.route-calculation-status {
+  position: fixed;
+  top: 20px;
+  left: 50%;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  border-radius: 24px;
+  color: #ffffff;
+  background: #006a6a;
+  box-shadow: 0 3px 8px #0000003d;
+  font: 14px system-ui, sans-serif;
+  transform: translateX(-50%);
+}
+
+.route-calculation-status[hidden] {
+  display: none;
+}
+
+.route-calculation-status .material-symbols-outlined {
+  animation: route-calculation-spin 1.2s linear infinite;
+  font-size: 20px;
+}
+
+@keyframes route-calculation-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.route-form-panel {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  left: auto;
+  z-index: 4;
+  width: min(440px, calc(100% - 40px));
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 16px;
+  color: #1d1b20;
+  background: #fffbfe;
+  box-shadow: 0 8px 24px #0000003d;
+  font: 14px system-ui, sans-serif;
+  transform: translateY(-50%);
+}
+
+.route-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.route-form-header h2 {
+  margin: 0;
+  font-size: 20px;
+}
+
+.route-form-panel label {
+  display: block;
+  margin: 12px 0;
+  font-weight: 600;
+}
+
+.route-form-panel input,
+.route-form-panel select {
+  display: block;
+  width: 100%;
+  margin-top: 5px;
+  padding: 9px 10px;
+  border: 1px solid #79747e;
+  border-radius: 6px;
+  color: #1d1b20;
+  background: #fffbfe;
+  font: inherit;
+}
+
+.route-form-panel input:not([type="checkbox"]),
+.route-form-panel select {
+  height: 40px;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 12px;
+  align-items: start;
+}
+
+.route-form-panel fieldset {
+  margin: 14px 0;
+  border: 1px solid #cac4d0;
+  border-radius: 8px;
+}
+
+.route-form-panel .form-check {
+  display: inline-block;
+  margin: 5px 10px 5px 0;
+  font-weight: 400;
+}
+
+.route-form-panel .form-check input {
+  display: inline-block;
+  width: auto;
+  margin: 0 4px 0 0;
+}
+
+.close-button {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 50%;
+  color: #49454f;
+  background: transparent;
+  font-size: 26px;
+  cursor: pointer;
+}
+
+.close-button:hover {
+  background: #e8def8;
+}
+
+.form-submit {
+  width: 100%;
+  padding: 11px 16px;
+  border: 0;
+  border-radius: 20px;
+  color: #ffffff;
+  background: #6750a4;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.form-submit:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.form-error {
+  min-height: 1.3em;
+  color: #b3261e;
+  font-weight: 600;
+}
+
+.form-hint {
+  color: #625b71;
+}
+
+.material-fab {
+  position: fixed;
+  right: 24px;
+  bottom: 24px;
+  z-index: 3;
+  display: grid;
+  width: 56px;
+  height: 56px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  color: #ffffff;
+  background: #6750a4;
+  box-shadow: 0 3px 6px #00000033, 0 6px 12px #00000024;
+  cursor: pointer;
+  transition: background-color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+}
+
+.material-fab:hover {
+  background: #7f67be;
+  box-shadow: 0 5px 8px #0000003d, 0 8px 16px #0000002e;
+  transform: translateY(-1px);
+}
+
+.material-fab-refresh {
+  bottom: 92px;
+}
+
+.material-fab-calculate {
+  bottom: 160px;
+  background: #006a6a;
+}
+
+.material-fab-calculate:hover {
+  background: #008585;
+}
+
+.material-fab:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.material-fab:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.material-fab .material-symbols-outlined {
+  font-size: 24px;
+}
+
+@media (max-width: 600px) {
+  .material-fab {
+    right: 16px;
+    bottom: 16px;
+  }
+
+  .material-fab-refresh {
+    bottom: 84px;
+  }
+
+  .material-fab-calculate {
+    bottom: 152px;
+  }
+
+  .route-form-panel {
+    top: 50%;
+    right: 10px;
+    left: 10px;
+    width: calc(100% - 20px);
+    max-height: calc(100% - 20px);
+    transform: translateY(-50%);
+  }
+}

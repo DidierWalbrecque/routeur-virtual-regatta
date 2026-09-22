@@ -267,6 +267,9 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 		return
 	}
 	isochroneStep := profile.IsochroneStep
+	if payload.StepMinutes > 0 {
+		isochroneStep = time.Duration(payload.StepMinutes * float64(time.Minute))
+	}
 	isochroneStarted := time.Now()
 	requestedDuration := time.Duration(payload.DurationMinutes * float64(time.Minute))
 	distance, err := navigation.DistanceBetween(position, destination)
