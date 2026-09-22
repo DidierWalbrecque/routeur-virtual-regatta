@@ -20,6 +20,11 @@ data/land/*
 frontend/node_modules/
 frontend/dist/
 
+# Interface Flask
+.venv-flask/
+__pycache__/
+*.py[cod]
+
 # Variables locales et secrets
 .env
 .env.*

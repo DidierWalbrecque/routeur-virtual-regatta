@@ -230,3 +230,21 @@ L'API accepte les champs JSON suivants :
 ```
 
 Les valeurs permises sont `quick` et `precise`.
+
+## Animation des isochrones pendant le calcul
+
+À terme, l'interface devra afficher les isochrones au fur et à mesure de leur
+calcul par Go, au lieu d'attendre la réponse JSON complète. Le calcul devra
+exposer une progression après chaque frontière terminée, avec au minimum le
+nombre de couches réalisées, le nombre total prévu, l'instant calculé et le
+contour de l'isochrone.
+
+Le flux recommandé est un endpoint HTTP en streaming, de type SSE : Go émet
+des événements `start`, `frontier`, `complete` et `error`, Flask les relaie
+sans les mettre en mémoire, puis MapLibre ajoute chaque frontière dès sa
+réception. La route finale et ses points intermédiaires ne seront affichés
+qu'après l'événement `complete`.
+
+Cette évolution nécessite également l'annulation d'un calcul précédent, la
+gestion des déconnexions et des tests vérifiant que les frontières arrivent
+progressivement avant la route finale.
