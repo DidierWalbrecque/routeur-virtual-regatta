@@ -52,6 +52,13 @@ Pour arrêter le serveur dans les deux terminaux :
 Ctrl + C
 ```
 
+## Utiliser l'interface Flask alternative
+
+L'interface Flask affiche actuellement uniquement une carte MapLibre avec le
+départ et la destination par défaut. Le formulaire et le calcul seront ajoutés
+progressivement ; la carte React reste disponible comme interface alternative. La procédure complète d'installation,
+de lancement et de test se trouve dans [`docs/flask.md`](docs/flask.md).
+
 ## Utiliser l'interface locale des caps pratiques
 
 Lancer l'API, depuis un premier terminal à la racine du dépôt :

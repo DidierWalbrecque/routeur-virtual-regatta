@@ -1,0 +1,475 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Routeur Virtual Regatta</title>
+    <link rel="stylesheet" href="{{ url_for('maplibre_vendor', filename='maplibre-gl.css') }}" onerror="this.onerror=null;this.href='https://cdn.jsdelivr.net/npm/maplibre-gl@6.10.0/dist/maplibre-gl.css';">
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,400,0,0">
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  </head>
+  <body>
+    <div id="map" aria-label="Carte de navigation Virtual Regatta"></div>
+    <div id="route-calculation-status" class="route-calculation-status" hidden role="status" aria-live="polite">
+      <span class="material-symbols-outlined" aria-hidden="true">progress_activity</span>
+      <span>Calcul de la route en cours…</span>
+    </div>
+    <div id="map-error" role="alert">MapLibre n’a pas pu être chargé.</div>
+    <button id="calculate-route" class="material-fab material-fab-calculate" type="button" title="Calculer la route" aria-label="Calculer la route">
+      <span class="material-symbols-outlined" aria-hidden="true">alt_route</span>
+    </button>
+    <button id="refresh-weather" class="material-fab material-fab-refresh" type="button" title="Actualiser les GRIB" aria-label="Actualiser les GRIB">
+      <span class="material-symbols-outlined" aria-hidden="true">cloud_sync</span>
+    </button>
+    <button id="recenter-map" class="material-fab" type="button" title="Recentrer la carte" aria-label="Recentrer la carte">
+      <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
+    </button>
+    <aside id="route-form-panel" class="route-form-panel" hidden>
+      <div class="route-form-header">
+        <h2>Calculer une route</h2>
+        <button id="close-route-form" class="close-button" type="button" title="Fermer" aria-label="Fermer">×</button>
+      </div>
+      <form id="route-form">
+        <label>Position actuelle Virtual Regatta
+          <input id="route-start" required value="13°N 07'16&quot; - 121°E 35'12&quot;">
+        </label>
+        <label>Destination Virtual Regatta
+          <input id="route-destination" required value="13°N 10'16&quot; - 121°E 20'12&quot;">
+        </label>
+        <label>Départ (heure locale, JJ/MM/AAAA HH:MM)
+          <input id="route-instant" required value="22/09/2026 00:00" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}">
+        </label>
+        <label>Polaire
+          <input id="route-polar" required value="../data/polars/ultim_bp_11.json">
+        </label>
+        <div class="form-grid">
+          <label>Durée (min)
+            <input id="route-duration" type="number" min="1" value="240" required>
+          </label>
+          <label>Pas (min)
+            <input id="route-step" type="number" min="1" value="10" required>
+          </label>
+          <label>Mode
+            <select id="route-mode">
+              <option value="quick">Rapide</option>
+              <option value="precise" selected>Précis</option>
+            </select>
+          </label>
+          <label>Voile fixe (0 = auto)
+            <input id="route-sail" type="number" min="0" value="0" required>
+          </label>
+        </div>
+        <label>Caps (degrés séparés par des virgules)
+          <input id="route-headings" required value="0, 15, 30, 45, 60, 75, 90, 105, 120, 135, 150, 165, 180, 195, 210, 225, 240, 255, 270, 285, 300, 315, 330, 345">
+        </label>
+        <fieldset>
+          <legend>Équipements possédés</legend>
+          <label class="form-check"><input type="checkbox" value="light"> light</label>
+          <label class="form-check"><input type="checkbox" value="heavy"> heavy</label>
+          <label class="form-check"><input type="checkbox" value="code0"> code0</label>
+          <label class="form-check"><input type="checkbox" value="foils"> foils</label>
+          <label class="form-check"><input type="checkbox" value="hull_polish"> hull_polish</label>
+          <label class="form-check"><input type="checkbox" value="pro_winches"> pro_winches</label>
+        </fieldset>
+        <label class="form-check"><input id="route-robust" type="checkbox"> Ne conserver que les caps robustes</label>
+        <p id="route-form-error" class="form-error" role="alert"></p>
+        <p id="route-weather-status" class="form-hint">Actualisez les GRIB avant de lancer le calcul.</p>
+        <button id="submit-route" class="form-submit" type="submit">Calculer la route</button>
+      </form>
+    </aside>
+    <script>
+      const departure = { latitude: 13.121111, longitude: 121.586667 };
+      const destination = { latitude: 13.171111, longitude: 121.336667 };
+      let navigationMap;
+      let navigationBounds;
+      let maplibreApi;
+      let departureMarker;
+      let destinationMarker;
+      let mapReady = false;
+      let pendingRoute;
+      let latestWeatherFiles = [];
+      let latestWeatherRun = "";
+
+      function initializeMap(maplibregl) {
+        const map = new maplibregl.Map({
+          container: "map",
+          style: {
+            version: 8,
+            sources: {
+              openstreetmap: {
+                type: "raster",
+                tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+                tileSize: 256,
+                attribution: "© OpenStreetMap contributors",
+              },
+            },
+            layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
+          },
+          center: [departure.longitude, departure.latitude],
+          zoom: 10,
+          minZoom: 5,
+          attributionControl: true,
+        });
+        navigationMap = map;
+
+        map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+        map.on("load", () => {
+          departureMarker = new maplibregl.Marker({ color: "#1971c2" })
+            .setLngLat([departure.longitude, departure.latitude])
+            .addTo(map);
+          destinationMarker = new maplibregl.Marker({ color: "#6741d9" })
+            .setLngLat([destination.longitude, destination.latitude])
+            .addTo(map);
+          map.addSource("points", {
+            type: "geojson",
+            data: {
+              type: "FeatureCollection",
+              features: [
+                { type: "Feature", properties: { kind: "departure" }, geometry: { type: "Point", coordinates: [departure.longitude, departure.latitude] } },
+                { type: "Feature", properties: { kind: "destination" }, geometry: { type: "Point", coordinates: [destination.longitude, destination.latitude] } },
+              ],
+            },
+          });
+          map.addLayer({
+            id: "points",
+            type: "circle",
+            source: "points",
+            paint: {
+              "circle-radius": 9,
+              "circle-color": ["match", ["get", "kind"], "departure", "#1971c2", "#6741d9"],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 3,
+            },
+          });
+
+        const bounds = new maplibregl.LngLatBounds();
+        bounds.extend([departure.longitude, departure.latitude]);
+        bounds.extend([destination.longitude, destination.latitude]);
+        navigationBounds = bounds;
+        map.fitBounds(bounds, { padding: 80, maxZoom: 12 });
+        mapReady = true;
+        if (pendingRoute) drawRoute(pendingRoute);
+        });
+      }
+
+      function drawRoute(result) {
+        pendingRoute = result;
+        if (!mapReady || !navigationMap || !maplibreApi) return;
+        console.log(`[MAP] Route reçue : ${result.route?.length || 0} point(s), ${result.isochrones?.length || 0} front(s)`);
+
+        const route = result.route || [];
+        const routeCoordinates = route.map((point) => [point.position.longitude, point.position.latitude]);
+        const routeData = {
+          type: "FeatureCollection",
+          features: routeCoordinates.length > 1 ? [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates: routeCoordinates } }] : [],
+        };
+        const direction = {
+          x: (result.destination || destination).longitude - (result.position || departure).longitude,
+          y: (result.destination || destination).latitude - (result.position || departure).latitude,
+        };
+        const startedAt = route[0]?.instant;
+        const contourData = {
+          type: "FeatureCollection",
+          features: (result.isochrones || []).map((isochrone) => {
+            const contour = forwardContour(isochrone.contour || [], direction);
+            const visibleContour = contour.length > 1 ? contour : (isochrone.contour || []);
+            const elapsedMinutes = startedAt ? Math.round((Date.parse(isochrone.instant) - Date.parse(startedAt)) / 60000) : 0;
+            return {
+              type: "Feature",
+              properties: { major: elapsedMinutes > 0 && elapsedMinutes % 30 === 0 },
+              geometry: { type: "LineString", coordinates: visibleContour.map((point) => [point.longitude, point.latitude]) },
+            };
+          }).filter((feature) => feature.geometry.coordinates.length > 1),
+        };
+        const endpointData = {
+          type: "FeatureCollection",
+          features: [result.position || departure, result.destination || destination].map((point, index) => ({
+            type: "Feature",
+            properties: { kind: index === 0 ? "departure" : "destination" },
+            geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
+          })),
+        };
+        const currentPosition = result.position || departure;
+        const currentDestination = result.destination || destination;
+        if (departureMarker) departureMarker.setLngLat([currentPosition.longitude, currentPosition.latitude]);
+        if (destinationMarker) destinationMarker.setLngLat([currentDestination.longitude, currentDestination.latitude]);
+        const routePointData = {
+          type: "FeatureCollection",
+          features: route.filter((point, index) => index > 0 && !point.terminal).map((point, index) => {
+            const elapsedMinutes = route[0]?.instant && point.instant ? Math.round((Date.parse(point.instant) - Date.parse(route[0].instant)) / 60000) : 0;
+            return {
+              type: "Feature",
+              properties: { label: elapsedMinutes > 0 && elapsedMinutes % 30 === 0 ? `+${elapsedMinutes} min` : "" },
+              geometry: { type: "Point", coordinates: [point.position.longitude, point.position.latitude] },
+            };
+          }),
+        };
+        const setSourceData = (id, data) => {
+          const source = navigationMap.getSource(id);
+          if (source) source.setData(data);
+          else navigationMap.addSource(id, { type: "geojson", data });
+        };
+
+        setSourceData("points", endpointData);
+        setSourceData("route", { type: "FeatureCollection", features: [] });
+        if (!navigationMap.getLayer("route")) navigationMap.addLayer({ id: "route", type: "line", source: "route", paint: { "line-color": "#f59f00", "line-width": 5, "line-opacity": 0.95 } });
+        setSourceData("isochrones", { type: "FeatureCollection", features: [] });
+        const isochronePaint = { "line-color": ["case", ["boolean", ["get", "major"], false], "#145cff", "#75b5ff"], "line-width": ["case", ["boolean", ["get", "major"], false], 1.5, 0.8], "line-opacity": ["case", ["boolean", ["get", "major"], false], 0.95, 0.65] };
+        if (!navigationMap.getLayer("isochrones")) navigationMap.addLayer({ id: "isochrones", type: "line", source: "isochrones", paint: isochronePaint });
+        else {
+          navigationMap.setPaintProperty("isochrones", "line-color", isochronePaint["line-color"]);
+          navigationMap.setPaintProperty("isochrones", "line-width", isochronePaint["line-width"]);
+          navigationMap.setPaintProperty("isochrones", "line-opacity", isochronePaint["line-opacity"]);
+        }
+        setSourceData("route-points", { type: "FeatureCollection", features: [] });
+        if (!navigationMap.getLayer("route-points")) navigationMap.addLayer({ id: "route-points", type: "circle", source: "route-points", paint: { "circle-radius": 7, "circle-color": "#f59f00", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
+        if (!navigationMap.getLayer("route-point-labels")) navigationMap.addLayer({ id: "route-point-labels", type: "symbol", source: "route-points", layout: { "text-field": ["get", "label"], "text-size": 12, "text-offset": [0, -1.5], "text-anchor": "bottom" }, paint: { "text-color": "#145cff", "text-halo-color": "#ffffff", "text-halo-width": 2 } });
+        navigationMap.moveLayer("route-points");
+        navigationMap.moveLayer("route-point-labels");
+        navigationMap.moveLayer("points");
+
+        navigationMap.getSource("isochrones").setData(contourData);
+        navigationMap.getSource("route").setData(routeData);
+        navigationMap.getSource("route-points").setData(routePointData);
+        console.log(`[MAP] Isochrones et route affichées : ${route.length} point(s), ${contourData.features.length} front(s)`);
+
+        const points = [result.position || departure, result.destination || destination, ...route.map((point) => point.position)];
+        const bounds = new maplibreApi.LngLatBounds();
+        points.forEach((point) => bounds.extend([point.longitude, point.latitude]));
+        navigationBounds = bounds;
+        navigationMap.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 500 });
+      }
+
+      function forwardContour(ring, direction) {
+        const vertices = ring.length > 1 && ring[0].latitude === ring[ring.length - 1].latitude && ring[0].longitude === ring[ring.length - 1].longitude ? ring.slice(0, -1) : ring;
+        if (vertices.length < 3 || Math.hypot(direction.x, direction.y) < 0.001) return [];
+        const area = vertices.reduce((sum, point, index) => {
+          const next = vertices[(index + 1) % vertices.length];
+          return sum + point.longitude * next.latitude - next.longitude * point.latitude;
+        }, 0);
+        const visible = vertices.map((point, index) => {
+          const next = vertices[(index + 1) % vertices.length];
+          return Math.sign(area) * ((next.latitude - point.latitude) * direction.x - (next.longitude - point.longitude) * direction.y) > 0;
+        });
+        const start = visible.findIndex((value, index) => value && !visible[(index + visible.length - 1) % visible.length]);
+        if (start < 0) return [];
+        const arc = [vertices[start]];
+        for (let offset = 0; offset < vertices.length && visible[(start + offset) % vertices.length]; offset++) {
+          arc.push(vertices[(start + offset + 1) % vertices.length]);
+        }
+        return arc;
+      }
+
+      function runToISO(run) {
+        const match = String(run || "").match(/^(\d{8})(\d{2})$/);
+        if (!match) return "";
+        const date = match[1];
+        return `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}T${match[2]}:00:00Z`;
+      }
+
+      function runToLocal(run) {
+        const match = String(run || "").match(/^(\d{8})(\d{2})$/);
+        if (!match) return "";
+        const date = match[1];
+        return `${date.slice(6, 8)}/${date.slice(4, 6)}/${date.slice(0, 4)} ${match[2]}:00`;
+      }
+
+      function parseVirtualRegattaPosition(value) {
+        const match = value.trim().match(/^(\d{1,3})°\s*([NS])\s*(\d{1,2})['’]\s*(\d+(?:\.\d+)?)"\s*-\s*(\d{1,3})°\s*([EW])\s*(\d{1,2})['’]\s*(\d+(?:\.\d+)?)"$/i);
+        if (!match) return null;
+        const [, latitudeDegrees, latitudeHemisphere, latitudeMinutes, latitudeSeconds, longitudeDegrees, longitudeHemisphere, longitudeMinutes, longitudeSeconds] = match;
+        const latitude = Number(latitudeDegrees) + Number(latitudeMinutes) / 60 + Number(latitudeSeconds) / 3600;
+        const longitude = Number(longitudeDegrees) + Number(longitudeMinutes) / 60 + Number(longitudeSeconds) / 3600;
+        return { latitude: latitudeHemisphere.toUpperCase() === "S" ? -latitude : latitude, longitude: longitudeHemisphere.toUpperCase() === "W" ? -longitude : longitude };
+      }
+
+      function updateMapFromForm() {
+        if (!mapReady || !navigationMap || !maplibreApi) return;
+        const position = parseVirtualRegattaPosition(document.getElementById("route-start").value);
+        const formDestination = parseVirtualRegattaPosition(document.getElementById("route-destination").value);
+        if (!position || !formDestination) {
+          console.warn("[MAP] Position ou destination invalide, marqueur non déplacé");
+          return;
+        }
+        console.info("[MAP] Nouvelle destination", {
+          saisie: document.getElementById("route-destination").value,
+          latitude: formDestination.latitude,
+          longitude: formDestination.longitude,
+        });
+        const endpointSource = navigationMap.getSource("points");
+        if (departureMarker) departureMarker.setLngLat([position.longitude, position.latitude]);
+        if (destinationMarker) destinationMarker.setLngLat([formDestination.longitude, formDestination.latitude]);
+        if (endpointSource) endpointSource.setData({
+          type: "FeatureCollection",
+          features: [position, formDestination].map((point, index) => ({
+            type: "Feature",
+            properties: { kind: index === 0 ? "departure" : "destination" },
+            geometry: { type: "Point", coordinates: [point.longitude, point.latitude] },
+          })),
+        });
+        if (navigationMap.getSource("route")) navigationMap.getSource("route").setData({ type: "FeatureCollection", features: [] });
+        if (navigationMap.getSource("isochrones")) navigationMap.getSource("isochrones").setData({ type: "FeatureCollection", features: [] });
+        if (navigationMap.getSource("route-points")) navigationMap.getSource("route-points").setData({ type: "FeatureCollection", features: [] });
+        navigationBounds = new maplibreApi.LngLatBounds();
+        navigationBounds.extend([position.longitude, position.latitude]);
+        navigationBounds.extend([formDestination.longitude, formDestination.latitude]);
+        navigationMap.triggerRepaint();
+      }
+
+      function getMapPadding() {
+        const panel = document.getElementById("route-form-panel");
+        if (!panel || panel.hidden) return 80;
+        return { top: 80, bottom: 80, left: 80, right: panel.getBoundingClientRect().width + 40 };
+      }
+
+      function setRouteCalculationState(isCalculating) {
+        const status = document.getElementById("route-calculation-status");
+        if (status) status.hidden = !isCalculating;
+      }
+
+      function parseLocalDate(value) {
+        const match = value.trim().match(/^(\d{2})\/(\d{2})\/(\d{4})\s+(\d{2}):(\d{2})$/);
+        if (!match) throw new Error("Date invalide : utilisez JJ/MM/AAAA HH:MM.");
+        const [, day, month, year, hour, minute] = match;
+        const date = new Date(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute));
+        if (Number.isNaN(date.getTime())) throw new Error("Date invalide : utilisez JJ/MM/AAAA HH:MM.");
+        return date.toISOString();
+      }
+
+      function loadScript(url) {
+        return new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = url;
+          script.onload = () => resolve(window.maplibregl);
+          script.onerror = () => reject(new Error(`Chargement impossible : ${url}`));
+          document.head.appendChild(script);
+        });
+      }
+
+      async function loadMapLibre() {
+        try {
+          const localModule = await import("{{ url_for('maplibre_vendor', filename='maplibre-gl.mjs') }}");
+          maplibreApi = localModule;
+          initializeMap(localModule);
+          return;
+        } catch (localError) {
+          for (const url of [
+            "https://cdn.jsdelivr.net/npm/maplibre-gl@6.10.0/dist/maplibre-gl.js",
+            "https://unpkg.com/maplibre-gl@6.10.0/dist/maplibre-gl.js",
+          ]) {
+            try {
+              const maplibregl = await loadScript(url);
+              maplibreApi = maplibregl;
+              initializeMap(maplibregl);
+              return;
+            } catch (cdnError) {
+              // Essaie la source suivante.
+            }
+          }
+        }
+        document.getElementById("map-error").classList.add("visible");
+      }
+
+      document.getElementById("recenter-map").addEventListener("click", () => {
+        if (navigationMap && navigationBounds) navigationMap.fitBounds(navigationBounds, { padding: getMapPadding(), maxZoom: 12, duration: 500 });
+      });
+
+      document.getElementById("refresh-weather").addEventListener("click", async (event) => {
+        const button = event.currentTarget;
+        button.disabled = true;
+        console.info("[GRIB] Demande d’actualisation envoyée");
+        try {
+          const response = await fetch("/api/weather/refresh", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ forecastHours: [0, 3, 6, 9, 12, 15, 18, 21, 24], lookbackHours: 48 }),
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+          latestWeatherFiles = body.files || [];
+          latestWeatherRun = body.run || "";
+          document.getElementById("route-instant").value = runToLocal(latestWeatherRun) || document.getElementById("route-instant").value;
+          document.getElementById("route-weather-status").textContent = `${latestWeatherFiles.length} fichier(s) disponible(s), run ${latestWeatherRun}.`;
+          console.info(`[GRIB] Actualisation réussie : run ${body.run}, ${body.files.length} fichier(s), ${body.removedFiles?.length || 0} ancien(s) supprimé(s)`);
+        } catch (error) {
+          console.error("[GRIB] Échec de l’actualisation", error);
+        } finally {
+          button.disabled = false;
+        }
+      });
+
+      document.getElementById("calculate-route").addEventListener("click", () => {
+        document.getElementById("route-form-panel").hidden = false;
+        document.getElementById("route-start").focus();
+      });
+
+      document.getElementById("close-route-form").addEventListener("click", () => {
+        document.getElementById("route-form-panel").hidden = true;
+      });
+
+      document.getElementById("route-start").addEventListener("change", updateMapFromForm);
+      document.getElementById("route-destination").addEventListener("change", updateMapFromForm);
+      ["route-start", "route-destination"].forEach((id) => {
+        document.getElementById(id).addEventListener("input", () => {
+          const position = parseVirtualRegattaPosition(document.getElementById("route-start").value);
+          const formDestination = parseVirtualRegattaPosition(document.getElementById("route-destination").value);
+          if (position && formDestination) updateMapFromForm();
+        });
+      });
+
+      document.getElementById("route-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const button = document.getElementById("submit-route");
+        const formError = document.getElementById("route-form-error");
+        formError.textContent = "";
+        if (latestWeatherFiles.length === 0 || !latestWeatherRun) {
+          formError.textContent = "Actualisez les GRIB avant de lancer le calcul.";
+          console.warn("[ROUTE] Calcul impossible : actualisez d’abord les GRIB");
+          return;
+        }
+        button.disabled = true;
+        console.info(`[ROUTE] Calcul demandé avec le run ${latestWeatherRun}`);
+        try {
+          const duration = Number(document.getElementById("route-duration").value);
+          const step = Number(document.getElementById("route-step").value);
+          if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(step) || step <= 0 || step > duration) throw new Error("La durée et le pas sont invalides.");
+          const headings = document.getElementById("route-headings").value.split(",").map((value) => Number(value.trim()));
+          if (!headings.length || headings.some((heading) => !Number.isFinite(heading) || heading < 0 || heading >= 360)) throw new Error("Les caps doivent être compris entre 0 inclus et 360 exclus.");
+          setRouteCalculationState(true);
+          const response = await fetch("/api/practical-headings", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              weatherFiles: latestWeatherFiles,
+              polarPath: document.getElementById("route-polar").value,
+              position: { virtualRegatta: document.getElementById("route-start").value },
+              destination: { virtualRegatta: document.getElementById("route-destination").value },
+              instant: parseLocalDate(document.getElementById("route-instant").value),
+              durationMinutes: duration,
+              stepMinutes: step,
+              headings,
+              owned: [...document.querySelectorAll('#route-form input[type="checkbox"][value]:checked')].map((input) => input.value),
+              fixedSailID: Number(document.getElementById("route-sail").value),
+              mode: document.getElementById("route-mode").value,
+              requireRobustScenarios: document.getElementById("route-robust").checked,
+            }),
+          });
+          const body = await response.json();
+          if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+          drawRoute(body);
+          document.getElementById("route-form-panel").hidden = true;
+          console.info(`[ROUTE] Calcul réussi : ${body.route?.length || 0} point(s), destination atteinte=${body.destinationReached}`);
+        } catch (error) {
+          formError.textContent = error.message || "Le calcul a échoué.";
+          console.error("[ROUTE] Échec du calcul", error);
+        } finally {
+          setRouteCalculationState(false);
+          button.disabled = false;
+        }
+      });
+
+      void loadMapLibre();
+    </script>
+  </body>
+</html>
