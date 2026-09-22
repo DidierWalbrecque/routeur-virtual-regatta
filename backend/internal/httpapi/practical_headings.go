@@ -41,6 +41,7 @@ type positionRequest struct {
 type practicalHeadingsResponse struct {
 	Position    positionRequest              `json:"position"`
 	Destination positionRequest              `json:"destination"`
+	Reached     bool                         `json:"destinationReached"`
 	Candidates  []practicalCandidateResponse `json:"candidates"`
 	Isochrones  []isochroneFrontierResponse  `json:"isochrones"`
 	Route       []routePointResponse         `json:"route"`
@@ -56,6 +57,7 @@ type performanceResponse struct {
 	IsochroneMilliseconds float64 `json:"isochroneMilliseconds"`
 	CacheHits             int     `json:"cacheHits"`
 	CacheMisses           int     `json:"cacheMisses"`
+	IsochroneDurationMin  float64 `json:"isochroneDurationMinutes"`
 }
 
 const landGeoJSONPath = "../data/land/natural-earth-10m-land.geojson"
@@ -79,6 +81,25 @@ func calculationProfileFor(mode string) (calculationProfile, error) {
 	}
 }
 
+func adaptiveIsochroneDuration(distance navigation.NauticalMiles, requested time.Duration, maxSpeed polar.BoatSpeed) time.Duration {
+	if requested <= 0 || maxSpeed <= 0 || distance <= 0 {
+		return requested
+	}
+	const (
+		conservativeSpeedRatio = 0.6
+		minimumBuffer          = 60 * time.Minute
+	)
+	estimated := time.Duration(float64(distance) / (float64(maxSpeed) * conservativeSpeedRatio) * float64(time.Hour))
+	estimated += minimumBuffer
+	if estimated < minimumBuffer {
+		estimated = minimumBuffer
+	}
+	if estimated > requested {
+		return requested
+	}
+	return estimated
+}
+
 type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
 	Positions []positionRequest `json:"positions"`
@@ -90,6 +111,13 @@ type routePointResponse struct {
 	Sail     string          `json:"sail"`
 	Instant  time.Time       `json:"instant"`
 	Terminal bool            `json:"terminal"`
+}
+
+type availableRouteStep struct {
+	Position navigation.Position
+	Heading  navigation.Heading
+	Sail     string
+	Instant  time.Time
 }
 
 type practicalCandidateResponse struct {
@@ -240,7 +268,21 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 	}
 	isochroneStep := profile.IsochroneStep
 	isochroneStarted := time.Now()
-	layerCount := int(math.Ceil(time.Duration(payload.DurationMinutes*float64(time.Minute)).Minutes() / isochroneStep.Minutes()))
+	requestedDuration := time.Duration(payload.DurationMinutes * float64(time.Minute))
+	distance, err := navigation.DistanceBetween(position, destination)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "distance de destination impossible: "+err.Error())
+		return
+	}
+	calculationDuration := adaptiveIsochroneDuration(distance, requestedDuration, boatPolar.MaxSpeed)
+	// A land-constrained route may need a long detour even when the direct
+	// distance is short. Keep the requested horizon in that case so the search
+	// can continue around obstacles instead of producing a false final error.
+	if landConstraint != nil {
+		calculationDuration = requestedDuration
+	}
+	result.Performance.IsochroneDurationMin = calculationDuration.Minutes()
+	layerCount := int(math.Ceil(calculationDuration.Minutes() / isochroneStep.Minutes()))
 	if layerCount > 0 {
 		search, err := routing.BuildIsochroneSearch(request.Context(), weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
@@ -252,6 +294,7 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			writeJSONError(response, http.StatusBadRequest, "calcul des isochrones impossible: "+err.Error())
 			return
 		}
+		result.Reached = search.Reached
 		for _, frontier := range search.Frontiers {
 			layer := isochroneFrontierResponse{Instant: frontier.Instant, Positions: make([]positionRequest, 0, len(frontier.Nodes)), Contour: make([]positionRequest, 0)}
 			for _, node := range frontier.Nodes {
@@ -267,10 +310,19 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			}
 			result.Isochrones = append(result.Isochrones, layer)
 		}
-		bestRoute, err := search.ReconstructBestRoute()
-		if err == nil {
+		if !search.Reached {
+			availableSteps, routeErr := reconstructBestAvailableRoute(search)
+			if routeErr != nil {
+				writeJSONError(response, http.StatusBadRequest, "reconstruction de la meilleure route impossible: "+routeErr.Error())
+				return
+			}
+			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(search.Origin.Latitude), Longitude: float64(search.Origin.Longitude)}, Instant: search.StartedAt})
+			for _, routeStep := range availableSteps {
+				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Position.Latitude), Longitude: float64(routeStep.Position.Longitude)}, Heading: float64(routeStep.Heading), Sail: routeStep.Sail, Instant: routeStep.Instant})
+			}
+		} else if bestRoute, err := search.ReconstructBestRoute(); err == nil {
 			routeSteps := bestRoute.Steps
-			if len(routeSteps) > 0 {
+			if search.Reached && len(routeSteps) > 0 {
 				previousPosition := bestRoute.Origin
 				if len(routeSteps) > 1 {
 					previousPosition = routeSteps[len(routeSteps)-2].Node.Candidate.Step.NextPosition
@@ -289,30 +341,55 @@ func practicalHeadingsHandler(response http.ResponseWriter, request *http.Reques
 			for _, routeStep := range routeSteps {
 				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Instant: routeStep.Node.Candidate.Step.NextInstant})
 			}
-			lastPosition := bestRoute.Origin
-			lastInstant := bestRoute.StartedAt
-			if len(routeSteps) > 0 {
-				lastPosition = routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextPosition
-				lastInstant = routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextInstant
-			}
-			if lastPosition != destination {
-				finalSegment := routing.RouteSegment{From: lastPosition, To: destination, StartedAt: lastInstant, FinishedAt: lastInstant.Add(profile.IsochroneStep)}
-				allowed, constraintErr := landConstraint.Allows(request.Context(), finalSegment)
-				if constraintErr != nil {
-					writeJSONError(response, http.StatusBadRequest, "vérification de l’arrivée impossible: "+constraintErr.Error())
-					return
+			if search.Reached {
+				lastPosition := bestRoute.Origin
+				lastInstant := bestRoute.StartedAt
+				if len(routeSteps) > 0 {
+					lastPosition = routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextPosition
+					lastInstant = routeSteps[len(routeSteps)-1].Node.Candidate.Step.NextInstant
 				}
-				if !allowed {
-					writeJSONError(response, http.StatusBadRequest, "la dernière approche de la destination traverse une terre ou la côte")
-					return
+				if lastPosition != destination {
+					finalSegment := routing.RouteSegment{From: lastPosition, To: destination, StartedAt: lastInstant, FinishedAt: lastInstant.Add(profile.IsochroneStep)}
+					allowed, constraintErr := landConstraint.Allows(request.Context(), finalSegment)
+					if constraintErr != nil {
+						writeJSONError(response, http.StatusBadRequest, "vérification de l’arrivée impossible: "+constraintErr.Error())
+						return
+					}
+					if !allowed {
+						writeJSONError(response, http.StatusBadRequest, "la dernière approche de la destination traverse une terre ou la côte")
+						return
+					}
 				}
+				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
 			}
-			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
 		}
 		result.Performance.IsochroneMilliseconds = elapsedMilliseconds(isochroneStarted)
 	}
 	result.Performance.TotalMilliseconds = elapsedMilliseconds(totalStarted)
 	writeJSON(response, http.StatusOK, result)
+}
+
+func reconstructBestAvailableRoute(search routing.IsochroneSearch) ([]availableRouteStep, error) {
+	if len(search.Frontiers) == 0 {
+		return nil, fmt.Errorf("aucun front d’isochrone disponible")
+	}
+	steps := make([]availableRouteStep, len(search.Frontiers))
+	nodeIndex := 0
+	for frontierIndex := len(search.Frontiers) - 1; frontierIndex >= 0; frontierIndex-- {
+		frontier := search.Frontiers[frontierIndex]
+		if nodeIndex < 0 || nodeIndex >= len(frontier.Nodes) {
+			return nil, fmt.Errorf("nœud %d absent du front %d", nodeIndex, frontierIndex+1)
+		}
+		node := frontier.Nodes[nodeIndex]
+		steps[frontierIndex] = availableRouteStep{
+			Position: node.Candidate.Step.NextPosition,
+			Heading:  node.Candidate.Heading,
+			Sail:     node.Candidate.Step.BestSail.SailName,
+			Instant:  node.Candidate.Step.NextInstant,
+		}
+		nodeIndex = node.ParentIndex
+	}
+	return steps, nil
 }
 
 func routeStepPassesDestination(from, to, destination navigation.Position) (bool, error) {
