@@ -15,6 +15,10 @@ type IsochroneProgress struct {
 	CandidateCount  int
 	CellSize        navigation.NauticalMiles
 	Reached         bool
+	// Frontier is the completed frontier associated with this report. Its
+	// nodes are read-only for the reporter and allow streaming consumers to
+	// serialize the contour before the search continues.
+	Frontier IsochroneFrontier
 }
 
 // IsochroneProgressReporter receives one report for each completed frontier.

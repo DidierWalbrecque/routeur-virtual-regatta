@@ -10,7 +10,15 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import (
+    Flask,
+    Response,
+    jsonify,
+    render_template,
+    request,
+    send_from_directory,
+    stream_with_context,
+)
 
 
 DEFAULT_API_BASE_URL = "http://localhost:8080"
@@ -71,6 +79,26 @@ def create_app(api_base_url: str | None = None) -> Flask:
             )
         return jsonify(body), status
 
+    @app.post("/api/practical-headings/stream")
+    def stream_practical_headings():
+        payload = request.get_json(silent=True) or {}
+        app.logger.info("[ROUTE] Demande de calcul streaming reçue")
+        upstream, body, status = _open_go_stream(
+            app, "/api/practical-headings/stream", payload
+        )
+        if upstream is None:
+            return jsonify(body), status
+
+        return Response(
+            stream_with_context(_relay_go_stream(upstream)),
+            status=status,
+            headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+
     return app
 
 
@@ -97,6 +125,46 @@ def _call_go_api(app: Flask, path: str, payload: dict[str, Any]) -> tuple[Any, i
     except (urllib.error.URLError, TimeoutError, OSError) as error:
         app.logger.error("[API Go] Appel impossible vers %s : %s", path, error)
         return {"error": f"API Go indisponible : {error}"}, 502
+
+
+def _open_go_stream(
+    app: Flask, path: str, payload: dict[str, Any]
+) -> tuple[Any | None, Any, int]:
+    """Ouvre le flux Go et conserve la réponse ouverte pour le générateur Flask."""
+
+    url = f"{app.config['API_BASE_URL']}{path}"
+    body = json.dumps(payload).encode("utf-8")
+    http_request = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json", "Accept": "text/event-stream"},
+        method="POST",
+    )
+
+    try:
+        upstream = urllib.request.urlopen(
+            http_request, timeout=app.config["API_TIMEOUT_SECONDS"]
+        )
+        return upstream, None, upstream.status
+    except urllib.error.HTTPError as error:
+        app.logger.error("[API Go] Réponse HTTP %s pour %s", error.code, path)
+        return None, _decode_json(error.read()), error.code
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        app.logger.error("[API Go] Flux impossible vers %s : %s", path, error)
+        return None, {"error": f"API Go indisponible : {error}"}, 502
+
+
+def _relay_go_stream(upstream: Any):
+    """Relaye les octets SSE au navigateur sans attendre la fin du calcul Go."""
+
+    try:
+        while True:
+            chunk = upstream.read(16 * 1024)
+            if not chunk:
+                break
+            yield chunk
+    finally:
+        upstream.close()
 
 
 def _decode_json(raw_body: bytes) -> Any:

@@ -56,7 +56,7 @@ func cachedFileSignature(path string) (string, fileSignature, error) {
 	return cleanPath, fileSignature{size: info.Size(), modified: info.ModTime().UnixNano()}, nil
 }
 
-func loadCachedWeatherProvider(paths ...string) (*weather.GRIB2WeatherProvider, cacheLoadStats, error) {
+func loadCachedWeatherProvider(paths ...string) (weather.WeatherProvider, cacheLoadStats, error) {
 	if len(paths) == 0 {
 		return nil, cacheLoadStats{}, fmt.Errorf("weather: au moins un fichier GRIB2 est requis")
 	}

@@ -87,8 +87,11 @@
       let destinationMarker;
       let mapReady = false;
       let pendingRoute;
+      let pendingRouteShowsRoute = true;
       let latestWeatherFiles = [];
       let latestWeatherRun = "";
+      let activeRouteController;
+      const routeStreamModule = import("{{ url_for('static', filename='route_stream.js') }}");
 
       function initializeMap(maplibregl) {
         const map = new maplibregl.Map({
@@ -149,16 +152,21 @@
         navigationBounds = bounds;
         map.fitBounds(bounds, { padding: 80, maxZoom: 12 });
         mapReady = true;
-        if (pendingRoute) drawRoute(pendingRoute);
+        if (pendingRoute) renderRouteFrame(pendingRoute, pendingRouteShowsRoute);
         });
       }
 
       function drawRoute(result) {
+        renderRouteFrame(result, true);
+      }
+
+      function renderRouteFrame(result, showRoute) {
         pendingRoute = result;
+        pendingRouteShowsRoute = showRoute;
         if (!mapReady || !navigationMap || !maplibreApi) return;
         console.log(`[MAP] Route reçue : ${result.route?.length || 0} point(s), ${result.isochrones?.length || 0} front(s)`);
 
-        const route = result.route || [];
+        const route = showRoute ? (result.route || []) : [];
         const routeCoordinates = route.map((point) => [point.position.longitude, point.position.latitude]);
         const routeData = {
           type: "FeatureCollection",
@@ -239,6 +247,25 @@
         points.forEach((point) => bounds.extend([point.longitude, point.latitude]));
         navigationBounds = bounds;
         navigationMap.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 500 });
+      }
+
+      function beginRouteStream(start) {
+        const frame = {
+          position: start.position || departure,
+          destination: start.destination || destination,
+          route: [],
+          isochrones: [],
+        };
+        if (start.startedAt) frame.route.push({ position: frame.position, instant: start.startedAt });
+        renderRouteFrame(frame, false);
+      }
+
+      function addStreamFrontier(frontier) {
+        if (!pendingRoute) return;
+        pendingRoute.isochrones = [...(pendingRoute.isochrones || []), frontier];
+        renderRouteFrame(pendingRoute, false);
+        const status = document.getElementById("route-calculation-status");
+        if (status) status.querySelector("span:last-child").textContent = `Calcul de la route en cours… (${frontier.completedLayers}/${frontier.totalLayers})`;
       }
 
       function forwardContour(ring, direction) {
@@ -428,6 +455,9 @@
           console.warn("[ROUTE] Calcul impossible : actualisez d’abord les GRIB");
           return;
         }
+        if (activeRouteController) activeRouteController.abort();
+        const controller = new AbortController();
+        activeRouteController = controller;
         button.disabled = true;
         console.info(`[ROUTE] Calcul demandé avec le run ${latestWeatherRun}`);
         try {
@@ -437,7 +467,7 @@
           const headings = document.getElementById("route-headings").value.split(",").map((value) => Number(value.trim()));
           if (!headings.length || headings.some((heading) => !Number.isFinite(heading) || heading < 0 || heading >= 360)) throw new Error("Les caps doivent être compris entre 0 inclus et 360 exclus.");
           setRouteCalculationState(true);
-          const response = await fetch("/api/practical-headings", {
+          const response = await fetch("/api/practical-headings/stream", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -454,18 +484,39 @@
               mode: document.getElementById("route-mode").value,
               requireRobustScenarios: document.getElementById("route-robust").checked,
             }),
+            signal: controller.signal,
           });
-          const body = await response.json();
-          if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-          drawRoute(body);
+          const { readSSEStream } = await routeStreamModule;
+          await readSSEStream(response, (eventName, data) => {
+            if (activeRouteController !== controller) return;
+            if (eventName === "start") {
+              beginRouteStream(data);
+              return;
+            }
+            if (eventName === "frontier") {
+              addStreamFrontier(data);
+              return;
+            }
+            if (eventName === "complete") {
+              drawRoute(data);
+              return;
+            }
+            if (eventName === "cancelled") throw new Error(data.error || "Calcul annulé.");
+            if (eventName === "error") throw new Error(data.error || "Le calcul a échoué.");
+          });
           document.getElementById("route-form-panel").hidden = true;
-          console.info(`[ROUTE] Calcul réussi : ${body.route?.length || 0} point(s), destination atteinte=${body.destinationReached}`);
+          console.info("[ROUTE] Flux de calcul terminé");
         } catch (error) {
-          formError.textContent = error.message || "Le calcul a échoué.";
-          console.error("[ROUTE] Échec du calcul", error);
+          if (!(controller.signal.aborted && activeRouteController !== controller)) {
+            formError.textContent = error.message || "Le calcul a échoué.";
+            console.error("[ROUTE] Échec du calcul", error);
+          }
         } finally {
-          setRouteCalculationState(false);
-          button.disabled = false;
+          if (activeRouteController === controller) {
+            activeRouteController = null;
+            setRouteCalculationState(false);
+            button.disabled = false;
+          }
         }
       });
 

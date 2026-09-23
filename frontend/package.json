@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:stream": "node --test ../flaskapp/tests/route_stream.test.mjs"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
