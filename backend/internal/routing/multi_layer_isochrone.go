@@ -569,6 +569,7 @@ func BuildIsochroneSearch(
 				CandidateCount:  len(frontier.Nodes),
 				CellSize:        frontier.CellSize,
 				Reached:         search.Reached,
+				Frontier:        frontier,
 			})
 		}
 		if search.Reached {

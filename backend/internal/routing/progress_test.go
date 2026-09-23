@@ -89,6 +89,16 @@ func TestBuildIsochroneSearchReportsCompletedFrontiers(t *testing.T) {
 				frontier.CellSize,
 			)
 		}
+		if report.Frontier.Index != frontier.Index || len(report.Frontier.Nodes) != len(frontier.Nodes) {
+			t.Errorf(
+				"rapport %d : frontier = index %d avec %d nœud(s), attendu index %d avec %d",
+				index+1,
+				report.Frontier.Index,
+				len(report.Frontier.Nodes),
+				frontier.Index,
+				len(frontier.Nodes),
+			)
+		}
 		if report.Reached {
 			t.Errorf(
 				"rapport %d : destination déclarée atteinte",

@@ -17,6 +17,8 @@ class FlaskInterfaceTests(unittest.TestCase):
         self.assertIn('id="calculate-route"', page)
         self.assertIn('id="route-form-panel"', page)
         self.assertIn('id="route-start"', page)
+        self.assertIn("/static/route_stream.js", page)
+        self.assertIn("/api/practical-headings/stream", page)
 
     @patch("flaskapp.app._call_go_api")
     def test_weather_refresh_is_proxied(self, call_go_api):
@@ -53,6 +55,49 @@ class FlaskInterfaceTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.get_json()["destinationReached"])
         call_go_api.assert_called_once_with(ANY, "/api/practical-headings", payload)
+
+    @patch("flaskapp.app.urllib.request.urlopen")
+    def test_calculation_stream_is_relayed_without_decoding(self, urlopen):
+        class FakeUpstream:
+            status = 200
+
+            def __init__(self):
+                self.chunks = [
+                    b"event: start\ndata: {\"totalLayers\":2}\n\n",
+                    b"event: frontier\ndata: {\"completedLayers\":1}\n\n",
+                    b"event: complete\ndata: {\"destinationReached\":true}\n\n",
+                ]
+                self.closed = False
+
+            def read(self, _size):
+                return self.chunks.pop(0) if self.chunks else b""
+
+            def close(self):
+                self.closed = True
+
+        upstream = FakeUpstream()
+        urlopen.return_value = upstream
+        response = self.client.post(
+            "/api/practical-headings/stream",
+            json={"durationMinutes": 20},
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.content_type, "text/event-stream")
+        self.assertEqual(
+            response.get_data(),
+            b"".join(
+                [
+                    b"event: start\ndata: {\"totalLayers\":2}\n\n",
+                    b"event: frontier\ndata: {\"completedLayers\":1}\n\n",
+                    b"event: complete\ndata: {\"destinationReached\":true}\n\n",
+                ]
+            ),
+        )
+        self.assertTrue(upstream.closed)
+        request = urlopen.call_args.args[0]
+        self.assertEqual(request.full_url, "http://go-api.test/api/practical-headings/stream")
+        self.assertEqual(request.get_header("Accept"), "text/event-stream")
 
 
 if __name__ == "__main__":

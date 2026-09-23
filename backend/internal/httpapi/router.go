@@ -7,6 +7,7 @@ func NewHandler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /health", healthHandler)
 	mux.HandleFunc("POST /api/practical-headings", practicalHeadingsHandler)
+	mux.HandleFunc("POST /api/practical-headings/stream", practicalHeadingsStreamHandler)
 	mux.HandleFunc("POST /api/weather/refresh", weatherRefreshHandler)
 
 	return mux
