@@ -226,6 +226,7 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, "données terrestres indisponibles: "+err.Error())
 		return
 	}
+	arrivalLandConstraint := landConstraint
 	landConstraint, err = landConstraint.WithCoastalMargin(navigation.NauticalMiles(2))
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "marge côtière impossible: "+err.Error())
@@ -353,7 +354,9 @@ func runPracticalHeadings(
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
 			Owned: owned, HeadingSpacing: profile.HeadingSpacing, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
 			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: simulation.StaminaState{Level: 100},
-			Constraints: []routing.Constraint{landConstraint}, Progress: progressReporter,
+			Constraints:        []routing.Constraint{landConstraint},
+			ArrivalConstraints: []routing.Constraint{arrivalLandConstraint},
+			Progress:           progressReporter,
 		})
 		if err != nil {
 			if stream != nil {
@@ -428,7 +431,7 @@ func runPracticalHeadings(
 				}
 				if lastPosition != destination {
 					finalSegment := routing.RouteSegment{From: lastPosition, To: destination, StartedAt: lastInstant, FinishedAt: lastInstant.Add(profile.IsochroneStep)}
-					allowed, constraintErr := landConstraint.Allows(calculationContext, finalSegment)
+					allowed, constraintErr := arrivalLandConstraint.Allows(calculationContext, finalSegment)
 					if constraintErr != nil {
 						if stream != nil {
 							stream.fail(response, "vérification de l’arrivée impossible: "+constraintErr.Error(), constraintErr)

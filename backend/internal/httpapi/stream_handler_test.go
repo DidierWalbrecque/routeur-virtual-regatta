@@ -80,6 +80,7 @@ func TestPracticalHeadingsStreamEndpointEmitsProgressBeforeComplete(t *testing.T
 			StepDuration:  input.StepDuration,
 			Frontiers:     frontiers,
 			ArrivalRadius: input.ArrivalRadius,
+			Reached:       true,
 		}, nil
 	}
 
@@ -105,6 +106,92 @@ func TestPracticalHeadingsStreamEndpointEmitsProgressBeforeComplete(t *testing.T
 	}
 	if !strings.Contains(body, `"completedLayers":1`) || !strings.Contains(body, `"completedLayers":2`) {
 		t.Fatalf("progression absente: %q", body)
+	}
+}
+
+func TestPracticalHeadingsStreamEndpointCompletesWithBestAvailableRoute(t *testing.T) {
+	originalWeatherLoader := loadWeatherProviderForRequest
+	originalPolarLoader := loadPolarForRequest
+	originalLandLoader := loadLandForRequest
+	originalEvaluate := evaluatePracticalHeadings
+	originalBuild := buildIsochroneSearch
+	t.Cleanup(func() {
+		loadWeatherProviderForRequest = originalWeatherLoader
+		loadPolarForRequest = originalPolarLoader
+		loadLandForRequest = originalLandLoader
+		evaluatePracticalHeadings = originalEvaluate
+		buildIsochroneSearch = originalBuild
+	})
+
+	loadWeatherProviderForRequest = func(...string) (weather.WeatherProvider, cacheLoadStats, error) {
+		return nil, cacheLoadStats{}, nil
+	}
+	loadPolarForRequest = func(string) (*polar.Polar, bool, error) {
+		return &polar.Polar{MaxSpeed: 10}, false, nil
+	}
+	loadLandForRequest = func(string) (*land.GeoJSONConstraint, bool, error) {
+		constraint, err := land.DecodeGeoJSON(strings.NewReader(testLandGeoJSON))
+		return constraint, false, err
+	}
+	evaluatePracticalHeadings = func(
+		context.Context,
+		weather.WeatherProvider,
+		*polar.Polar,
+		routing.PracticalHeadingInput,
+	) ([]routing.PracticalHeadingCandidate, error) {
+		return nil, nil
+	}
+	buildIsochroneSearch = func(
+		_ context.Context,
+		_ weather.WeatherProvider,
+		_ *polar.Polar,
+		input routing.IsochroneSearchInput,
+	) (routing.IsochroneSearch, error) {
+		instant := input.Instant.Add(input.StepDuration)
+		frontier := streamTestFrontier(input.Position, instant, 1, -1)
+		if input.Progress != nil {
+			input.Progress(routing.IsochroneProgress{
+				CompletedLayers: 1,
+				TotalLayers:     1,
+				Instant:         frontier.Instant,
+				CandidateCount:  len(frontier.Nodes),
+				CellSize:        1,
+				Frontier:        frontier,
+			})
+		}
+		return routing.IsochroneSearch{
+			Origin:        input.Position,
+			Destination:   input.Destination,
+			StartedAt:     input.Instant,
+			StepDuration:  input.StepDuration,
+			Frontiers:     []routing.IsochroneFrontier{frontier},
+			ArrivalRadius: input.ArrivalRadius,
+			Reached:       false,
+		}, nil
+	}
+
+	payload := []byte(`{"weatherFiles":["fake"],"polarPath":"fake","position":{"latitude":-10,"longitude":-10},"destination":{"latitude":-10,"longitude":-9.9},"instant":"2026-09-05T07:30:00Z","durationMinutes":10,"stepMinutes":10,"headings":[0],"mode":"quick"}`)
+	request := httptest.NewRequest(http.MethodPost, "/api/practical-headings/stream", bytes.NewReader(payload))
+	request.Header.Set("Content-Type", "application/json")
+	response := httptest.NewRecorder()
+
+	NewHandler().ServeHTTP(response, request)
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("statut = %d, corps = %s", response.Code, response.Body.String())
+	}
+	body := response.Body.String()
+	if !strings.Contains(body, "event: complete\ndata:") {
+		t.Fatalf("événement complete absent: %q", body)
+	}
+	if strings.Contains(body, "event: error\ndata:") {
+		t.Fatalf("une route incomplète doit rester affichable: %q", body)
+	}
+	if !strings.Contains(body, `"destinationReached":false`) {
+		t.Fatalf("le statut destinationReached=false est absent: %q", body)
+	}
+	if !strings.Contains(body, `"route":[`) {
+		t.Fatalf("la meilleure route disponible est absente: %q", body)
 	}
 }
 
