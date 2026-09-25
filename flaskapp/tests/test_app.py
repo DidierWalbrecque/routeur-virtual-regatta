@@ -16,8 +16,11 @@ class FlaskInterfaceTests(unittest.TestCase):
         self.assertIn('id="map"', page)
         self.assertIn('id="calculate-route"', page)
         self.assertIn('id="route-form-panel"', page)
+        self.assertIn('id="show-route-details"', page)
+        self.assertIn('id="route-details-panel"', page)
         self.assertIn('id="route-start"', page)
         self.assertIn("/static/route_stream.js", page)
+        self.assertIn("/static/route_details.js", page)
         self.assertIn("/api/practical-headings/stream", page)
 
     @patch("flaskapp.app._call_go_api")

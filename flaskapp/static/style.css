@@ -85,6 +85,99 @@ body {
   transform: translateY(-50%);
 }
 
+.route-details-button {
+  position: fixed;
+  top: 20px;
+  right: 24px;
+  z-index: 3;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 18px;
+  border: 0;
+  border-radius: 22px;
+  color: #ffffff;
+  background: #6750a4;
+  box-shadow: 0 3px 6px #00000033, 0 6px 12px #00000024;
+  font: 600 14px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.route-details-button:hover {
+  background: #7f67be;
+}
+
+.route-details-button:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 3px;
+}
+
+.route-details-button .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.route-details-panel {
+  position: fixed;
+  top: 50%;
+  right: 20px;
+  left: auto;
+  z-index: 6;
+  width: min(900px, calc(100% - 40px));
+  max-height: calc(100% - 40px);
+  overflow-y: auto;
+  padding: 20px;
+  border-radius: 16px;
+  color: #1d1b20;
+  background: #fffbfe;
+  box-shadow: 0 8px 24px #0000003d;
+  font: 14px system-ui, sans-serif;
+  transform: translateY(-50%);
+}
+
+.route-details-status,
+.route-details-summary {
+  margin: 8px 0;
+}
+
+.route-details-status {
+  font-weight: 700;
+}
+
+.route-details-status.reached {
+  color: #087f5b;
+}
+
+.route-details-status.partial {
+  color: #9a6700;
+}
+
+.route-details-summary {
+  color: #625b71;
+}
+
+.route-details-table-wrapper {
+  overflow-x: auto;
+}
+
+.route-details-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.route-details-table th,
+.route-details-table td {
+  padding: 9px 8px;
+  border-bottom: 1px solid #e6e1e8;
+  text-align: left;
+}
+
+.route-details-table th {
+  color: #49454f;
+  background: #f3edf7;
+  font-weight: 700;
+}
+
 .route-form-header {
   display: flex;
   align-items: center;
@@ -261,5 +354,17 @@ body {
     width: calc(100% - 20px);
     max-height: calc(100% - 20px);
     transform: translateY(-50%);
+  }
+
+  .route-details-button {
+    top: 16px;
+    right: 16px;
+  }
+
+  .route-details-panel {
+    right: 10px;
+    left: 10px;
+    width: calc(100% - 20px);
+    max-height: calc(100% - 20px);
   }
 }
