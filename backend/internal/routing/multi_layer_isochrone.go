@@ -34,7 +34,10 @@ type IsochroneSearchInput struct {
 	StaminaRecoveryRules  *simulation.StaminaRecoveryRules
 	Gates                 []CourseGate
 	Constraints           []Constraint
-	Progress              IsochroneProgressReporter
+	// ArrivalConstraints are applied only to the final segment to the
+	// destination. When nil, Constraints are used for backward compatibility.
+	ArrivalConstraints []Constraint
+	Progress           IsochroneProgressReporter
 }
 
 // IsochroneNode represents one retained position and its parent in the
@@ -191,6 +194,14 @@ func BuildIsochroneSearch(
 			)
 		}
 	}
+	for index, constraint := range input.ArrivalConstraints {
+		if constraint == nil {
+			return IsochroneSearch{}, fmt.Errorf(
+				"routing: construction des isochrones impossible: contrainte d'arrivée %d absente",
+				index+1,
+			)
+		}
+	}
 
 	headings, err := GenerateHeadingGrid(input.HeadingSpacing)
 	if err != nil {
@@ -304,6 +315,10 @@ func BuildIsochroneSearch(
 		Gates:          append([]CourseGate(nil), input.Gates...),
 		MaxCandidates:  input.MaxCandidates,
 		Frontiers:      make([]IsochroneFrontier, 0, input.LayerCount),
+	}
+	arrivalConstraints := input.ArrivalConstraints
+	if arrivalConstraints == nil {
+		arrivalConstraints = input.Constraints
 	}
 	parentStates := []isochroneParentState{initialParent}
 	currentInstant := input.Instant
@@ -502,7 +517,6 @@ func BuildIsochroneSearch(
 				layerIndex+1,
 			)
 		}
-
 		nodes, effectiveCellSize, err := pruneIsochroneNodesToLimit(
 			input.Position,
 			expanded,
@@ -538,7 +552,7 @@ func BuildIsochroneSearch(
 					StartedAt:  nodes[index].State.Instant,
 					FinishedAt: nodes[index].State.Instant.Add(input.StepDuration),
 				}
-				allowed, constraintErr := segmentAllowed(ctx, input.Constraints, finalSegment)
+				allowed, constraintErr := segmentAllowed(ctx, arrivalConstraints, finalSegment)
 				if constraintErr != nil {
 					return search, fmt.Errorf(
 						"routing: vérification de l'approche finale à la couche %d impossible: %w",

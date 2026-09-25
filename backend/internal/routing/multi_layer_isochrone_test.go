@@ -358,6 +358,50 @@ func TestBuildIsochroneSearchStopsAtArrivalRadius(t *testing.T) {
 	}
 }
 
+func TestBuildIsochroneSearchUsesArrivalConstraintsForFinalSegment(t *testing.T) {
+	arrivalBlocked := ConstraintFunc(func(
+		_ context.Context,
+		segment RouteSegment,
+	) (bool, error) {
+		return segment.To != (navigation.Position{Longitude: 0.13}), nil
+	})
+	arrivalAllowed := ConstraintFunc(func(
+		context.Context,
+		RouteSegment,
+	) (bool, error) {
+		return true, nil
+	})
+
+	search, err := BuildIsochroneSearch(
+		context.Background(),
+		&staticWeatherProvider{
+			wind: navigation.Wind{Speed: 5, Direction: 180},
+		},
+		testPolar(),
+		IsochroneSearchInput{
+			Position:           navigation.Position{},
+			Destination:        navigation.Position{Longitude: 0.13},
+			Instant:            time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			StepDuration:       time.Hour,
+			LayerCount:         5,
+			HeadingSpacing:     90,
+			CellSize:           1,
+			ArrivalRadius:      0.5,
+			Constraints:        []Constraint{arrivalBlocked},
+			ArrivalConstraints: []Constraint{arrivalAllowed},
+		},
+	)
+	if err != nil {
+		t.Fatalf("construction refusée: %v", err)
+	}
+	if !search.Reached {
+		t.Fatal("la destination devait être atteinte avec la contrainte d’arrivée dédiée")
+	}
+	if len(search.Frontiers) != 1 {
+		t.Fatalf("fronts = %d, attendu 1", len(search.Frontiers))
+	}
+}
+
 func TestIsochroneSearchBestRejectsEmptySearch(t *testing.T) {
 	if _, ok := (IsochroneSearch{}).Best(); ok {
 		t.Fatal("une recherche vide ne doit pas avoir de meilleur nœud")
