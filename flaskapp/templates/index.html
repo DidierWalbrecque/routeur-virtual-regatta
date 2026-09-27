@@ -24,6 +24,17 @@
     <button id="recenter-map" class="material-fab" type="button" title="Recentrer la carte" aria-label="Recentrer la carte">
       <span class="material-symbols-outlined" aria-hidden="true">my_location</span>
     </button>
+    <button id="show-route-details" class="route-details-button" type="button" hidden aria-controls="route-details-panel" aria-expanded="false">
+      <span class="material-symbols-outlined" aria-hidden="true">route</span>
+      Détails de la route
+    </button>
+    <aside id="route-details-panel" class="route-details-panel" hidden role="dialog" aria-modal="true" aria-labelledby="route-details-title">
+      <div class="route-form-header">
+        <h2 id="route-details-title">Détails de la route</h2>
+        <button id="close-route-details" class="close-button" type="button" title="Fermer" aria-label="Fermer">×</button>
+      </div>
+      <div id="route-details-content"></div>
+    </aside>
     <aside id="route-form-panel" class="route-form-panel" hidden>
       <div class="route-form-header">
         <h2>Calculer une route</h2>
@@ -91,7 +102,9 @@
       let latestWeatherFiles = [];
       let latestWeatherRun = "";
       let activeRouteController;
+      let latestRouteResult;
       const routeStreamModule = import("{{ url_for('static', filename='route_stream.js') }}");
+      const routeDetailsModule = import("{{ url_for('static', filename='route_details.js') }}");
 
       function initializeMap(maplibregl) {
         const map = new maplibregl.Map({
@@ -157,7 +170,43 @@
       }
 
       function drawRoute(result) {
+        setRouteDetailsResult(result);
         renderRouteFrame(result, true);
+      }
+
+      function setRouteDetailsResult(result) {
+        latestRouteResult = result;
+        const button = document.getElementById("show-route-details");
+        if (!button) return;
+        button.hidden = !result || !Array.isArray(result.route) || result.route.length === 0;
+        button.setAttribute("aria-expanded", "false");
+      }
+
+      function resetRouteDetails() {
+        latestRouteResult = undefined;
+        const button = document.getElementById("show-route-details");
+        const panel = document.getElementById("route-details-panel");
+        if (button) {
+          button.hidden = true;
+          button.setAttribute("aria-expanded", "false");
+        }
+        if (panel) panel.hidden = true;
+      }
+
+      async function showRouteDetails() {
+        if (!latestRouteResult) return;
+        const { renderRouteDetails } = await routeDetailsModule;
+        renderRouteDetails(document.getElementById("route-details-content"), latestRouteResult);
+        const panel = document.getElementById("route-details-panel");
+        const button = document.getElementById("show-route-details");
+        panel.hidden = false;
+        button.setAttribute("aria-expanded", "true");
+        document.getElementById("close-route-details").focus();
+      }
+
+      function hideRouteDetails() {
+        document.getElementById("route-details-panel").hidden = true;
+        document.getElementById("show-route-details").setAttribute("aria-expanded", "false");
       }
 
       function renderRouteFrame(result, showRoute) {
@@ -250,6 +299,7 @@
       }
 
       function beginRouteStream(start) {
+        resetRouteDetails();
         const frame = {
           position: start.position || departure,
           destination: start.destination || destination,
@@ -313,6 +363,7 @@
 
       function updateMapFromForm() {
         if (!mapReady || !navigationMap || !maplibreApi) return;
+        resetRouteDetails();
         const position = parseVirtualRegattaPosition(document.getElementById("route-start").value);
         const formDestination = parseVirtualRegattaPosition(document.getElementById("route-destination").value);
         if (!position || !formDestination) {
@@ -434,6 +485,11 @@
       document.getElementById("close-route-form").addEventListener("click", () => {
         document.getElementById("route-form-panel").hidden = true;
       });
+      document.getElementById("show-route-details").addEventListener("click", showRouteDetails);
+      document.getElementById("close-route-details").addEventListener("click", hideRouteDetails);
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && !document.getElementById("route-details-panel").hidden) hideRouteDetails();
+      });
 
       document.getElementById("route-start").addEventListener("change", updateMapFromForm);
       document.getElementById("route-destination").addEventListener("change", updateMapFromForm);
@@ -456,6 +512,7 @@
           return;
         }
         if (activeRouteController) activeRouteController.abort();
+        resetRouteDetails();
         const controller = new AbortController();
         activeRouteController = controller;
         button.disabled = true;
