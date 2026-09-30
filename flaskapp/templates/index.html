@@ -44,14 +44,29 @@
         <label>Position actuelle Virtual Regatta
           <input id="route-start" required value="13°N 07'16&quot; - 121°E 35'12&quot;">
         </label>
+        <label class="form-check"><input id="route-use-vr-state" type="checkbox" checked> Utiliser la position, la stamina et les options reçues de Virtual Regatta</label>
+        <p id="route-vr-state-status" class="form-hint">État Virtual Regatta : lecture en cours…</p>
+        <section id="route-checkpoints-panel" aria-labelledby="route-checkpoints-title">
+          <h3 id="route-checkpoints-title">Portes restantes</h3>
+          <select id="route-checkpoints-list" aria-label="Portes restantes">
+            <option value="" selected>Chargement des portes…</option>
+          </select>
+        </section>
         <label>Destination Virtual Regatta
           <input id="route-destination" required value="13°N 10'16&quot; - 121°E 20'12&quot;">
         </label>
         <label>Départ (heure locale, JJ/MM/AAAA HH:MM)
-          <input id="route-instant" required value="22/09/2026 00:00" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}">
+          <input id="route-instant" required value="" pattern="\d{2}/\d{2}/\d{4} \d{2}:\d{2}">
         </label>
         <label>Polaire
-          <input id="route-polar" required value="../data/polars/ultim_bp_11.json">
+          <select id="route-polar" required>
+            {% for polar in polar_options %}
+              <option value="{{ polar.value }}"{% if polar.value == default_polar %} selected{% endif %}>{{ polar.label }}</option>
+            {% endfor %}
+            {% if not polar_options %}
+              <option value="{{ default_polar }}" selected>{{ default_polar }}</option>
+            {% endif %}
+          </select>
         </label>
         <div class="form-grid">
           <label>Durée (min)
@@ -103,8 +118,21 @@
       let latestWeatherRun = "";
       let activeRouteController;
       let latestRouteResult;
+      let vrStateRefreshTimer;
+      let latestVirtualRegattaState;
+      let virtualRegattaCheckpointKey = "";
+      const virtualRegattaCheckpointCache = new Map();
+      const routeInstantInput = document.getElementById("route-instant");
       const routeStreamModule = import("{{ url_for('static', filename='route_stream.js') }}");
       const routeDetailsModule = import("{{ url_for('static', filename='route_details.js') }}");
+
+      function setCurrentLocalDateTime() {
+        const now = new Date();
+        const pad = (value) => String(value).padStart(2, "0");
+        routeInstantInput.value = `${pad(now.getDate())}/${pad(now.getMonth() + 1)}/${now.getFullYear()} ${pad(now.getHours())}:${pad(now.getMinutes())}`;
+      }
+
+      setCurrentLocalDateTime();
 
       function initializeMap(maplibregl) {
         const map = new maplibregl.Map({
@@ -158,6 +186,80 @@
               "circle-stroke-width": 3,
             },
           });
+          map.addSource("vr-checkpoints", {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+          });
+          map.addLayer({
+            id: "vr-checkpoint-lines",
+            type: "line",
+            source: "vr-checkpoints",
+            filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "rhumb"], false]],
+            paint: {
+              "line-color": ["match", ["get", "side"], "stbd", "#2f9e44", "port", "#d9480f", "#7048e8"],
+              "line-width": 3,
+              "line-opacity": 0.9,
+              "line-dasharray": [1, 0],
+            },
+          });
+          map.addLayer({
+            id: "vr-checkpoint-rhumb-lines",
+            type: "line",
+            source: "vr-checkpoints",
+            filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "rhumb"], true]],
+            paint: {
+              "line-color": "#7048e8",
+              "line-width": 3,
+              "line-opacity": 0.9,
+              "line-dasharray": [2, 2],
+            },
+          });
+          map.addLayer({
+            id: "vr-checkpoint-marks",
+            type: "circle",
+            source: "vr-checkpoints",
+            filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "mark"]],
+            paint: {
+              "circle-radius": 7,
+              "circle-color": ["match", ["get", "mark"], "start", "#2f9e44", "end", "#e03131", "#7048e8"],
+              "circle-stroke-color": "#ffffff",
+              "circle-stroke-width": 2,
+            },
+          });
+          map.addLayer({
+            id: "vr-checkpoint-mark-labels",
+            type: "symbol",
+            source: "vr-checkpoints",
+            filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "mark"]],
+            layout: {
+              "text-field": ["get", "markLabel"],
+              "text-size": 10,
+              "text-allow-overlap": true,
+            },
+            paint: {
+              "text-color": "#ffffff",
+              "text-halo-color": "#212529",
+              "text-halo-width": 1,
+            },
+          });
+          map.addLayer({
+            id: "vr-checkpoint-labels",
+            type: "symbol",
+            source: "vr-checkpoints",
+            filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
+            layout: {
+              "text-field": ["get", "label"],
+              "text-size": 12,
+              "text-offset": [0, -1.2],
+              "text-anchor": "bottom",
+              "text-allow-overlap": true,
+            },
+            paint: {
+              "text-color": "#7048e8",
+              "text-halo-color": "#ffffff",
+              "text-halo-width": 2,
+            },
+          });
 
         const bounds = new maplibregl.LngLatBounds();
         bounds.extend([departure.longitude, departure.latitude]);
@@ -165,8 +267,138 @@
         navigationBounds = bounds;
         map.fitBounds(bounds, { padding: 80, maxZoom: 12 });
         mapReady = true;
+        if (latestVirtualRegattaState) renderVirtualRegattaCheckpoints(latestVirtualRegattaState);
         if (pendingRoute) renderRouteFrame(pendingRoute, pendingRouteShowsRoute);
         });
+      }
+
+      function virtualRegattaCheckpointFeatures(state) {
+        return (state?.checkpoints || []).filter((checkpoint) => isVirtualRegattaCheckpointUsable(state, checkpoint)).flatMap((checkpoint, index) => {
+          const start = checkpoint?.start;
+          const end = checkpoint?.end;
+          if (![start, end].every((point) => point && Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude)))) return [];
+          const group = checkpoint.group ?? index + 1;
+          const id = checkpoint.id ?? index + 1;
+          const name = checkpoint.name || checkpoint.display || "Porte";
+          const side = checkpoint.rhumb ? "any" : String(checkpoint.side || "").toLowerCase();
+          const sideLabel = checkpoint.rhumb ? "dans les deux sens" : side === "stbd" ? "tribord" : side === "port" ? "bâbord" : "sens libre";
+          const properties = {
+            checkpoint: `${group}.${id}`,
+            label: `Porte ${group}.${id} — ${name}`,
+            name,
+            side,
+            sideLabel,
+            rhumb: checkpoint.rhumb === true,
+          };
+          const midpoint = {
+            longitude: (Number(start.longitude) + Number(end.longitude)) / 2,
+            latitude: (Number(start.latitude) + Number(end.latitude)) / 2,
+          };
+          return [
+            {
+              type: "Feature",
+              properties,
+              geometry: {
+                type: "LineString",
+                coordinates: [
+                  [Number(start.longitude), Number(start.latitude)],
+                  [Number(end.longitude), Number(end.latitude)],
+                ],
+              },
+            },
+            {
+              type: "Feature",
+              properties: { ...properties, kind: "label", label: `P${group}.${id} — ${name}` },
+              geometry: { type: "Point", coordinates: [midpoint.longitude, midpoint.latitude] },
+            },
+            {
+              type: "Feature",
+              properties: { ...properties, kind: "mark", mark: "start", markLabel: "D" },
+              geometry: { type: "Point", coordinates: [Number(start.longitude), Number(start.latitude)] },
+            },
+            {
+              type: "Feature",
+              properties: { ...properties, kind: "mark", mark: "end", markLabel: "A" },
+              geometry: { type: "Point", coordinates: [Number(end.longitude), Number(end.latitude)] },
+            },
+          ];
+        });
+      }
+
+      function isVirtualRegattaCheckpointPassed(state, checkpoint) {
+        const group = Number(checkpoint?.group);
+        return Number.isInteger(group) && group > 0 && state?.gateGroupCounters?.[group - 1] === true;
+      }
+
+      function isVirtualRegattaCheckpointUsable(state, checkpoint) {
+        return !isVirtualRegattaCheckpointPassed(state, checkpoint) && checkpoint?.onLand !== true;
+      }
+
+      function cacheVirtualRegattaCheckpoints(state) {
+        (state?.checkpoints || []).forEach((checkpoint, index) => {
+          const group = checkpoint.group ?? index + 1;
+          const id = checkpoint.id ?? index + 1;
+          virtualRegattaCheckpointCache.set(`${group}.${id}`, {
+            start: checkpoint.start,
+            end: checkpoint.end,
+          });
+        });
+      }
+
+      function renderVirtualRegattaCheckpointList(state) {
+        const list = document.getElementById("route-checkpoints-list");
+        if (!list) return;
+        const previousValue = list.value;
+        cacheVirtualRegattaCheckpoints(state);
+        list.replaceChildren();
+        const checkpoints = (state?.checkpoints || []).filter((checkpoint) => isVirtualRegattaCheckpointUsable(state, checkpoint));
+        if (checkpoints.length === 0) {
+          const empty = document.createElement("option");
+          empty.value = "";
+          empty.selected = true;
+          empty.textContent = "Aucune porte maritime restante reçue.";
+          list.appendChild(empty);
+          return;
+        }
+        const placeholder = document.createElement("option");
+        placeholder.value = "";
+        placeholder.textContent = "Choisir une porte…";
+        placeholder.disabled = true;
+        placeholder.selected = !previousValue;
+        list.appendChild(placeholder);
+        checkpoints.forEach((checkpoint, index) => {
+          const item = document.createElement("option");
+          const group = checkpoint.group ?? index + 1;
+          const id = checkpoint.id ?? index + 1;
+          const name = checkpoint.name || checkpoint.display || "Porte";
+          const cached = virtualRegattaCheckpointCache.get(`${group}.${id}`) || checkpoint;
+          item.value = `${group}.${id}`;
+          item.textContent = `P${group}.${id} — ${name}`;
+          item.title = `Départ : ${formatVirtualRegattaPosition(cached.start)}\nArrivée : ${formatVirtualRegattaPosition(cached.end)}`;
+          if (item.value === previousValue) item.selected = true;
+          list.appendChild(item);
+        });
+      }
+
+      function renderVirtualRegattaCheckpoints(state, fitMap = true) {
+        latestVirtualRegattaState = state;
+        if (!mapReady || !navigationMap) return;
+        const features = virtualRegattaCheckpointFeatures(state);
+        const source = navigationMap.getSource("vr-checkpoints");
+        if (source) source.setData({ type: "FeatureCollection", features });
+        const coordinates = features
+          .filter((feature) => feature.geometry.type === "LineString")
+          .flatMap((feature) => feature.geometry.coordinates);
+        const nextKey = JSON.stringify(coordinates);
+        if (fitMap && nextKey !== virtualRegattaCheckpointKey && coordinates.length > 0) {
+          const bounds = new maplibreApi.LngLatBounds();
+          coordinates.forEach((coordinate) => bounds.extend(coordinate));
+          if (state?.position) bounds.extend([state.position.longitude, state.position.latitude]);
+          navigationBounds = bounds;
+          navigationMap.fitBounds(bounds, { padding: 80, maxZoom: 10, duration: 500 });
+        }
+        virtualRegattaCheckpointKey = nextKey;
+        console.info(`[MAP] Portes Virtual Regatta affichées : ${features.filter((feature) => feature.geometry.type === "LineString").length}`);
       }
 
       function drawRoute(result) {
@@ -361,6 +593,68 @@
         return { latitude: latitudeHemisphere.toUpperCase() === "S" ? -latitude : latitude, longitude: longitudeHemisphere.toUpperCase() === "W" ? -longitude : longitude };
       }
 
+      function formatVirtualRegattaCoordinate(value, isLatitude) {
+        const absolute = Math.abs(Number(value));
+        let degrees = Math.floor(absolute);
+        let minutesValue = (absolute - degrees) * 60;
+        let minutes = Math.floor(minutesValue);
+        let seconds = Math.round((minutesValue - minutes) * 60);
+        if (seconds >= 60) {
+          seconds = 0;
+          minutes += 1;
+        }
+        if (minutes >= 60) {
+          minutes = 0;
+          degrees += 1;
+        }
+        const hemisphere = isLatitude
+          ? (Number(value) < 0 ? "S" : "N")
+          : (Number(value) < 0 ? "W" : "E");
+        const degreeText = isLatitude ? String(degrees) : String(degrees).padStart(3, "0");
+        return degreeText + "°" + hemisphere + " " + String(minutes).padStart(2, "0") + "'" + String(seconds).padStart(2, "0") + String.fromCharCode(34);
+      }
+
+      function formatVirtualRegattaPosition(position) {
+        if (!position || !Number.isFinite(Number(position.latitude)) || !Number.isFinite(Number(position.longitude))) return "";
+        return formatVirtualRegattaCoordinate(position.latitude, true) + " - " + formatVirtualRegattaCoordinate(position.longitude, false);
+      }
+
+      async function refreshVirtualRegattaState() {
+        const status = document.getElementById("route-vr-state-status");
+        try {
+          const response = await fetch("/api/vr/state", { cache: "no-store" });
+          const state = await response.json();
+          if (!response.ok) throw new Error(state.error || "HTTP " + response.status);
+          renderVirtualRegattaCheckpointList(state);
+          renderVirtualRegattaCheckpoints(state);
+          const formattedPosition = formatVirtualRegattaPosition(state.position);
+          if (formattedPosition) {
+            document.getElementById("route-start").value = formattedPosition;
+          }
+          const options = new Set((state.options || []).map((option) => String(option).toLowerCase().replace(/[_ -]/g, "")));
+          const optionAliases = {
+            light: ["light"],
+            heavy: ["heavy"],
+            code0: ["code0", "codezero", "reach"],
+            foils: ["foil", "foils"],
+            hull_polish: ["hull", "hullpolish"],
+            pro_winches: ["winch", "winches", "prowinches"],
+          };
+          document.querySelectorAll('#route-form input[type="checkbox"][value]').forEach((input) => {
+            const aliases = optionAliases[input.value] || [input.value];
+            input.checked = aliases.some((alias) => options.has(alias));
+          });
+          const stamina = state.stamina == null ? "inconnue" : Number(state.stamina).toFixed(1) + " %";
+          const remainingCheckpoints = (state.checkpoints || []).filter((checkpoint) => isVirtualRegattaCheckpointUsable(state, checkpoint));
+          status.textContent = "État VR reçu : stamina " + stamina + ", position actualisée" +
+            ", " + remainingCheckpoints.length + " porte(s) restante(s)" +
+            (state.updatedAt ? ", mise à jour " + new Date(Number(state.updatedAt)).toLocaleTimeString() : "") + ".";
+        } catch (error) {
+          status.textContent = "État VR indisponible : " + error.message;
+          console.warn("[VR STATE] Lecture impossible", error);
+        }
+      }
+
       function updateMapFromForm() {
         if (!mapReady || !navigationMap || !maplibreApi) return;
         resetRouteDetails();
@@ -467,7 +761,6 @@
           if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
           latestWeatherFiles = body.files || [];
           latestWeatherRun = body.run || "";
-          document.getElementById("route-instant").value = runToLocal(latestWeatherRun) || document.getElementById("route-instant").value;
           document.getElementById("route-weather-status").textContent = `${latestWeatherFiles.length} fichier(s) disponible(s), run ${latestWeatherRun}.`;
           console.info(`[GRIB] Actualisation réussie : run ${body.run}, ${body.files.length} fichier(s), ${body.removedFiles?.length || 0} ancien(s) supprimé(s)`);
         } catch (error) {
@@ -479,11 +772,16 @@
 
       document.getElementById("calculate-route").addEventListener("click", () => {
         document.getElementById("route-form-panel").hidden = false;
+        refreshVirtualRegattaState();
+        clearInterval(vrStateRefreshTimer);
+        vrStateRefreshTimer = setInterval(refreshVirtualRegattaState, 10000);
         document.getElementById("route-start").focus();
       });
 
       document.getElementById("close-route-form").addEventListener("click", () => {
         document.getElementById("route-form-panel").hidden = true;
+        clearInterval(vrStateRefreshTimer);
+        vrStateRefreshTimer = undefined;
       });
       document.getElementById("show-route-details").addEventListener("click", showRouteDetails);
       document.getElementById("close-route-details").addEventListener("click", hideRouteDetails);
@@ -493,6 +791,14 @@
 
       document.getElementById("route-start").addEventListener("change", updateMapFromForm);
       document.getElementById("route-destination").addEventListener("change", updateMapFromForm);
+      document.getElementById("route-checkpoints-list").addEventListener("change", (event) => {
+        const checkpoint = virtualRegattaCheckpointCache.get(event.currentTarget.value);
+        if (!checkpoint?.start) return;
+        const destinationInput = document.getElementById("route-destination");
+        destinationInput.value = formatVirtualRegattaPosition(checkpoint.start);
+        console.info("[ROUTE] Destination définie sur le départ de la porte", event.currentTarget.value);
+        updateMapFromForm();
+      });
       ["route-start", "route-destination"].forEach((id) => {
         document.getElementById(id).addEventListener("input", () => {
           const position = parseVirtualRegattaPosition(document.getElementById("route-start").value);
@@ -540,6 +846,7 @@
               fixedSailID: Number(document.getElementById("route-sail").value),
               mode: document.getElementById("route-mode").value,
               requireRobustScenarios: document.getElementById("route-robust").checked,
+              useVirtualRegattaState: document.getElementById("route-use-vr-state").checked,
             }),
             signal: controller.signal,
           });
@@ -577,6 +884,7 @@
         }
       });
 
+      void refreshVirtualRegattaState();
       void loadMapLibre();
     </script>
   </body>

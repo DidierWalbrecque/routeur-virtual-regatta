@@ -5,12 +5,32 @@ import "net/http"
 // NewHandler construit le gestionnaire HTTP de l'application.
 func NewHandler() http.Handler {
 	mux := http.NewServeMux()
+	vrState := newVRStateStore()
 	mux.HandleFunc("GET /health", healthHandler)
-	mux.HandleFunc("POST /api/practical-headings", practicalHeadingsHandler)
-	mux.HandleFunc("POST /api/practical-headings/stream", practicalHeadingsStreamHandler)
+	mux.HandleFunc("POST /api/practical-headings", func(response http.ResponseWriter, request *http.Request) {
+		runPracticalHeadings(response, request, nil, vrState)
+	})
+	mux.HandleFunc("POST /api/practical-headings/stream", func(response http.ResponseWriter, request *http.Request) {
+		runPracticalHeadings(response, request, &practicalHeadingsStream{}, vrState)
+	})
 	mux.HandleFunc("POST /api/weather/refresh", weatherRefreshHandler)
+	mux.HandleFunc("POST /api/vr/state", vrState.post)
+	mux.HandleFunc("GET /api/vr/state", vrState.get)
 
-	return mux
+	return withCORS(mux)
+}
+
+func withCORS(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Access-Control-Allow-Origin", "*")
+		response.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		response.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		if request.Method == http.MethodOptions {
+			response.WriteHeader(http.StatusNoContent)
+			return
+		}
+		next.ServeHTTP(response, request)
+	})
 }
 
 // healthHandler indique que l'API fonctionne.

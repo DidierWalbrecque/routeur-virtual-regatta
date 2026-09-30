@@ -188,8 +188,8 @@ func TestBuildIsochroneSearchCanBeCanceledFromProgress(t *testing.T) {
 			len(search.Frontiers),
 		)
 	}
-	if provider.calls != 4 {
-		t.Errorf("appels météo = %d, attendus 4", provider.calls)
+	if provider.calls != 1 {
+		t.Errorf("appels météo = %d, attendus 1", provider.calls)
 	}
 }
 

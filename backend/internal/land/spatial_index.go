@@ -25,6 +25,21 @@ func newPolygonSpatialIndex(polygons []polygon) polygonSpatialIndex {
 		if !ok {
 			continue
 		}
+		polygons[polygonIndex].minLongitude = minLongitude
+		polygons[polygonIndex].maxLongitude = maxLongitude
+		polygons[polygonIndex].minLatitude = minLatitude
+		polygons[polygonIndex].maxLatitude = maxLatitude
+		if len(value.rings) > 0 && len(value.rings[0]) > 0 {
+			polygons[polygonIndex].referenceLongitude = value.rings[0][0].longitude
+			polygons[polygonIndex].unwrappedRings = make([][]point, len(value.rings))
+			for ringIndex, ring := range value.rings {
+				polygons[polygonIndex].unwrappedRings[ringIndex] = unwrapRing(
+					ring,
+					polygons[polygonIndex].referenceLongitude,
+				)
+			}
+		}
+		polygons[polygonIndex].boundsReady = true
 		for _, cell := range cellsForBounds(
 			minLongitude,
 			maxLongitude,
@@ -95,6 +110,9 @@ func (constraint *GeoJSONConstraint) candidatePolygonIndices(
 func polygonBounds(
 	value polygon,
 ) (float64, float64, float64, float64, bool) {
+	if value.boundsReady {
+		return value.minLongitude, value.maxLongitude, value.minLatitude, value.maxLatitude, true
+	}
 	if len(value.rings) == 0 || len(value.rings[0]) == 0 {
 		return 0, 0, 0, 0, false
 	}

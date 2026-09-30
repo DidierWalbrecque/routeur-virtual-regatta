@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>VR State Lite</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <h1>VR State Lite</h1>
+      <p id="status" class="muted">Aucune donnée reçue.</p>
+      <dl id="state" hidden>
+        <dt>Bateau</dt><dd id="display-name">—</dd>
+        <dt>Course</dt><dd id="race">—</dd>
+        <dt>Position</dt><dd id="position">—</dd>
+        <dt>Stamina</dt><dd id="stamina">—</dd>
+        <dt>Options</dt><dd id="options">—</dd>
+        <dt>Voiles disponibles</dt><dd id="sails">—</dd>
+        <dt>Cap / vitesse</dt><dd id="navigation">—</dd>
+        <dt>Voile</dt><dd id="sail">—</dd>
+        <dt>Portes</dt><dd id="checkpoints">—</dd>
+        <dt>Mise à jour</dt><dd id="updated-at">—</dd>
+      </dl>
+      <button id="copy" type="button" disabled>Copier le JSON</button>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>

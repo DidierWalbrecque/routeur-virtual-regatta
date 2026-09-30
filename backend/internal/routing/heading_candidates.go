@@ -31,6 +31,35 @@ type HeadingCandidate struct {
 	Step    simulation.StepResult
 }
 
+type headingWeatherCache struct {
+	provider weather.WeatherProvider
+	position navigation.Position
+	instant  time.Time
+	loaded   bool
+	wind     navigation.Wind
+	err      error
+}
+
+func (cache *headingWeatherCache) WindAt(
+	ctx context.Context,
+	position navigation.Position,
+	instant time.Time,
+) (navigation.Wind, error) {
+	if cache.provider == nil {
+		return navigation.Wind{}, errors.New("routing: fournisseur météo requis")
+	}
+	if cache.loaded && position == cache.position && instant.Equal(cache.instant) {
+		return cache.wind, cache.err
+	}
+	wind, err := cache.provider.WindAt(ctx, position, instant)
+	if position == cache.position && instant.Equal(cache.instant) {
+		cache.loaded = true
+		cache.wind = wind
+		cache.err = err
+	}
+	return wind, err
+}
+
 // EvaluateHeadingCandidates simulates each heading from the exact same initial
 // state and preserves the order supplied by the caller.
 func EvaluateHeadingCandidates(
@@ -65,10 +94,15 @@ func EvaluateHeadingCandidates(
 	}
 
 	candidates := make([]HeadingCandidate, 0, len(input.Headings))
+	cachedWeather := &headingWeatherCache{
+		provider: weatherProvider,
+		position: input.Position,
+		instant:  input.Instant,
+	}
 	for index, heading := range input.Headings {
 		step, err := simulation.EvaluateStep(
 			ctx,
-			weatherProvider,
+			cachedWeather,
 			boatPolar,
 			simulation.StepInput{
 				Position: input.Position,
