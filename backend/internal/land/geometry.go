@@ -92,32 +92,97 @@ func segmentForbiddenByPolygon(
 	referenceLongitude,
 	margin float64,
 ) (bool, error) {
-	rings := make([][]point, len(value.rings))
-	for index, ring := range value.rings {
-		rings[index] = unwrapRing(ring, referenceLongitude)
-		if segmentIntersectsRing(start, end, rings[index]) {
+	if !polygonMayAffectSegment(value, start, end, referenceLongitude, margin) {
+		return false, nil
+	}
+	rings := value.unwrappedRings
+	polygonReference := value.referenceLongitude
+	if len(rings) == 0 {
+		rings = make([][]point, len(value.rings))
+		polygonReference = referenceLongitude
+		if len(value.rings) > 0 && len(value.rings[0]) > 0 {
+			polygonReference = value.rings[0][0].longitude
+		}
+		for index, ring := range value.rings {
+			rings[index] = unwrapRing(ring, polygonReference)
+		}
+	}
+	shift := 360 * math.Round((referenceLongitude-polygonReference)/360)
+	localStart := start
+	localStart.longitude -= shift
+	localEnd := end
+	localEnd.longitude -= shift
+	localReferenceLongitude := referenceLongitude - shift
+	for _, ring := range rings {
+		if segmentIntersectsRing(localStart, localEnd, ring) {
 			return true, nil
 		}
 	}
-	if pointInPolygon(start, rings) || pointInPolygon(end, rings) {
+	if pointInPolygon(localStart, rings) || pointInPolygon(localEnd, rings) {
 		return true, nil
 	}
 	if margin <= 0 {
 		return false, nil
 	}
 
-	referenceLatitude := (start.latitude + end.latitude) / 2
-	projectedStart := projectPoint(start, referenceLongitude, referenceLatitude)
-	projectedEnd := projectPoint(end, referenceLongitude, referenceLatitude)
+	referenceLatitude := (localStart.latitude + localEnd.latitude) / 2
+	projectedStart := projectPoint(localStart, localReferenceLongitude, referenceLatitude)
+	projectedEnd := projectPoint(localEnd, localReferenceLongitude, referenceLatitude)
 	minimum := math.Inf(1)
 	for _, ring := range rings {
 		for index := 1; index < len(ring); index++ {
-			edgeStart := projectPoint(ring[index-1], referenceLongitude, referenceLatitude)
-			edgeEnd := projectPoint(ring[index], referenceLongitude, referenceLatitude)
+			edgeStart := projectPoint(ring[index-1], localReferenceLongitude, referenceLatitude)
+			edgeEnd := projectPoint(ring[index], localReferenceLongitude, referenceLatitude)
 			minimum = math.Min(minimum, projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd))
 		}
 	}
 	return minimum <= margin+geometryEpsilon, nil
+}
+
+func polygonMayAffectSegment(
+	value polygon,
+	start,
+	end point,
+	referenceLongitude,
+	margin float64,
+) bool {
+	minLongitude, maxLongitude, minLatitude, maxLatitude, ok := polygonBounds(value)
+	if !ok {
+		return false
+	}
+
+	latitudeMargin := margin / 60
+	segmentMinLatitude := math.Min(start.latitude, end.latitude) - latitudeMargin
+	segmentMaxLatitude := math.Max(start.latitude, end.latitude) + latitudeMargin
+	if segmentMaxLatitude < minLatitude || segmentMinLatitude > maxLatitude {
+		return false
+	}
+
+	maximumAbsoluteLatitude := math.Max(
+		math.Abs(start.latitude),
+		math.Abs(end.latitude),
+	)
+	longitudeScale := math.Cos(maximumAbsoluteLatitude * math.Pi / 180)
+	longitudeMargin := margin / 60
+	if longitudeScale > 1e-9 {
+		longitudeMargin = margin / (60 * longitudeScale)
+	} else {
+		longitudeMargin = 180
+	}
+	if longitudeMargin > 180 {
+		longitudeMargin = 180
+	}
+
+	segmentMinLongitude := math.Min(start.longitude, end.longitude) - longitudeMargin
+	segmentMaxLongitude := math.Max(start.longitude, end.longitude) + longitudeMargin
+	polygonReference := value.referenceLongitude
+	if !value.boundsReady && len(value.rings) > 0 && len(value.rings[0]) > 0 {
+		polygonReference = value.rings[0][0].longitude
+	}
+	shift := 360 * math.Round((referenceLongitude-polygonReference)/360)
+	minLongitude += shift
+	maxLongitude += shift
+	return segmentMaxLongitude >= minLongitude && segmentMinLongitude <= maxLongitude
 }
 
 func segmentTouchesPolygon(

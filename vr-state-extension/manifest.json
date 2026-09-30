@@ -1,0 +1,45 @@
+{
+  "manifest_version": 3,
+  "name": "VR State Lite",
+  "short_name": "VR State Lite",
+  "version": "0.1.0",
+  "description": "Affiche la position, la stamina et les options du bateau Virtual Regatta.",
+  "permissions": ["storage"],
+  "host_permissions": [
+    "http://localhost:5000/*",
+    "https://*.virtualregatta.com/*",
+    "https://*.offshore.virtualregatta.com/*",
+    "https://prod.vro.sparks.virtualregatta.com/*",
+    "https://vro-api-ranking.prod.virtualregatta.com/*",
+    "https://vro-api-client.prod.virtualregatta.com/*",
+    "https://dev.vro.sparks.virtualregatta.com/*",
+    "https://vro-api-ranking.devel.virtualregatta.com/*",
+    "https://vro-api-client.devel.virtualregatta.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "action": {
+    "default_title": "VR State Lite",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://beta.virtualregatta.com/*",
+        "https://play.offshore.virtualregatta.com/*",
+        "https://www.virtualregatta.com/en/offshore-game/*",
+        "https://www.virtualregatta.com/offshore-game/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_start",
+      "all_frames": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["page-hook.js"],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

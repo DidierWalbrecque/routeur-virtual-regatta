@@ -18,7 +18,14 @@ type point struct {
 }
 
 type polygon struct {
-	rings [][]point
+	rings              [][]point
+	unwrappedRings     [][]point
+	minLongitude       float64
+	maxLongitude       float64
+	minLatitude        float64
+	maxLatitude        float64
+	referenceLongitude float64
+	boundsReady        bool
 }
 
 // GeoJSONConstraint rejects route segments touching a terrestrial polygon.

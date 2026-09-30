@@ -24,6 +24,26 @@ from flask import (
 DEFAULT_API_BASE_URL = "http://localhost:8080"
 DEFAULT_TIMEOUT_SECONDS = 300
 MAPLIBRE_DIST = Path(__file__).resolve().parents[1] / "frontend" / "node_modules" / "maplibre-gl" / "dist"
+POLARS_DIR = Path(__file__).resolve().parents[1] / "data" / "polars"
+DEFAULT_POLAR_PATH = "../data/polars/ultim_bp_11.json"
+
+
+def available_polar_options() -> list[dict[str, str]]:
+    """Retourne les polaires JSON disponibles dans le répertoire du projet."""
+
+    try:
+        polar_files = sorted(POLARS_DIR.glob("*.json"), key=lambda path: path.name.lower())
+    except OSError:
+        return []
+
+    return [
+        {
+            "label": polar_file.name,
+            "value": f"../data/polars/{polar_file.name}",
+        }
+        for polar_file in polar_files
+        if polar_file.is_file()
+    ]
 
 
 def create_app(api_base_url: str | None = None) -> Flask:
@@ -40,7 +60,20 @@ def create_app(api_base_url: str | None = None) -> Flask:
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        polar_options = available_polar_options()
+        default_polar = next(
+            (
+                option["value"]
+                for option in polar_options
+                if option["value"] == DEFAULT_POLAR_PATH
+            ),
+            polar_options[0]["value"] if polar_options else DEFAULT_POLAR_PATH,
+        )
+        return render_template(
+            "index.html",
+            polar_options=polar_options,
+            default_polar=default_polar,
+        )
 
     @app.get("/vendor/maplibre/<path:filename>")
     def maplibre_vendor(filename):
@@ -68,6 +101,10 @@ def create_app(api_base_url: str | None = None) -> Flask:
     def calculate_practical_headings():
         payload = request.get_json(silent=True) or {}
         app.logger.info("[ROUTE] Demande de calcul reçue")
+        app.logger.info(
+            "[ROUTE] État Virtual Regatta utilisé : %s",
+            payload.get("useVirtualRegattaState", False),
+        )
         body, status = _call_go_api(app, "/api/practical-headings", payload)
         app.logger.info("[ROUTE] Réponse reçue : HTTP %s", status)
         if status < 400 and isinstance(body, dict):
@@ -99,6 +136,35 @@ def create_app(api_base_url: str | None = None) -> Flask:
             },
         )
 
+    @app.post("/api/vr/state")
+    def receive_vr_state():
+        payload = request.get_json(silent=True) or {}
+        app.logger.info(
+            "[VR STATE] Réception : user=%s, course=%s.%s, position=%s, stamina=%s, options=%s, voiles=%s, portes=%d",
+            payload.get("userId", ""),
+            payload.get("raceId", ""),
+            payload.get("legNum", ""),
+            payload.get("position", {}),
+            payload.get("stamina"),
+            payload.get("options", []),
+            payload.get("sails", []),
+            len(payload.get("checkpoints") or []),
+        )
+        body, status = _call_go_api(app, "/api/vr/state", payload)
+        app.logger.info("[VR STATE] Réponse Go : HTTP %s", status)
+        if status >= 400:
+            app.logger.error("[VR STATE] Erreur Go : %s", body)
+        return jsonify(body), status
+
+    @app.get("/api/vr/state")
+    def read_vr_state():
+        app.logger.info("[VR STATE] Lecture du dernier état demandé")
+        body, status = _call_go_get_api(app, "/api/vr/state")
+        app.logger.info("[VR STATE] Réponse Go : HTTP %s", status)
+        if status >= 400:
+            app.logger.error("[VR STATE] Erreur Go : %s", body)
+        return jsonify(body), status
+
     return app
 
 
@@ -113,6 +179,25 @@ def _call_go_api(app: Flask, path: str, payload: dict[str, Any]) -> tuple[Any, i
         headers={"Content-Type": "application/json"},
         method="POST",
     )
+
+    try:
+        with urllib.request.urlopen(
+            http_request, timeout=app.config["API_TIMEOUT_SECONDS"]
+        ) as response:
+            return _decode_json(response.read()), response.status
+    except urllib.error.HTTPError as error:
+        app.logger.error("[API Go] Réponse HTTP %s pour %s", error.code, path)
+        return _decode_json(error.read()), error.code
+    except (urllib.error.URLError, TimeoutError, OSError) as error:
+        app.logger.error("[API Go] Appel impossible vers %s : %s", path, error)
+        return {"error": f"API Go indisponible : {error}"}, 502
+
+
+def _call_go_get_api(app: Flask, path: str) -> tuple[Any, int]:
+    """Transmet une requête GET à l'API Go et conserve son statut HTTP."""
+
+    url = f"{app.config['API_BASE_URL']}{path}"
+    http_request = urllib.request.Request(url, method="GET")
 
     try:
         with urllib.request.urlopen(

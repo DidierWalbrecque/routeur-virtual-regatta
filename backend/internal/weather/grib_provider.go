@@ -135,7 +135,7 @@ func (provider *GRIB2WeatherProvider) WindAt(
 	if upper < len(provider.grids) &&
 		provider.grids[upper].ValidAt.Equal(instant) {
 		var err error
-		u, v, err = provider.grids[upper].ComponentsAt(position)
+		u, v, err = provider.grids[upper].componentsAtUnchecked(position)
 		if err != nil {
 			return navigation.Wind{}, fmt.Errorf(
 				"weather: interpolation à l'échéance %s impossible: %w",
@@ -159,7 +159,7 @@ func (provider *GRIB2WeatherProvider) WindAt(
 		before := provider.grids[lower]
 		after := provider.grids[upper]
 
-		beforeU, beforeV, err := before.ComponentsAt(position)
+		beforeU, beforeV, err := before.componentsAtUnchecked(position)
 		if err != nil {
 			return navigation.Wind{}, fmt.Errorf(
 				"weather: interpolation à l'échéance %s impossible: %w",
@@ -174,7 +174,7 @@ func (provider *GRIB2WeatherProvider) WindAt(
 			)
 		}
 
-		afterU, afterV, err := after.ComponentsAt(position)
+		afterU, afterV, err := after.componentsAtUnchecked(position)
 		if err != nil {
 			return navigation.Wind{}, fmt.Errorf(
 				"weather: interpolation à l'échéance %s impossible: %w",

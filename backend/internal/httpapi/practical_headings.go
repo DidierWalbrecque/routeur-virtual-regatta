@@ -31,6 +31,7 @@ type practicalHeadingsRequest struct {
 	MaxScenarioProgressLossNM float64                             `json:"maxScenarioProgressLossNM"`
 	RequireRobustScenarios    bool                                `json:"requireRobustScenarios"`
 	Mode                      string                              `json:"mode"`
+	UseVirtualRegattaState    bool                                `json:"useVirtualRegattaState"`
 }
 
 type positionRequest struct {
@@ -50,15 +51,19 @@ type practicalHeadingsResponse struct {
 }
 
 type performanceResponse struct {
-	TotalMilliseconds     float64 `json:"totalMilliseconds"`
-	WeatherMilliseconds   float64 `json:"weatherMilliseconds"`
-	PolarMilliseconds     float64 `json:"polarMilliseconds"`
-	LandMilliseconds      float64 `json:"landMilliseconds"`
-	PracticalMilliseconds float64 `json:"practicalMilliseconds"`
-	IsochroneMilliseconds float64 `json:"isochroneMilliseconds"`
-	CacheHits             int     `json:"cacheHits"`
-	CacheMisses           int     `json:"cacheMisses"`
-	IsochroneDurationMin  float64 `json:"isochroneDurationMinutes"`
+	TotalMilliseconds         float64 `json:"totalMilliseconds"`
+	WeatherMilliseconds       float64 `json:"weatherMilliseconds"`
+	PolarMilliseconds         float64 `json:"polarMilliseconds"`
+	LandMilliseconds          float64 `json:"landMilliseconds"`
+	PracticalMilliseconds     float64 `json:"practicalMilliseconds"`
+	IsochroneMilliseconds     float64 `json:"isochroneMilliseconds"`
+	CacheHits                 int     `json:"cacheHits"`
+	CacheMisses               int     `json:"cacheMisses"`
+	IsochroneDurationMin      float64 `json:"isochroneDurationMinutes"`
+	VirtualRegattaStateUsed   bool    `json:"virtualRegattaStateUsed"`
+	VirtualRegattaGatesUsed   int     `json:"virtualRegattaGatesUsed"`
+	InitialStamina            float64 `json:"initialStamina"`
+	StaminaFromVirtualRegatta bool    `json:"staminaFromVirtualRegatta"`
 }
 
 var landGeoJSONPath = "../data/land/natural-earth-10m-land.geojson"
@@ -118,6 +123,7 @@ type routePointResponse struct {
 	Position positionRequest `json:"position"`
 	Heading  float64         `json:"heading"`
 	Sail     string          `json:"sail"`
+	Stamina  float64         `json:"stamina"`
 	Instant  time.Time       `json:"instant"`
 	Terminal bool            `json:"terminal"`
 }
@@ -126,6 +132,7 @@ type availableRouteStep struct {
 	Position navigation.Position
 	Heading  navigation.Heading
 	Sail     string
+	Stamina  simulation.StaminaLevel
 	Instant  time.Time
 }
 
@@ -144,17 +151,18 @@ type practicalCandidateResponse struct {
 }
 
 func practicalHeadingsHandler(response http.ResponseWriter, request *http.Request) {
-	runPracticalHeadings(response, request, nil)
+	runPracticalHeadings(response, request, nil, nil)
 }
 
 func practicalHeadingsStreamHandler(response http.ResponseWriter, request *http.Request) {
-	runPracticalHeadings(response, request, &practicalHeadingsStream{})
+	runPracticalHeadings(response, request, &practicalHeadingsStream{}, nil)
 }
 
 func runPracticalHeadings(
 	response http.ResponseWriter,
 	request *http.Request,
 	stream *practicalHeadingsStream,
+	vrStateStore *vrStateStore,
 ) {
 	totalStarted := time.Now()
 	calculationContext := request.Context()
@@ -170,6 +178,32 @@ func runPracticalHeadings(
 	if err := decoder.Decode(&payload); err != nil {
 		writeJSONError(response, http.StatusBadRequest, "requête JSON invalide: "+err.Error())
 		return
+	}
+
+	var receivedVRState *vrState
+	var virtualRegattaGates []routing.CourseGate
+	if payload.UseVirtualRegattaState {
+		if vrStateStore == nil {
+			writeJSONError(response, http.StatusBadRequest, "état Virtual Regatta indisponible pour ce gestionnaire")
+			return
+		}
+		state, ok := vrStateStore.snapshot()
+		if !ok {
+			writeJSONError(response, http.StatusBadRequest, "aucun état Virtual Regatta reçu")
+			return
+		}
+		receivedVRState = &state
+		gates, gatesErr := courseGatesFromVRState(state)
+		if gatesErr != nil {
+			writeJSONError(response, http.StatusBadRequest, "portes Virtual Regatta invalides: "+gatesErr.Error())
+			return
+		}
+		virtualRegattaGates = gates
+		payload.Position = positionRequest{
+			Latitude:  state.Position.Latitude,
+			Longitude: state.Position.Longitude,
+		}
+		payload.Owned = equipmentIDsFromVRState(state)
 	}
 
 	instant, err := time.Parse(time.RFC3339, payload.Instant)
@@ -208,6 +242,13 @@ func runPracticalHeadings(
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "chargement polaire impossible: "+err.Error())
 		return
+	}
+	var transitionEvaluator *simulation.TransitionEvaluator
+	var combineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
+	var initialNavigation *routing.InitialNavigationState
+	if receivedVRState != nil {
+		transitionEvaluator, combineSpeedPenalties = vrManeuverRuntime(boatPolar)
+		initialNavigation = initialNavigationFromVRState(receivedVRState)
 	}
 	position, err := parsePositionRequest(payload.Position)
 	if err != nil {
@@ -265,6 +306,11 @@ func runPracticalHeadings(
 		Isochrones:  make([]isochroneFrontierResponse, 0),
 		Route:       make([]routePointResponse, 0),
 	}
+	result.Performance.VirtualRegattaStateUsed = receivedVRState != nil
+	result.Performance.VirtualRegattaGatesUsed = len(virtualRegattaGates)
+	initialStamina := initialStaminaForVRState(receivedVRState)
+	result.Performance.InitialStamina = float64(initialStamina.Level)
+	result.Performance.StaminaFromVirtualRegatta = receivedVRState != nil && receivedVRState.Stamina != nil
 	result.Performance.CacheHits = weatherStats.Hits
 	result.Performance.CacheMisses = weatherStats.Misses
 	if polarHit {
@@ -353,10 +399,14 @@ func runPracticalHeadings(
 		search, err := buildIsochroneSearch(calculationContext, weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
 			Owned: owned, HeadingSpacing: profile.HeadingSpacing, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
-			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: simulation.StaminaState{Level: 100},
-			Constraints:        []routing.Constraint{landConstraint},
-			ArrivalConstraints: []routing.Constraint{arrivalLandConstraint},
-			Progress:           progressReporter,
+			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: initialStamina,
+			InitialNavigation:     initialNavigation,
+			TransitionEvaluator:   transitionEvaluator,
+			CombineSpeedPenalties: combineSpeedPenalties,
+			Gates:                 virtualRegattaGates,
+			Constraints:           []routing.Constraint{landConstraint},
+			ArrivalConstraints:    []routing.Constraint{arrivalLandConstraint},
+			Progress:              progressReporter,
 		})
 		if err != nil {
 			if stream != nil {
@@ -393,9 +443,9 @@ func runPracticalHeadings(
 				}
 				return
 			}
-			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(search.Origin.Latitude), Longitude: float64(search.Origin.Longitude)}, Instant: search.StartedAt})
+			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(search.Origin.Latitude), Longitude: float64(search.Origin.Longitude)}, Stamina: float64(initialStamina.Level), Instant: search.StartedAt})
 			for _, routeStep := range availableSteps {
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Position.Latitude), Longitude: float64(routeStep.Position.Longitude)}, Heading: float64(routeStep.Heading), Sail: routeStep.Sail, Instant: routeStep.Instant})
+				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Position.Latitude), Longitude: float64(routeStep.Position.Longitude)}, Heading: float64(routeStep.Heading), Sail: routeStep.Sail, Stamina: float64(routeStep.Stamina), Instant: routeStep.Instant})
 			}
 		} else if bestRoute, err := search.ReconstructBestRoute(); err == nil {
 			routeSteps := bestRoute.Steps
@@ -418,9 +468,9 @@ func runPracticalHeadings(
 					routeSteps = routeSteps[:len(routeSteps)-1]
 				}
 			}
-			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(bestRoute.Origin.Latitude), Longitude: float64(bestRoute.Origin.Longitude)}, Instant: bestRoute.StartedAt})
+			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(bestRoute.Origin.Latitude), Longitude: float64(bestRoute.Origin.Longitude)}, Stamina: float64(initialStamina.Level), Instant: bestRoute.StartedAt})
 			for _, routeStep := range routeSteps {
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Instant: routeStep.Node.Candidate.Step.NextInstant})
+				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Stamina: float64(routeStep.Node.State.Stamina.Level), Instant: routeStep.Node.Candidate.Step.NextInstant})
 			}
 			if search.Reached {
 				lastPosition := bestRoute.Origin
@@ -449,7 +499,11 @@ func runPracticalHeadings(
 						return
 					}
 				}
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
+				terminalStamina := initialStamina.Level
+				if len(routeSteps) > 0 {
+					terminalStamina = routeSteps[len(routeSteps)-1].Node.State.Stamina.Level
+				}
+				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Stamina: float64(terminalStamina), Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
 			}
 		}
 		result.Performance.IsochroneMilliseconds = elapsedMilliseconds(isochroneStarted)
@@ -506,11 +560,20 @@ func reconstructBestAvailableRoute(search routing.IsochroneSearch) ([]availableR
 			Position: node.Candidate.Step.NextPosition,
 			Heading:  node.Candidate.Heading,
 			Sail:     node.Candidate.Step.BestSail.SailName,
+			Stamina:  node.State.Stamina.Level,
 			Instant:  node.Candidate.Step.NextInstant,
 		}
 		nodeIndex = node.ParentIndex
 	}
 	return steps, nil
+}
+
+func initialStaminaForVRState(state *vrState) simulation.StaminaState {
+	initial := simulation.StaminaState{Level: 100}
+	if state != nil && state.Stamina != nil {
+		initial.Level = simulation.StaminaLevel(*state.Stamina)
+	}
+	return initial
 }
 
 func routeStepPassesDestination(from, to, destination navigation.Position) (bool, error) {

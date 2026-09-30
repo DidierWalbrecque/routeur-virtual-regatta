@@ -59,8 +59,8 @@ func TestBuildIsochroneLayer(t *testing.T) {
 			len(layer.Candidates),
 		)
 	}
-	if provider.calls != 4 {
-		t.Fatalf("appels météo = %d, attendus 4", provider.calls)
+	if provider.calls != 1 {
+		t.Fatalf("appels météo = %d, attendus 1", provider.calls)
 	}
 
 	best, ok := layer.Best()

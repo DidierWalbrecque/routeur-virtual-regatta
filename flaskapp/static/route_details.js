@@ -16,6 +16,7 @@ export function buildRouteDetailsModel(result) {
     latitude: point.position?.latitude ?? null,
     longitude: point.position?.longitude ?? null,
     heading: index === 0 || point.terminal ? null : point.heading,
+    stamina: Number.isFinite(Number(point.stamina)) ? Number(point.stamina) : null,
     sail: index === 0 || point.terminal ? "—" : point.sail || "—",
     terminal: point.terminal === true,
   }));
@@ -68,7 +69,7 @@ export function renderRouteDetails(container, result) {
   tableWrapper.className = "route-details-table-wrapper";
   const table = document.createElement("table");
   table.className = "route-details-table";
-  const headers = ["Étape", "Heure", "Temps écoulé", "Latitude", "Longitude", "Cap", "Voile"];
+  const headers = ["Étape", "Heure", "Temps écoulé", "Latitude", "Longitude", "Cap", "Voile", "Stamina"];
   const head = document.createElement("thead");
   const headerRow = document.createElement("tr");
   headers.forEach((header) => appendCell(headerRow, header));
@@ -85,6 +86,7 @@ export function renderRouteDetails(container, result) {
     appendCell(row, formatCoordinate(step.longitude));
     appendCell(row, step.heading === null || !Number.isFinite(Number(step.heading)) ? "—" : `${Number(step.heading).toFixed(0)}°`);
     appendCell(row, step.sail);
+    appendCell(row, step.stamina === null ? "—" : `${step.stamina.toFixed(1)} %`);
     body.appendChild(row);
   });
   table.appendChild(body);

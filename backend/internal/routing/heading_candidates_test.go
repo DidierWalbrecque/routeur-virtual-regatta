@@ -63,11 +63,11 @@ func TestEvaluateHeadingCandidates(t *testing.T) {
 			len(headings),
 		)
 	}
-	if provider.calls != len(headings) {
+	if provider.calls != 1 {
 		t.Fatalf(
 			"appels météo = %d, attendus %d",
 			provider.calls,
-			len(headings),
+			1,
 		)
 	}
 

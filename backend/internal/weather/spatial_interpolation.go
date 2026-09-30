@@ -32,6 +32,12 @@ func (grid GRIB2WindGrid) ComponentsAt(
 		)
 	}
 
+	return grid.componentsAtUnchecked(position)
+}
+
+func (grid GRIB2WindGrid) componentsAtUnchecked(
+	position navigation.Position,
+) (navigation.WindComponent, navigation.WindComponent, error) {
 	north, south, latitudeRatio, err := grid.latitudeBounds(
 		float64(position.Latitude),
 	)

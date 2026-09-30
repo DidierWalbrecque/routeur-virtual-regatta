@@ -136,7 +136,7 @@ func TestBuildIsochroneSearch(t *testing.T) {
 		}
 	}
 
-	wantCalls := 4 + len(first.Nodes)*4
+	wantCalls := 1 + len(first.Nodes)
 	if provider.calls != wantCalls {
 		t.Errorf(
 			"appels météo = %d, attendus %d",
@@ -225,8 +225,8 @@ func TestBuildIsochroneSearchPreservesDistinctBoatStates(t *testing.T) {
 			}
 		}
 	}
-	if provider.calls != 36 {
-		t.Errorf("appels météo = %d, attendus 36", provider.calls)
+	if provider.calls != 9 {
+		t.Errorf("appels météo = %d, attendus 9", provider.calls)
 	}
 }
 
@@ -292,7 +292,7 @@ func TestBuildIsochroneSearchLimitsFrontierSizeAdaptively(t *testing.T) {
 		t.Fatal("la taille des cellules n'a jamais été augmentée")
 	}
 
-	maximumCalls := 24 + (layerCount-1)*maxCandidates*24
+	maximumCalls := 1 + (layerCount-1)*maxCandidates
 	if provider.calls > maximumCalls {
 		t.Errorf(
 			"appels météo = %d, maximum attendu %d",
@@ -353,8 +353,8 @@ func TestBuildIsochroneSearchStopsAtArrivalRadius(t *testing.T) {
 			search.ArrivalRadius,
 		)
 	}
-	if provider.calls != 4 {
-		t.Errorf("appels météo = %d, attendus 4", provider.calls)
+	if provider.calls != 1 {
+		t.Errorf("appels météo = %d, attendus 1", provider.calls)
 	}
 }
 
