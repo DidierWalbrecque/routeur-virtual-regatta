@@ -22,6 +22,9 @@ type StepInput struct {
 	Duration    time.Duration
 	Owned       equipment.EquipmentSet
 	FixedSailID polar.SailID
+	// Effects contains equipment effects prepared by the caller. When nil,
+	// effects are resolved for backward compatibility with direct step calls.
+	Effects *equipment.Effects
 }
 
 // StepResult contains the weather and performance used for one movement.
@@ -123,12 +126,16 @@ func EvaluateStep(
 		)
 	}
 
-	effects, err := equipment.ResolveEffects(boatPolar, input.Owned)
-	if err != nil {
-		return StepResult{}, fmt.Errorf(
-			"simulation: résolution des équipements impossible: %w",
-			err,
-		)
+	effects := input.Effects
+	if effects == nil {
+		resolved, resolveErr := equipment.ResolveEffects(boatPolar, input.Owned)
+		if resolveErr != nil {
+			return StepResult{}, fmt.Errorf(
+				"simulation: résolution des équipements impossible: %w",
+				resolveErr,
+			)
+		}
+		effects = &resolved
 	}
 	bestSail, err := selectSail(
 		boatPolar,
@@ -260,6 +267,9 @@ type Input struct {
 	StepDuration time.Duration
 	Owned        equipment.EquipmentSet
 	FixedSailID  polar.SailID
+	// Effects contains equipment effects prepared once for all simulation
+	// steps. When nil, Run resolves them once before its first step.
+	Effects *equipment.Effects
 }
 
 // Result contains every evaluated step and the final boat state.
@@ -293,6 +303,17 @@ func Run(
 		NextPosition: input.Position,
 		NextInstant:  input.Instant,
 	}
+	effects := input.Effects
+	if effects == nil {
+		resolved, err := equipment.ResolveEffects(boatPolar, input.Owned)
+		if err != nil {
+			return Result{}, fmt.Errorf(
+				"simulation: résolution des équipements impossible: %w",
+				err,
+			)
+		}
+		effects = &resolved
+	}
 	remaining := input.Duration
 
 	for remaining > 0 {
@@ -308,6 +329,7 @@ func Run(
 				Duration:    currentDuration,
 				Owned:       input.Owned,
 				FixedSailID: input.FixedSailID,
+				Effects:     effects,
 			},
 		)
 		if err != nil {

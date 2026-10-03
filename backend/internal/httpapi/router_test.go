@@ -307,3 +307,52 @@ func TestAdaptiveIsochroneDurationRespectsRequestedLimit(t *testing.T) {
 		t.Fatalf("une vitesse invalide devait conserver la limite: %s", got)
 	}
 }
+
+func TestCalculationDurationForRouteUsesAdaptiveHorizonOnlyForDirectOpenWater(t *testing.T) {
+	position := navigation.Position{Latitude: 0, Longitude: 0}
+	destination := navigation.Position{Latitude: 0, Longitude: 1}
+	instant := time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC)
+	requested := 240 * time.Minute
+	distance := navigation.NauticalMiles(10)
+	maxSpeed := polar.BoatSpeed(40)
+
+	openWater := routing.ConstraintFunc(func(_ context.Context, _ routing.RouteSegment) (bool, error) {
+		return true, nil
+	})
+	got, err := calculationDurationForRoute(
+		context.Background(), position, destination, instant, distance,
+		requested, maxSpeed, nil, openWater,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := adaptiveIsochroneDuration(distance, requested, maxSpeed)
+	if got != want {
+		t.Fatalf("horizon adaptatif = %s, attendu %s", got, want)
+	}
+
+	blockedWater := routing.ConstraintFunc(func(_ context.Context, _ routing.RouteSegment) (bool, error) {
+		return false, nil
+	})
+	got, err = calculationDurationForRoute(
+		context.Background(), position, destination, instant, distance,
+		requested, maxSpeed, nil, blockedWater,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != requested {
+		t.Fatalf("horizon d'un détour = %s, attendu %s", got, requested)
+	}
+
+	got, err = calculationDurationForRoute(
+		context.Background(), position, destination, instant, distance,
+		requested, maxSpeed, []routing.CourseGate{{}}, openWater,
+	)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != requested {
+		t.Fatalf("horizon avec porte obligatoire = %s, attendu %s", got, requested)
+	}
+}

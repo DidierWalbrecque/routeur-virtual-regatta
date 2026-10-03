@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,6 +14,7 @@ import (
 )
 
 type staticWeatherProvider struct {
+	mu    sync.Mutex
 	wind  navigation.Wind
 	err   error
 	calls int
@@ -23,6 +25,8 @@ func (provider *staticWeatherProvider) WindAt(
 	navigation.Position,
 	time.Time,
 ) (navigation.Wind, error) {
+	provider.mu.Lock()
+	defer provider.mu.Unlock()
 	provider.calls++
 	return provider.wind, provider.err
 }

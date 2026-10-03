@@ -34,6 +34,33 @@ func BenchmarkBuildIsochroneSearchWithConstraint(b *testing.B) {
 	}
 }
 
+func BenchmarkEvaluatePracticalHeadingCandidates(b *testing.B) {
+	headings, err := GenerateHeadingGrid(15)
+	if err != nil {
+		b.Fatal(err)
+	}
+	input := PracticalHeadingInput{
+		Position:     navigation.Position{Latitude: 0, Longitude: 0},
+		Destination:  navigation.Position{Latitude: 0, Longitude: 20},
+		Instant:      time.Date(2026, 9, 20, 12, 0, 0, 0, time.UTC),
+		Duration:     4 * time.Hour,
+		StepDuration: 10 * time.Minute,
+		Headings:     headings,
+	}
+	provider := &staticWeatherProvider{wind: navigation.Wind{Speed: 5, Direction: 180}}
+	b.ResetTimer()
+	for index := 0; index < b.N; index++ {
+		if _, err := EvaluatePracticalHeadingCandidates(
+			context.Background(),
+			provider,
+			testPolar(),
+			input,
+		); err != nil {
+			b.Fatal(err)
+		}
+	}
+}
+
 func benchmarkIsochroneInput(constraints []Constraint) IsochroneSearchInput {
 	return IsochroneSearchInput{
 		Position:       navigation.Position{Latitude: 0, Longitude: 0},

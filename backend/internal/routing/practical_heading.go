@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sort"
+	"sync"
 	"time"
 
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/equipment"
@@ -43,6 +45,11 @@ type PracticalHeadingCandidate struct {
 	WorstCaseProgress    DistanceProgress
 	ScenarioProgressLoss navigation.NauticalMiles
 	Robust               bool
+}
+
+type practicalHeadingResult struct {
+	candidate PracticalHeadingCandidate
+	err       error
 }
 
 // PracticalHeadingWeatherScenario contains the result obtained by applying a
@@ -102,6 +109,13 @@ func EvaluatePracticalHeadingCandidates(
 			err,
 		)
 	}
+	preparedEffects, err := equipment.ResolveEffects(boatPolar, input.Owned)
+	if err != nil {
+		return nil, fmt.Errorf(
+			"routing: résolution des équipements pratiques impossible: %w",
+			err,
+		)
+	}
 	if err := input.MaxScenarioProgressLoss.Validate(); err != nil {
 		return nil, fmt.Errorf(
 			"routing: perte maximale de progression pratique invalide: %w",
@@ -153,118 +167,62 @@ func EvaluatePracticalHeadingCandidates(
 		)
 	}
 
-	candidates := make(
-		[]PracticalHeadingCandidate,
-		0,
-		len(input.Headings),
-	)
-	for index, heading := range input.Headings {
-		result, err := simulation.Run(
-			ctx,
-			weatherProvider,
-			boatPolar,
-			simulation.Input{
-				Position:     input.Position,
-				Instant:      input.Instant,
-				Heading:      heading,
-				Duration:     input.Duration,
-				StepDuration: input.StepDuration,
-				Owned:        input.Owned,
-				FixedSailID:  input.FixedSailID,
-			},
-		)
-		if err != nil {
+	weatherCache := newConcurrentWeatherCache(weatherProvider)
+	results := make([]practicalHeadingResult, len(input.Headings))
+	jobs := make(chan int, len(input.Headings))
+	for index := range input.Headings {
+		jobs <- index
+	}
+	close(jobs)
+	workerCount := runtime.GOMAXPROCS(0)
+	if workerCount < 1 {
+		workerCount = 1
+	}
+	if workerCount > len(input.Headings) {
+		workerCount = len(input.Headings)
+	}
+	var workers sync.WaitGroup
+	workers.Add(workerCount)
+	for worker := 0; worker < workerCount; worker++ {
+		go func() {
+			defer workers.Done()
+			for index := range jobs {
+				if err := ctx.Err(); err != nil {
+					results[index].err = err
+					continue
+				}
+				candidate, err := evaluatePracticalHeading(
+					ctx,
+					weatherCache,
+					boatPolar,
+					input,
+					preparedEffects,
+					input.Headings[index],
+					initialDistance,
+				)
+				results[index] = practicalHeadingResult{
+					candidate: candidate,
+					err:       err,
+				}
+			}
+		}()
+	}
+	workers.Wait()
+
+	candidates := make([]PracticalHeadingCandidate, 0, len(input.Headings))
+	for index, result := range results {
+		if result.err != nil {
 			return nil, fmt.Errorf(
 				"routing: simulation du cap pratique %d à %.6f° impossible: %w",
 				index+1,
-				heading,
-				err,
+				input.Headings[index],
+				result.err,
 			)
 		}
-		remainingDistance, err := navigation.DistanceBetween(
-			result.NextPosition,
-			input.Destination,
-		)
-		if err != nil {
-			return nil, fmt.Errorf(
-				"routing: distance restante du cap pratique %d impossible: %w",
-				index+1,
-				err,
-			)
-		}
-		candidate := PracticalHeadingCandidate{
-			Heading:           heading,
-			Simulation:        result,
-			InitialDistance:   initialDistance,
-			RemainingDistance: remainingDistance,
-			Progress: DistanceProgress(
-				float64(initialDistance - remainingDistance),
-			),
-			StabilityScore: practicalStabilityScore(result),
-		}
-		for variationIndex, variation := range input.WeatherVariations {
-			variedResult, err := simulation.Run(
-				ctx,
-				practicalWeatherVariationProvider{
-					provider:  weatherProvider,
-					variation: variation,
-				},
-				boatPolar,
-				simulation.Input{
-					Position:     input.Position,
-					Instant:      input.Instant,
-					Heading:      heading,
-					Duration:     input.Duration,
-					StepDuration: input.StepDuration,
-					Owned:        input.Owned,
-					FixedSailID:  input.FixedSailID,
-				},
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"routing: scénario météo %d du cap pratique %d à %.6f° impossible: %w",
-					variationIndex+1,
-					index+1,
-					heading,
-					err,
-				)
-			}
-			variedRemainingDistance, err := navigation.DistanceBetween(
-				variedResult.NextPosition,
-				input.Destination,
-			)
-			if err != nil {
-				return nil, fmt.Errorf(
-					"routing: distance restante du scénario météo %d du cap pratique %d impossible: %w",
-					variationIndex+1,
-					index+1,
-					err,
-				)
-			}
-			candidate.WeatherScenarios = append(
-				candidate.WeatherScenarios,
-				PracticalHeadingWeatherScenario{
-					Variation:         variation,
-					Simulation:        variedResult,
-					RemainingDistance: variedRemainingDistance,
-					Progress: DistanceProgress(
-						float64(initialDistance - variedRemainingDistance),
-					),
-					StabilityScore: practicalStabilityScore(variedResult),
-				},
-			)
-		}
-		candidate.WorstCaseProgress,
-			candidate.ScenarioProgressLoss,
-			candidate.Robust = practicalRobustness(
-			candidate.Progress,
-			candidate.WeatherScenarios,
-			input.MaxScenarioProgressLoss,
-		)
-		if input.RequireRobustScenarios && !candidate.Robust {
+		if input.RequireRobustScenarios && !result.candidate.Robust {
 			continue
 		}
-		candidates = append(candidates, candidate)
+		candidates = append(candidates, result.candidate)
 	}
 	if input.RequireRobustScenarios && len(candidates) == 0 {
 		return nil, errors.New(
@@ -276,4 +234,100 @@ func EvaluatePracticalHeadingCandidates(
 		return candidates[left].Progress > candidates[right].Progress
 	})
 	return candidates, nil
+}
+
+func evaluatePracticalHeading(
+	ctx context.Context,
+	weatherProvider weather.WeatherProvider,
+	boatPolar *polar.Polar,
+	input PracticalHeadingInput,
+	effects equipment.Effects,
+	heading navigation.Heading,
+	initialDistance navigation.NauticalMiles,
+) (PracticalHeadingCandidate, error) {
+	result, err := simulation.Run(
+		ctx,
+		weatherProvider,
+		boatPolar,
+		simulation.Input{
+			Position:     input.Position,
+			Instant:      input.Instant,
+			Heading:      heading,
+			Duration:     input.Duration,
+			StepDuration: input.StepDuration,
+			Owned:        input.Owned,
+			FixedSailID:  input.FixedSailID,
+			Effects:      &effects,
+		},
+	)
+	if err != nil {
+		return PracticalHeadingCandidate{}, err
+	}
+	remainingDistance, err := navigation.DistanceBetween(
+		result.NextPosition,
+		input.Destination,
+	)
+	if err != nil {
+		return PracticalHeadingCandidate{}, err
+	}
+	candidate := PracticalHeadingCandidate{
+		Heading:           heading,
+		Simulation:        result,
+		InitialDistance:   initialDistance,
+		RemainingDistance: remainingDistance,
+		Progress: DistanceProgress(
+			float64(initialDistance - remainingDistance),
+		),
+		StabilityScore: practicalStabilityScore(result),
+	}
+	for _, variation := range input.WeatherVariations {
+		variedResult, err := simulation.Run(
+			ctx,
+			practicalWeatherVariationProvider{
+				provider:  weatherProvider,
+				variation: variation,
+			},
+			boatPolar,
+			simulation.Input{
+				Position:     input.Position,
+				Instant:      input.Instant,
+				Heading:      heading,
+				Duration:     input.Duration,
+				StepDuration: input.StepDuration,
+				Owned:        input.Owned,
+				FixedSailID:  input.FixedSailID,
+				Effects:      &effects,
+			},
+		)
+		if err != nil {
+			return PracticalHeadingCandidate{}, err
+		}
+		variedRemainingDistance, err := navigation.DistanceBetween(
+			variedResult.NextPosition,
+			input.Destination,
+		)
+		if err != nil {
+			return PracticalHeadingCandidate{}, err
+		}
+		candidate.WeatherScenarios = append(
+			candidate.WeatherScenarios,
+			PracticalHeadingWeatherScenario{
+				Variation:         variation,
+				Simulation:        variedResult,
+				RemainingDistance: variedRemainingDistance,
+				Progress: DistanceProgress(
+					float64(initialDistance - variedRemainingDistance),
+				),
+				StabilityScore: practicalStabilityScore(variedResult),
+			},
+		)
+	}
+	candidate.WorstCaseProgress,
+		candidate.ScenarioProgressLoss,
+		candidate.Robust = practicalRobustness(
+		candidate.Progress,
+		candidate.WeatherScenarios,
+		input.MaxScenarioProgressLoss,
+	)
+	return candidate, nil
 }

@@ -114,6 +114,9 @@
       let mapReady = false;
       let pendingRoute;
       let pendingRouteShowsRoute = true;
+      let renderedRouteKey = "";
+      let renderedIsochroneCount = 0;
+      let renderedIsochroneFeatures = [];
       let latestWeatherFiles = [];
       let latestWeatherRun = "";
       let activeRouteController;
@@ -406,6 +409,19 @@
         renderRouteFrame(result, true);
       }
 
+      function routeFrameKey(result) {
+        const position = result.position || departure;
+        const destinationPoint = result.destination || destination;
+        const startedAt = result.route?.[0]?.instant || "";
+        return [position.latitude, position.longitude, destinationPoint.latitude, destinationPoint.longitude, startedAt].join("|");
+      }
+
+      function resetRouteRenderCache() {
+        renderedRouteKey = "";
+        renderedIsochroneCount = 0;
+        renderedIsochroneFeatures = [];
+      }
+
       function setRouteDetailsResult(result) {
         latestRouteResult = result;
         const button = document.getElementById("show-route-details");
@@ -415,6 +431,7 @@
       }
 
       function resetRouteDetails() {
+        resetRouteRenderCache();
         latestRouteResult = undefined;
         const button = document.getElementById("show-route-details");
         const panel = document.getElementById("route-details-panel");
@@ -441,7 +458,7 @@
         document.getElementById("show-route-details").setAttribute("aria-expanded", "false");
       }
 
-      function renderRouteFrame(result, showRoute) {
+      function renderRouteFrame(result, showRoute, fitMap = showRoute) {
         pendingRoute = result;
         pendingRouteShowsRoute = showRoute;
         if (!mapReady || !navigationMap || !maplibreApi) return;
@@ -458,19 +475,30 @@
           y: (result.destination || destination).latitude - (result.position || departure).latitude,
         };
         const startedAt = route[0]?.instant;
-        const contourData = {
-          type: "FeatureCollection",
-          features: (result.isochrones || []).map((isochrone) => {
+        const frameKey = routeFrameKey(result);
+        const isochrones = result.isochrones || [];
+        if (frameKey !== renderedRouteKey || isochrones.length < renderedIsochroneCount) {
+          renderedRouteKey = frameKey;
+          renderedIsochroneCount = 0;
+          renderedIsochroneFeatures = [];
+        }
+        const startedAtMilliseconds = startedAt ? Date.parse(startedAt) : NaN;
+        for (let index = renderedIsochroneCount; index < isochrones.length; index += 1) {
+          const isochrone = isochrones[index];
+          const feature = (() => {
             const contour = forwardContour(isochrone.contour || [], direction);
             const visibleContour = contour.length > 1 ? contour : (isochrone.contour || []);
-            const elapsedMinutes = startedAt ? Math.round((Date.parse(isochrone.instant) - Date.parse(startedAt)) / 60000) : 0;
+            const elapsedMinutes = Number.isFinite(startedAtMilliseconds) ? Math.round((Date.parse(isochrone.instant) - startedAtMilliseconds) / 60000) : 0;
             return {
               type: "Feature",
               properties: { major: elapsedMinutes > 0 && elapsedMinutes % 30 === 0 },
               geometry: { type: "LineString", coordinates: visibleContour.map((point) => [point.longitude, point.latitude]) },
             };
-          }).filter((feature) => feature.geometry.coordinates.length > 1),
-        };
+          })();
+          if (feature.geometry.coordinates.length > 1) renderedIsochroneFeatures.push(feature);
+        }
+        renderedIsochroneCount = isochrones.length;
+        const contourData = { type: "FeatureCollection", features: renderedIsochroneFeatures };
         const endpointData = {
           type: "FeatureCollection",
           features: [result.position || departure, result.destination || destination].map((point, index) => ({
@@ -501,33 +529,24 @@
         };
 
         setSourceData("points", endpointData);
-        setSourceData("route", { type: "FeatureCollection", features: [] });
+        setSourceData("route", routeData);
         if (!navigationMap.getLayer("route")) navigationMap.addLayer({ id: "route", type: "line", source: "route", paint: { "line-color": "#f59f00", "line-width": 5, "line-opacity": 0.95 } });
-        setSourceData("isochrones", { type: "FeatureCollection", features: [] });
+        setSourceData("isochrones", contourData);
         const isochronePaint = { "line-color": ["case", ["boolean", ["get", "major"], false], "#145cff", "#75b5ff"], "line-width": ["case", ["boolean", ["get", "major"], false], 1.5, 0.8], "line-opacity": ["case", ["boolean", ["get", "major"], false], 0.95, 0.65] };
         if (!navigationMap.getLayer("isochrones")) navigationMap.addLayer({ id: "isochrones", type: "line", source: "isochrones", paint: isochronePaint });
-        else {
-          navigationMap.setPaintProperty("isochrones", "line-color", isochronePaint["line-color"]);
-          navigationMap.setPaintProperty("isochrones", "line-width", isochronePaint["line-width"]);
-          navigationMap.setPaintProperty("isochrones", "line-opacity", isochronePaint["line-opacity"]);
-        }
-        setSourceData("route-points", { type: "FeatureCollection", features: [] });
+        setSourceData("route-points", routePointData);
         if (!navigationMap.getLayer("route-points")) navigationMap.addLayer({ id: "route-points", type: "circle", source: "route-points", paint: { "circle-radius": 7, "circle-color": "#f59f00", "circle-stroke-color": "#ffffff", "circle-stroke-width": 2 } });
         if (!navigationMap.getLayer("route-point-labels")) navigationMap.addLayer({ id: "route-point-labels", type: "symbol", source: "route-points", layout: { "text-field": ["get", "label"], "text-size": 12, "text-offset": [0, -1.5], "text-anchor": "bottom" }, paint: { "text-color": "#145cff", "text-halo-color": "#ffffff", "text-halo-width": 2 } });
-        navigationMap.moveLayer("route-points");
-        navigationMap.moveLayer("route-point-labels");
-        navigationMap.moveLayer("points");
 
-        navigationMap.getSource("isochrones").setData(contourData);
-        navigationMap.getSource("route").setData(routeData);
-        navigationMap.getSource("route-points").setData(routePointData);
         console.log(`[MAP] Isochrones et route affichées : ${route.length} point(s), ${contourData.features.length} front(s)`);
 
-        const points = [result.position || departure, result.destination || destination, ...route.map((point) => point.position)];
-        const bounds = new maplibreApi.LngLatBounds();
-        points.forEach((point) => bounds.extend([point.longitude, point.latitude]));
-        navigationBounds = bounds;
-        navigationMap.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 500 });
+        if (fitMap) {
+          const points = [result.position || departure, result.destination || destination, ...route.map((point) => point.position)];
+          const bounds = new maplibreApi.LngLatBounds();
+          points.forEach((point) => bounds.extend([point.longitude, point.latitude]));
+          navigationBounds = bounds;
+          navigationMap.fitBounds(bounds, { padding: 80, maxZoom: 12, duration: 500 });
+        }
       }
 
       function beginRouteStream(start) {
@@ -544,8 +563,9 @@
 
       function addStreamFrontier(frontier) {
         if (!pendingRoute) return;
-        pendingRoute.isochrones = [...(pendingRoute.isochrones || []), frontier];
-        renderRouteFrame(pendingRoute, false);
+        if (!pendingRoute.isochrones) pendingRoute.isochrones = [];
+        pendingRoute.isochrones.push(frontier);
+        renderRouteFrame(pendingRoute, false, false);
         const status = document.getElementById("route-calculation-status");
         if (status) status.querySelector("span:last-child").textContent = `Calcul de la route en cours… (${frontier.completedLayers}/${frontier.totalLayers})`;
       }

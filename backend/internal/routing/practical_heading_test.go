@@ -40,8 +40,8 @@ func TestEvaluatePracticalHeadingCandidates(t *testing.T) {
 	if len(candidates) != 4 {
 		t.Fatalf("candidats = %d, attendus 4", len(candidates))
 	}
-	if provider.calls != 8 {
-		t.Errorf("appels météo = %d, attendus 8", provider.calls)
+	if provider.calls != 5 {
+		t.Errorf("appels météo = %d, attendus 5 après déduplication", provider.calls)
 	}
 
 	best := candidates[0]

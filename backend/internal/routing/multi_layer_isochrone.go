@@ -165,6 +165,13 @@ func BuildIsochroneSearch(
 			err,
 		)
 	}
+	preparedEffects, err := equipment.ResolveEffects(boatPolar, input.Owned)
+	if err != nil {
+		return IsochroneSearch{}, fmt.Errorf(
+			"routing: construction des isochrones impossible: résolution des équipements impossible: %w",
+			err,
+		)
+	}
 	if err := input.InitialStamina.Validate(); err != nil {
 		return IsochroneSearch{}, fmt.Errorf(
 			"routing: construction des isochrones impossible: stamina initiale invalide: %w",
@@ -346,6 +353,7 @@ func BuildIsochroneSearch(
 			currentInstant,
 			input.StepDuration,
 			input.Owned,
+			&preparedEffects,
 			headings,
 		)
 		if err != nil {
@@ -647,7 +655,7 @@ func pruneIsochroneNodesToLimit(
 ) ([]IsochroneNode, float64, error) {
 	effectiveCellSize := minimumCellSize
 	for {
-		selected, err := pruneIsochroneNodes(
+		selected, err := pruneIsochroneNodesUnsorted(
 			origin,
 			nodes,
 			effectiveCellSize,
@@ -656,9 +664,11 @@ func pruneIsochroneNodesToLimit(
 			return nil, 0, err
 		}
 		if maxCandidates == 0 || len(selected) <= maxCandidates {
+			sortIsochroneNodes(selected)
 			return selected, effectiveCellSize, nil
 		}
 		if effectiveCellSize >= maximumStateAwareCellSize {
+			sortIsochroneNodes(selected)
 			return selected[:maxCandidates], effectiveCellSize, nil
 		}
 
@@ -687,6 +697,22 @@ type isochroneStateCell struct {
 }
 
 func pruneIsochroneNodes(
+	origin navigation.Position,
+	nodes []IsochroneNode,
+	cellSize float64,
+) ([]IsochroneNode, error) {
+	selected, err := pruneIsochroneNodesUnsorted(origin, nodes, cellSize)
+	if err != nil {
+		return nil, err
+	}
+	sortIsochroneNodes(selected)
+	return selected, nil
+}
+
+// pruneIsochroneNodesUnsorted performs state-aware grouping without sorting.
+// The adaptive cell-size loop only needs the selected count until its final
+// pass, so sorting intermediate results would duplicate substantial work.
+func pruneIsochroneNodesUnsorted(
 	origin navigation.Position,
 	nodes []IsochroneNode,
 	cellSize float64,
@@ -764,6 +790,10 @@ func pruneIsochroneNodes(
 	for _, key := range keys {
 		selected = append(selected, groups[key]...)
 	}
+	return selected, nil
+}
+
+func sortIsochroneNodes(selected []IsochroneNode) {
 	sort.SliceStable(selected, func(left, right int) bool {
 		if selected[left].CourseProgress.NextGateIndex !=
 			selected[right].CourseProgress.NextGateIndex {
@@ -793,7 +823,6 @@ func pruneIsochroneNodes(
 		}
 		return selected[left].State.Tack < selected[right].State.Tack
 	})
-	return selected, nil
 }
 
 func isochroneNodeDominates(

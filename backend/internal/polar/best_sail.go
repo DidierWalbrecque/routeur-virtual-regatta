@@ -84,8 +84,8 @@ func (polar *Polar) BestEffectiveSailAt(
 		)
 	}
 
-	effectiveSpeed, err := polar.EffectiveSpeedAt(
-		best.SailID,
+	effectiveSpeed, err := polar.effectiveSpeedFromRaw(
+		best.Speed,
 		windSpeed,
 		windAngle,
 		options,

@@ -23,6 +23,9 @@ type HeadingCandidatesInput struct {
 	Duration time.Duration
 	Owned    equipment.EquipmentSet
 	Headings []navigation.Heading
+	// Effects contains equipment effects prepared for all headings from the
+	// same parent. When nil, they are resolved once for this evaluation.
+	Effects *equipment.Effects
 }
 
 // HeadingCandidate associates a requested heading with its simulated step.
@@ -94,6 +97,17 @@ func EvaluateHeadingCandidates(
 	}
 
 	candidates := make([]HeadingCandidate, 0, len(input.Headings))
+	effects := input.Effects
+	if effects == nil {
+		resolved, resolveErr := equipment.ResolveEffects(boatPolar, input.Owned)
+		if resolveErr != nil {
+			return nil, fmt.Errorf(
+				"routing: résolution des équipements impossible: %w",
+				resolveErr,
+			)
+		}
+		effects = &resolved
+	}
 	cachedWeather := &headingWeatherCache{
 		provider: weatherProvider,
 		position: input.Position,
@@ -110,6 +124,7 @@ func EvaluateHeadingCandidates(
 				Heading:  heading,
 				Duration: input.Duration,
 				Owned:    input.Owned,
+				Effects:  effects,
 			},
 		)
 		if err != nil {

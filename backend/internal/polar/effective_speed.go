@@ -20,7 +20,15 @@ func (polar *Polar) EffectiveSpeedAt(
 	if err != nil {
 		return 0, fmt.Errorf("polar: calcul de la vitesse effective impossible: %w", err)
 	}
+	return polar.effectiveSpeedFromRaw(rawSpeed, windSpeed, windAngle, options)
+}
 
+func (polar *Polar) effectiveSpeedFromRaw(
+	rawSpeed BoatSpeed,
+	windSpeed WindSpeed,
+	windAngle TrueWindAngle,
+	options SpeedOptions,
+) (BoatSpeed, error) {
 	effectiveSpeed, err := applySpeedRatio(
 		rawSpeed,
 		polar.GlobalSpeedRatio,
