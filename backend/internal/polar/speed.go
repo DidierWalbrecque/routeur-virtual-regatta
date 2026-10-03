@@ -18,13 +18,25 @@ func (polar *Polar) SpeedAt(
 		return 0, fmt.Errorf("polar: voile %d introuvable", sailID)
 	}
 
-	speed, err := interpolateSpeedGrid(
-		polar.WindSpeeds,
-		polar.WindAngles,
-		sail.Speeds,
-		windSpeed,
-		windAngle,
-	)
+	var speed BoatSpeed
+	var err error
+	if polar.prepared {
+		speed, err = interpolateSpeedGridUnchecked(
+			polar.WindSpeeds,
+			polar.WindAngles,
+			sail.Speeds,
+			windSpeed,
+			windAngle,
+		)
+	} else {
+		speed, err = interpolateSpeedGrid(
+			polar.WindSpeeds,
+			polar.WindAngles,
+			sail.Speeds,
+			windSpeed,
+			windAngle,
+		)
+	}
 	if err != nil {
 		return 0, fmt.Errorf(
 			"polar: calcul de vitesse impossible pour la voile %q (%d): %w",
@@ -39,6 +51,13 @@ func (polar *Polar) SpeedAt(
 func (polar *Polar) sailByID(sailID SailID) (*Sail, bool) {
 	if polar == nil {
 		return nil, false
+	}
+	if polar.prepared {
+		index, found := polar.sailIndex[sailID]
+		if !found {
+			return nil, false
+		}
+		return &polar.Sails[index], true
 	}
 	for sailIndex := range polar.Sails {
 		if polar.Sails[sailIndex].ID == sailID {

@@ -88,13 +88,22 @@ func (constraint *GeoJSONConstraint) candidatePolygonIndices(
 	minLatitude -= latitudeExpansion
 	maxLatitude += latitudeExpansion
 
-	seen := make(map[int]struct{})
-	for _, cell := range cellsForBounds(
+	cells := cellsForBounds(
 		minLongitude,
 		maxLongitude,
 		minLatitude,
 		maxLatitude,
-	) {
+	)
+	if len(cells) == 1 {
+		result := constraint.index[cells[0]]
+		if result == nil {
+			return []int{}
+		}
+		return result
+	}
+
+	seen := make(map[int]struct{})
+	for _, cell := range cells {
 		for _, polygonIndex := range constraint.index[cell] {
 			seen[polygonIndex] = struct{}{}
 		}
@@ -143,6 +152,12 @@ func cellsForBounds(
 	maxLatitudeCell := latitudeCell(maxLatitude)
 	minLongitudeCell := rawLongitudeCell(minLongitude)
 	maxLongitudeCell := rawLongitudeCell(maxLongitude)
+	if minLatitudeCell == maxLatitudeCell && minLongitudeCell == maxLongitudeCell {
+		return []spatialIndexCell{{
+			latitude:  minLatitudeCell,
+			longitude: normalizeLongitudeCell(minLongitudeCell),
+		}}
+	}
 
 	result := make(
 		[]spatialIndexCell,

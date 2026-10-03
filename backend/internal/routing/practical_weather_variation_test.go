@@ -36,8 +36,8 @@ func TestEvaluatePracticalHeadingCandidatesEvaluatesWeatherVariations(t *testing
 	if err != nil {
 		t.Fatalf("évaluation refusée: %v", err)
 	}
-	if provider.calls != 3 {
-		t.Fatalf("appels météo = %d, attendus 3", provider.calls)
+	if provider.calls != 1 {
+		t.Fatalf("appels météo = %d, attendus 1 après déduplication", provider.calls)
 	}
 	if len(candidates[0].WeatherScenarios) != len(variations) {
 		t.Fatalf(

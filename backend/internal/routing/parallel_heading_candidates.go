@@ -31,6 +31,7 @@ func evaluateParentHeadingCandidates(
 	instant time.Time,
 	duration time.Duration,
 	owned equipment.EquipmentSet,
+	effects *equipment.Effects,
 	headings []navigation.Heading,
 ) ([][]HeadingCandidate, error) {
 	if len(parents) == 0 {
@@ -66,6 +67,7 @@ func evaluateParentHeadingCandidates(
 					Instant:  instant,
 					Duration: duration,
 					Owned:    owned,
+					Effects:  effects,
 					Headings: headings,
 				})
 				results <- parentHeadingResult{index: index, candidates: candidates, err: err}

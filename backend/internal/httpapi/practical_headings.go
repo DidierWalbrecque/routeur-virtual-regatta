@@ -114,6 +114,43 @@ func adaptiveIsochroneDuration(distance navigation.NauticalMiles, requested time
 	return estimated
 }
 
+// calculationDurationForRoute keeps the adaptive horizon for direct open-water
+// routes. A land constraint or a mandatory gate can make the useful route much
+// longer than the great-circle distance, so those cases keep the requested
+// horizon as a safe upper bound.
+func calculationDurationForRoute(
+	ctx context.Context,
+	position navigation.Position,
+	destination navigation.Position,
+	instant time.Time,
+	distance navigation.NauticalMiles,
+	requested time.Duration,
+	maxSpeed polar.BoatSpeed,
+	gates []routing.CourseGate,
+	landConstraint routing.Constraint,
+) (time.Duration, error) {
+	if len(gates) > 0 {
+		return requested, nil
+	}
+	if landConstraint == nil {
+		return adaptiveIsochroneDuration(distance, requested, maxSpeed), nil
+	}
+	segment := routing.RouteSegment{
+		From:       position,
+		To:         destination,
+		StartedAt:  instant,
+		FinishedAt: instant.Add(requested),
+	}
+	allowed, err := landConstraint.Allows(ctx, segment)
+	if err != nil {
+		return 0, fmt.Errorf("vérification du trajet direct impossible: %w", err)
+	}
+	if !allowed {
+		return requested, nil
+	}
+	return adaptiveIsochroneDuration(distance, requested, maxSpeed), nil
+}
+
 type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
 	Positions []positionRequest `json:"positions"`
@@ -352,12 +389,20 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, "distance de destination impossible: "+err.Error())
 		return
 	}
-	calculationDuration := adaptiveIsochroneDuration(distance, requestedDuration, boatPolar.MaxSpeed)
-	// A land-constrained route may need a long detour even when the direct
-	// distance is short. Keep the requested horizon in that case so the search
-	// can continue around obstacles instead of producing a false final error.
-	if landConstraint != nil {
-		calculationDuration = requestedDuration
+	calculationDuration, err := calculationDurationForRoute(
+		calculationContext,
+		position,
+		destination,
+		instant,
+		distance,
+		requestedDuration,
+		boatPolar.MaxSpeed,
+		virtualRegattaGates,
+		landConstraint,
+	)
+	if err != nil {
+		writeJSONError(response, http.StatusBadRequest, "optimisation de l'horizon impossible: "+err.Error())
+		return
 	}
 	result.Performance.IsochroneDurationMin = calculationDuration.Minutes()
 	layerCount := int(math.Ceil(calculationDuration.Minutes() / isochroneStep.Minutes()))
@@ -374,6 +419,7 @@ func runPracticalHeadings(
 			}
 		}
 		progressReporter := routing.IsochroneProgressReporter(nil)
+		frontierResponses := make(map[int]isochroneFrontierResponse, layerCount)
 		if stream != nil {
 			progressReporter = func(progress routing.IsochroneProgress) {
 				frontier, frontierErr := isochroneFrontierResponseFor(position, progress.Frontier)
@@ -382,6 +428,7 @@ func runPracticalHeadings(
 					cancelCalculation()
 					return
 				}
+				frontierResponses[progress.Frontier.Index] = frontier
 				if err := stream.event(response, "frontier", practicalHeadingsFrontierEvent{
 					Instant:            frontier.Instant.Format(time.RFC3339Nano),
 					Positions:          frontier.Positions,
@@ -422,14 +469,17 @@ func runPracticalHeadings(
 		}
 		result.Reached = search.Reached
 		for _, frontier := range search.Frontiers {
-			layer, err := isochroneFrontierResponseFor(position, frontier)
-			if err != nil {
-				if stream != nil {
-					stream.fail(response, "contour d’isochrone impossible: "+err.Error(), err)
-				} else {
-					writeJSONError(response, http.StatusBadRequest, "contour d’isochrone impossible: "+err.Error())
+			layer, exists := frontierResponses[frontier.Index]
+			if !exists {
+				layer, err = isochroneFrontierResponseFor(position, frontier)
+				if err != nil {
+					if stream != nil {
+						stream.fail(response, "contour d’isochrone impossible: "+err.Error(), err)
+					} else {
+						writeJSONError(response, http.StatusBadRequest, "contour d’isochrone impossible: "+err.Error())
+					}
+					return
 				}
-				return
 			}
 			result.Isochrones = append(result.Isochrones, layer)
 		}

@@ -40,6 +40,13 @@ type Polar struct {
 	Foil  FoilProfile
 	Hull  HullProfile
 	Winch WinchProfile
+
+	// The derived fields are populated after successful validation. They keep
+	// the hot speed-calculation path free from repeated linear lookups and
+	// structural grid checks. Hand-built test polars transparently use the
+	// defensive fallback path when these fields are absent.
+	sailIndex map[SailID]int
+	prepared  bool
 }
 
 // Sail contient l'identité d'une voile et sa grille de vitesses.

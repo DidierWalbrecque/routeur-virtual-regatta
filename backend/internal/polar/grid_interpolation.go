@@ -28,6 +28,24 @@ func interpolateSpeedGrid(
 			)
 		}
 	}
+	return interpolateSpeedGridUnchecked(
+		windSpeeds,
+		windAngles,
+		grid,
+		targetWindSpeed,
+		targetWindAngle,
+	)
+}
+
+// interpolateSpeedGridUnchecked is used only after Polar.Validate has
+// confirmed the dimensions of every speed grid.
+func interpolateSpeedGridUnchecked(
+	windSpeeds []WindSpeed,
+	windAngles []TrueWindAngle,
+	grid SpeedGrid,
+	targetWindSpeed WindSpeed,
+	targetWindAngle TrueWindAngle,
+) (BoatSpeed, error) {
 
 	angleBounds, err := findAxisBounds(windAngles, targetWindAngle)
 	if err != nil {

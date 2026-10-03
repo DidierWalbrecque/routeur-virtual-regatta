@@ -130,6 +130,8 @@ func (polar *Polar) Validate() error {
 	if polar == nil {
 		return errors.New("polar: la polaire est nil")
 	}
+	polar.prepared = false
+	polar.sailIndex = nil
 	if strings.TrimSpace(polar.Label) == "" {
 		return errors.New("polar: le label est vide")
 	}
@@ -167,6 +169,11 @@ func (polar *Polar) Validate() error {
 			return err
 		}
 	}
+	polar.sailIndex = make(map[SailID]int, len(polar.Sails))
+	for index := range polar.Sails {
+		polar.sailIndex[polar.Sails[index].ID] = index
+	}
+	polar.prepared = true
 
 	return nil
 }
