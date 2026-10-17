@@ -298,11 +298,38 @@ func convertSails(sources []sailFile) []Sail {
 		}
 		result[sailIndex] = Sail{
 			ID:     SailID(source.ID),
-			Name:   source.Name,
+			Name:   normalizeSailName(source.Name),
 			Speeds: SpeedGrid{Values: values},
 		}
 	}
 	return result
+}
+
+// normalizeSailName converts the known sail-name variants used by different
+// polar sources to the canonical names expected by the rest of the engine.
+// Unknown names are only trimmed so that adding a new sail remains possible
+// without silently changing its identity.
+func normalizeSailName(value string) string {
+	trimmed := strings.TrimSpace(value)
+	key := strings.NewReplacer("_", "", "-", "", " ", "").Replace(strings.ToLower(trimmed))
+	switch key {
+	case "jib":
+		return "Jib"
+	case "spi":
+		return "Spi"
+	case "staysail":
+		return "Staysail"
+	case "lightjib":
+		return "LightJib"
+	case "code0":
+		return "Code0"
+	case "heavygnk":
+		return "HeavyGnk"
+	case "lightgnk":
+		return "LightGnk"
+	default:
+		return trimmed
+	}
 }
 
 func convertManeuver(source maneuverFile) ManeuverProfile {

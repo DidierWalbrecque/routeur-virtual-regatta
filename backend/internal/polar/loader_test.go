@@ -90,6 +90,50 @@ func TestLoadValidPolar(t *testing.T) {
 	}
 }
 
+func TestLoadNormalizesSailNameVariants(t *testing.T) {
+	variants := map[string]string{
+		"JIB":       "Jib",
+		"SPI":       "Spi",
+		"STAYSAIL":  "Staysail",
+		"LIGHT_JIB": "LightJib",
+		"CODE_0":    "Code0",
+		"HEAVY_GNK": "HeavyGnk",
+		"LIGHT-GNK": "LightGnk",
+	}
+
+	for input, expected := range variants {
+		polar, err := Load(strings.NewReader(strings.Replace(
+			validPolarJSON,
+			`"name": "Jib"`,
+			`"name": "`+input+`"`,
+			1,
+		)))
+		if err != nil {
+			t.Fatalf("Load(%q) a retourné une erreur inattendue: %v", input, err)
+		}
+		if got := polar.Sails[0].Name; got != expected {
+			t.Errorf("nom normalisé de %q = %q, attendu %q", input, got, expected)
+		}
+	}
+}
+
+func TestLoadSuperMaxi100Polar(t *testing.T) {
+	path := filepath.Join("..", "..", "..", "data", "polars", "super_maxi_100.json")
+	boatPolar, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("LoadFile() n'a pas chargé la polaire Super Maxi 100: %v", err)
+	}
+	if boatPolar.Label != "mono/super_maxi_100" {
+		t.Fatalf("label = %q, attendu %q", boatPolar.Label, "mono/super_maxi_100")
+	}
+	if boatPolar.MaxSpeed != 24.96 {
+		t.Fatalf("vitesse maximale = %v, attendue 24.96", boatPolar.MaxSpeed)
+	}
+	if len(boatPolar.Sails) == 0 || boatPolar.Sails[0].Name != "Jib" {
+		t.Fatalf("première voile = %+v, Jib normalisé attendu", boatPolar.Sails)
+	}
+}
+
 func TestLoadAcceptsLegacyOptionalFields(t *testing.T) {
 	legacyJSON := `{
       "_id": 13,

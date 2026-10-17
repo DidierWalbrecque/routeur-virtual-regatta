@@ -24,6 +24,7 @@ class FlaskInterfaceTests(unittest.TestCase):
         self.assertIn('id="route-checkpoints-list"', page)
         self.assertIn('checkpoint?.onLand !== true', page)
         self.assertIn('id="route-polar"', page)
+        self.assertIn('value="../data/polars/super_maxi_100.json"', page)
         self.assertIn('id: "vr-checkpoint-lines"', page)
         self.assertIn('id: "vr-checkpoint-rhumb-lines"', page)
         self.assertIn('id: "vr-checkpoint-marks"', page)
