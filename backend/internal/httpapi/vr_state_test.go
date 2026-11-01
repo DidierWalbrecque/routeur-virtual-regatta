@@ -1,6 +1,9 @@
 package httpapi
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -113,5 +116,83 @@ func TestAnnotateVRStateCheckpointsMarksLandMidpoint(t *testing.T) {
 	}
 	if state.Checkpoints[1].OnLand == nil || *state.Checkpoints[1].OnLand {
 		t.Fatal("le milieu de la seconde porte devait être marqué maritime")
+	}
+}
+
+func TestVRStateKeepsBoatHints(t *testing.T) {
+	store := newVRStateStore()
+	body := `{"position":{"latitude":49,"longitude":-4},"boatHints":[{"path":"res.leg.boat.polar_id","value":"4"},{"path":"res.bs.boatName","value":"IMOCA 60 Foils"}]}`
+	recorder := httptest.NewRecorder()
+	store.post(recorder, httptest.NewRequest(http.MethodPost, "/api/vr/state", strings.NewReader(body)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("statut %d : %s", recorder.Code, recorder.Body.String())
+	}
+
+	read := httptest.NewRecorder()
+	store.get(read, httptest.NewRequest(http.MethodGet, "/api/vr/state", nil))
+	var state vrState
+	if err := json.Unmarshal(read.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.BoatHints) != 2 || state.BoatHints[0].Path != "res.leg.boat.polar_id" || state.BoatHints[1].Value != "IMOCA 60 Foils" {
+		t.Fatalf("indices de bateau perdus : %+v", state.BoatHints)
+	}
+}
+
+func TestVRStateKeepsValidGameZonesOnly(t *testing.T) {
+	store := newVRStateStore()
+	body := `{"position":{"latitude":49,"longitude":-4},"legShape":[{"path":"res.leg.restrictedZones","value":"tableau[3]"}],"zones":[
+		{"name":" Cornouailles ","points":[{"latitude":50,"longitude":-5.5},{"latitude":50.1,"longitude":-5.3},{"latitude":49.9,"longitude":-5.3}]},
+		{"name":"deux points","points":[{"latitude":50,"longitude":-5.5},{"latitude":50.1,"longitude":-5.3}]},
+		{"name":"hors limites","points":[{"latitude":120,"longitude":-5.5},{"latitude":50.1,"longitude":-5.3},{"latitude":49.9,"longitude":-5.3}]}]}`
+	recorder := httptest.NewRecorder()
+	store.post(recorder, httptest.NewRequest(http.MethodPost, "/api/vr/state", strings.NewReader(body)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("statut %d : %s", recorder.Code, recorder.Body.String())
+	}
+
+	read := httptest.NewRecorder()
+	store.get(read, httptest.NewRequest(http.MethodGet, "/api/vr/state", nil))
+	var state vrState
+	if err := json.Unmarshal(read.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if len(state.Zones) != 1 || state.Zones[0].Name != "Cornouailles" || len(state.Zones[0].Points) != 3 {
+		t.Fatalf("seule la zone valide devait être conservée : %+v", state.Zones)
+	}
+	if len(state.LegShape) != 1 || state.LegShape[0].Path != "res.leg.restrictedZones" {
+		t.Fatalf("résumé de la manche perdu : %+v", state.LegShape)
+	}
+}
+
+func TestCourseGatesFromVRStateIgnoresPassedAndLandGates(t *testing.T) {
+	onLand := true
+	atSea := false
+	checkpoint := func(group, id int, name string, landFlag *bool) vrStateCheckpoint {
+		return vrStateCheckpoint{
+			Group: group, ID: id, Name: name, Side: "port", OnLand: landFlag,
+			Start: vrStatePosition{Latitude: 1, Longitude: float64(group)},
+			End:   vrStatePosition{Latitude: 2, Longitude: float64(group)},
+		}
+	}
+	state := vrState{
+		GateGroupCounters: []bool{true, false, false},
+		Checkpoints: []vrStateCheckpoint{
+			checkpoint(1, 3, "franchie", &atSea),
+			checkpoint(2, 2, "bouée", &atSea),
+			checkpoint(3, 6, "sur terre", &onLand),
+			checkpoint(3, 1, "sans indication", nil),
+		},
+	}
+	gates, err := courseGatesFromVRState(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := make([]string, 0, len(gates))
+	for _, gate := range gates {
+		names = append(names, gate.Name)
+	}
+	if len(names) != 2 || names[0] != "bouée" || names[1] != "sans indication" {
+		t.Fatalf("portes retenues = %v, attendu [bouée sans indication]", names)
 	}
 }

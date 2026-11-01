@@ -26,6 +26,8 @@ type polygon struct {
 	maxLatitude        float64
 	referenceLongitude float64
 	boundsReady        bool
+	// grid indexes the edges of large polygons; nil for small ones.
+	grid *edgeGrid
 }
 
 // GeoJSONConstraint rejects route segments touching a terrestrial polygon.

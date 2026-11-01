@@ -13,6 +13,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("POST /api/practical-headings/stream", func(response http.ResponseWriter, request *http.Request) {
 		runPracticalHeadings(response, request, &practicalHeadingsStream{}, vrState)
 	})
+	mux.HandleFunc("GET /api/polars", polarsHandler)
 	mux.HandleFunc("POST /api/weather/refresh", weatherRefreshHandler)
 	mux.HandleFunc("POST /api/vr/state", vrState.post)
 	mux.HandleFunc("GET /api/vr/state", vrState.get)

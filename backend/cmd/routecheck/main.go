@@ -49,6 +49,7 @@ type options struct {
 	layerCount           int
 	owned                equipment.EquipmentSet
 	headingSpacing       float64
+	refineHeadings       bool
 	cellSize             navigation.NauticalMiles
 	maxCandidates        int
 	arrivalRadius        navigation.NauticalMiles
@@ -133,6 +134,7 @@ func run(args []string, stdout, stderr io.Writer) error {
 			LayerCount:            options.layerCount,
 			Owned:                 options.owned,
 			HeadingSpacing:        options.headingSpacing,
+			RefineHeadings:        options.refineHeadings,
 			CellSize:              options.cellSize,
 			MaxCandidates:         options.maxCandidates,
 			ArrivalRadius:         options.arrivalRadius,
@@ -446,6 +448,11 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 		10,
 		"écart entre les caps explorés en degrés",
 	)
+	refineHeadings := flags.Bool(
+		"refine-headings",
+		false,
+		"affine les caps entiers autour des meilleurs caps de la grille",
+	)
 	cellSize := flags.Float64(
 		"cell-size",
 		1,
@@ -688,6 +695,7 @@ func parseOptions(args []string, stderr io.Writer) (options, error) {
 	result.layerCount = layerCount
 	result.owned = owned
 	result.headingSpacing = *headingSpacing
+	result.refineHeadings = *refineHeadings
 	result.cellSize = cellSizeValue
 	result.maxCandidates = *maxCandidates
 	result.arrivalRadius = arrivalRadiusValue

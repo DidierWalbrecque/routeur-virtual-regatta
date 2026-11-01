@@ -3,53 +3,56 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import ANY, patch
 
-from flaskapp.app import available_polar_options, create_app
+from flaskapp.app import create_app
 
 
-class FlaskInterfaceTests(unittest.TestCase):
+class FlaskRelayTests(unittest.TestCase):
     def setUp(self):
         self.client = create_app("http://go-api.test").test_client()
 
-    def test_index_is_available(self):
-        response = self.client.get("/")
+    def test_index_serves_the_built_react_interface(self):
+        with TemporaryDirectory() as temporary_directory:
+            dist = Path(temporary_directory)
+            (dist / "assets").mkdir()
+            (dist / "index.html").write_text('<div id="root"></div>', encoding="utf-8")
+            (dist / "assets" / "app.js").write_text("console.log(1)", encoding="utf-8")
+
+            with patch("flaskapp.app.FRONTEND_DIST", dist):
+                page = self.client.get("/")
+                asset = self.client.get("/assets/app.js")
+                missing = self.client.get("/assets/absent.js")
+                page_text = page.get_data(as_text=True)
+                for response in (page, asset, missing):
+                    response.close()
+
+            self.assertEqual(page.status_code, 200)
+            self.assertIn('id="root"', page_text)
+            self.assertEqual(asset.status_code, 200)
+            self.assertEqual(missing.status_code, 404)
+
+    def test_index_explains_how_to_build_the_interface(self):
+        with TemporaryDirectory() as temporary_directory:
+            with patch("flaskapp.app.FRONTEND_DIST", Path(temporary_directory)):
+                response = self.client.get("/")
+                assets = self.client.get("/assets/app.js")
+                assets.close()
+
+        self.assertEqual(response.status_code, 503)
+        self.assertIn("npm run build", response.get_data(as_text=True))
+        self.assertEqual(assets.status_code, 404)
+
+    @patch("flaskapp.app._call_go_get_api")
+    def test_polars_list_is_proxied(self, call_go_get_api):
+        call_go_get_api.return_value = (
+            {"polars": [{"label": "a.json", "value": "../data/polars/a.json"}], "default": "../data/polars/a.json"},
+            200,
+        )
+
+        response = self.client.get("/api/polars")
 
         self.assertEqual(response.status_code, 200)
-        page = response.get_data(as_text=True)
-        self.assertIn('id="map"', page)
-        self.assertIn('id="calculate-route"', page)
-        self.assertIn('id="route-form-panel"', page)
-        self.assertIn('id="show-route-details"', page)
-        self.assertIn('id="route-details-panel"', page)
-        self.assertIn('id="route-start"', page)
-        self.assertIn('id="route-checkpoints-list"', page)
-        self.assertIn('checkpoint?.onLand !== true', page)
-        self.assertIn('id="route-polar"', page)
-        self.assertIn('value="../data/polars/super_maxi_100.json"', page)
-        self.assertIn('id: "vr-checkpoint-lines"', page)
-        self.assertIn('id: "vr-checkpoint-rhumb-lines"', page)
-        self.assertIn('id: "vr-checkpoint-marks"', page)
-        self.assertIn('id: "vr-checkpoint-mark-labels"', page)
-        self.assertIn('id: "vr-checkpoint-labels"', page)
-        self.assertIn('value="../data/polars/ultim_bp_11.json"', page)
-        self.assertIn("/static/route_stream.js", page)
-        self.assertIn("/static/route_details.js", page)
-        self.assertIn("/api/practical-headings/stream", page)
-
-    def test_polar_options_are_discovered_from_the_data_directory(self):
-        with TemporaryDirectory() as temporary_directory:
-            polar_directory = Path(temporary_directory)
-            (polar_directory / "Zeta.json").write_text("{}", encoding="utf-8")
-            (polar_directory / "alpha.json").write_text("{}", encoding="utf-8")
-            (polar_directory / "not-a-polar.txt").write_text("{}", encoding="utf-8")
-
-            with patch("flaskapp.app.POLARS_DIR", polar_directory):
-                self.assertEqual(
-                    available_polar_options(),
-                    [
-                        {"label": "alpha.json", "value": "../data/polars/alpha.json"},
-                        {"label": "Zeta.json", "value": "../data/polars/Zeta.json"},
-                    ],
-                )
+        self.assertEqual(response.get_json()["default"], "../data/polars/a.json")
+        call_go_get_api.assert_called_once_with(ANY, "/api/polars")
 
     @patch("flaskapp.app._call_go_api")
     def test_weather_refresh_is_proxied(self, call_go_api):
@@ -67,23 +70,6 @@ class FlaskInterfaceTests(unittest.TestCase):
             "/api/weather/refresh",
             {"forecastHours": [0, 3], "lookbackHours": 48},
         )
-
-    def test_weather_refresh_does_not_change_departure_time(self):
-        response = self.client.get("/")
-
-        self.assertEqual(response.status_code, 200)
-        page = response.get_data(as_text=True)
-        self.assertNotIn('route-instant").value = runToLocal(latestWeatherRun)', page)
-
-    def test_vr_state_polling_does_not_clear_the_route(self):
-        response = self.client.get("/")
-
-        self.assertEqual(response.status_code, 200)
-        page = response.get_data(as_text=True)
-        polling_function = page.split("async function refreshVirtualRegattaState", 1)[1].split(
-            "function updateMapFromForm", 1
-        )[0]
-        self.assertNotIn("updateMapFromForm()", polling_function)
 
     @patch("flaskapp.app._call_go_api")
     def test_vr_state_post_is_proxied(self, call_go_api):

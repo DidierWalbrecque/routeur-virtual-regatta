@@ -113,6 +113,24 @@ func segmentForbiddenByPolygon(
 	localEnd := end
 	localEnd.longitude -= shift
 	localReferenceLongitude := referenceLongitude - shift
+	referenceLatitude := (localStart.latitude + localEnd.latitude) / 2
+	longitudeScale := math.Cos(referenceLatitude * math.Pi / 180)
+
+	if value.grid != nil && len(value.unwrappedRings) > 0 {
+		forbidden, handled := segmentForbiddenByIndexedPolygon(
+			localStart,
+			localEnd,
+			value,
+			localReferenceLongitude,
+			referenceLatitude,
+			longitudeScale,
+			margin,
+		)
+		if handled {
+			return forbidden, nil
+		}
+	}
+
 	for _, ring := range rings {
 		if segmentIntersectsRing(localStart, localEnd, ring) {
 			return true, nil
@@ -125,18 +143,102 @@ func segmentForbiddenByPolygon(
 		return false, nil
 	}
 
-	referenceLatitude := (localStart.latitude + localEnd.latitude) / 2
-	projectedStart := projectPoint(localStart, localReferenceLongitude, referenceLatitude)
-	projectedEnd := projectPoint(localEnd, localReferenceLongitude, referenceLatitude)
-	minimum := math.Inf(1)
+	projectedStart := projectPointWithScale(localStart, localReferenceLongitude, referenceLatitude, longitudeScale)
+	projectedEnd := projectPointWithScale(localEnd, localReferenceLongitude, referenceLatitude, longitudeScale)
 	for _, ring := range rings {
 		for index := 1; index < len(ring); index++ {
-			edgeStart := projectPoint(ring[index-1], localReferenceLongitude, referenceLatitude)
-			edgeEnd := projectPoint(ring[index], localReferenceLongitude, referenceLatitude)
-			minimum = math.Min(minimum, projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd))
+			edgeStart := projectPointWithScale(ring[index-1], localReferenceLongitude, referenceLatitude, longitudeScale)
+			edgeEnd := projectPointWithScale(ring[index], localReferenceLongitude, referenceLatitude, longitudeScale)
+			if projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd) <= margin+geometryEpsilon {
+				return true, nil
+			}
 		}
 	}
-	return minimum <= margin+geometryEpsilon, nil
+	return false, nil
+}
+
+// segmentForbiddenByIndexedPolygon gives the same answer as the exhaustive
+// checks of segmentForbiddenByPolygon while only visiting the polygon edges
+// close to the segment. handled is false when the query is too large for the
+// grid, in which case the caller falls back to the exhaustive scan.
+func segmentForbiddenByIndexedPolygon(
+	localStart,
+	localEnd point,
+	value polygon,
+	localReferenceLongitude,
+	referenceLatitude,
+	longitudeScale,
+	margin float64,
+) (forbidden, handled bool) {
+	latitudeExpansion := margin / 60
+	longitudeExpansion := 0.0
+	if margin > 0 {
+		if longitudeScale < 1e-6 {
+			return false, false
+		}
+		longitudeExpansion = margin / (60 * longitudeScale)
+	}
+	// Small relative slack so rounding can never exclude an edge that the
+	// exhaustive scan would have accepted.
+	latitudeExpansion = latitudeExpansion*(1+1e-9) + edgeGridPad
+	longitudeExpansion = longitudeExpansion*(1+1e-9) + edgeGridPad
+
+	var buffer [256]edgeRef
+	edges, ok := value.grid.collect(
+		math.Min(localStart.longitude, localEnd.longitude)-longitudeExpansion,
+		math.Max(localStart.longitude, localEnd.longitude)+longitudeExpansion,
+		math.Min(localStart.latitude, localEnd.latitude)-latitudeExpansion,
+		math.Max(localStart.latitude, localEnd.latitude)+latitudeExpansion,
+		buffer[:0],
+	)
+	if !ok {
+		return false, false
+	}
+
+	rings := value.unwrappedRings
+	for _, edge := range edges {
+		if edge.index == 0 {
+			continue
+		}
+		ring := rings[edge.ring]
+		if segmentsIntersect(localStart, localEnd, ring[edge.index-1], ring[edge.index]) {
+			return true, true
+		}
+	}
+	if value.grid.pointInPolygon(localStart, rings) ||
+		value.grid.pointInPolygon(localEnd, rings) {
+		return true, true
+	}
+	if margin <= 0 {
+		return false, true
+	}
+
+	projectedStart := projectPointWithScale(localStart, localReferenceLongitude, referenceLatitude, longitudeScale)
+	projectedEnd := projectPointWithScale(localEnd, localReferenceLongitude, referenceLatitude, longitudeScale)
+	for _, edge := range edges {
+		if edge.index == 0 {
+			continue
+		}
+		ring := rings[edge.ring]
+		edgeStart := projectPointWithScale(ring[edge.index-1], localReferenceLongitude, referenceLatitude, longitudeScale)
+		edgeEnd := projectPointWithScale(ring[edge.index], localReferenceLongitude, referenceLatitude, longitudeScale)
+		if projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd) <= margin+geometryEpsilon {
+			return true, true
+		}
+	}
+	return false, true
+}
+
+func projectPointWithScale(
+	value point,
+	referenceLongitude,
+	referenceLatitude,
+	longitudeScale float64,
+) projectedPoint {
+	return projectedPoint{
+		x: (value.longitude - referenceLongitude) * 60 * longitudeScale,
+		y: (value.latitude - referenceLatitude) * 60,
+	}
 }
 
 func polygonMayAffectSegment(

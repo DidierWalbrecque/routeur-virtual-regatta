@@ -39,6 +39,9 @@ func newPolygonSpatialIndex(polygons []polygon) polygonSpatialIndex {
 				)
 			}
 		}
+		polygons[polygonIndex].grid = buildEdgeGrid(
+			polygons[polygonIndex].unwrappedRings,
+		)
 		polygons[polygonIndex].boundsReady = true
 		for _, cell := range cellsForBounds(
 			minLongitude,
