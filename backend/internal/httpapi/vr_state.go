@@ -26,6 +26,19 @@ type vrStateSail struct {
 	Automatic bool   `json:"automatic,omitempty"`
 }
 
+// vrBoatHint est une valeur du jeu pouvant identifier le bateau : son chemin dans
+// la réponse de Virtual Regatta et sa valeur, telles que reçues.
+type vrBoatHint struct {
+	Path  string `json:"path"`
+	Value string `json:"value"`
+}
+
+// vrStateZone est une zone interdite de la course, reçue du jeu.
+type vrStateZone struct {
+	Name   string            `json:"name"`
+	Points []vrStatePosition `json:"points"`
+}
+
 type vrStateCheckpoint struct {
 	Group   int             `json:"group"`
 	ID      int             `json:"id"`
@@ -56,6 +69,9 @@ type vrState struct {
 	Speed             *float64            `json:"speed"`
 	State             string              `json:"state"`
 	UpdatedAt         *int64              `json:"updatedAt"`
+	BoatHints         []vrBoatHint        `json:"boatHints,omitempty"`
+	Zones             []vrStateZone       `json:"zones,omitempty"`
+	LegShape          []vrBoatHint        `json:"legShape,omitempty"`
 	SourceURL         string              `json:"sourceUrl,omitempty"`
 	ReceivedAt        int64               `json:"receivedAt"`
 }
@@ -80,6 +96,7 @@ func (store *vrStateStore) post(response http.ResponseWriter, request *http.Requ
 		writeJSONError(response, http.StatusBadRequest, "état Virtual Regatta invalide: "+err.Error())
 		return
 	}
+	state.Zones = sanitizeVRStateZones(state.Zones)
 	annotateVRStateCheckpoints(&state)
 
 	state.ReceivedAt = time.Now().UnixMilli()
@@ -138,6 +155,9 @@ func (store *vrStateStore) snapshot() (vrState, bool) {
 
 	state := *store.current
 	state.Options = append([]string(nil), store.current.Options...)
+	state.BoatHints = append([]vrBoatHint(nil), store.current.BoatHints...)
+	state.LegShape = append([]vrBoatHint(nil), store.current.LegShape...)
+	state.Zones = append([]vrStateZone(nil), store.current.Zones...)
 	state.Sails = append([]vrStateSail(nil), store.current.Sails...)
 	state.Checkpoints = append([]vrStateCheckpoint(nil), store.current.Checkpoints...)
 	state.GateGroupCounters = append([]bool(nil), store.current.GateGroupCounters...)
@@ -152,6 +172,11 @@ func courseGatesFromVRState(state vrState) ([]routing.CourseGate, error) {
 	gates := make([]routing.CourseGate, 0, len(state.Checkpoints))
 	for index, checkpoint := range state.Checkpoints {
 		if checkpoint.Group > 0 && checkpoint.Group <= len(state.GateGroupCounters) && state.GateGroupCounters[checkpoint.Group-1] {
+			continue
+		}
+		// Une porte dont le milieu est sur une terre n'est pas franchissable en mer :
+		// l'interface la masque, le calcul ne doit pas l'imposer non plus.
+		if checkpoint.OnLand != nil && *checkpoint.OnLand {
 			continue
 		}
 		name := strings.TrimSpace(checkpoint.Name)
@@ -236,6 +261,37 @@ func equipmentIDsFromVRState(state vrState) []string {
 		result = append(result, id)
 	}
 	return result
+}
+
+// sanitizeVRStateZones ne garde que les zones exploitables : au moins trois
+// sommets valides, dans des limites raisonnables. Une zone invalide est écartée
+// sans refuser l'état entier, car les zones ne sont qu'un complément.
+func sanitizeVRStateZones(zones []vrStateZone) []vrStateZone {
+	kept := make([]vrStateZone, 0, len(zones))
+	for _, zone := range zones {
+		if len(kept) >= maxExclusionZones {
+			break
+		}
+		points := make([]vrStatePosition, 0, len(zone.Points))
+		for _, point := range zone.Points {
+			if point.Latitude < -90 || point.Latitude > 90 || point.Longitude < -180 || point.Longitude > 180 {
+				points = nil
+				break
+			}
+			points = append(points, point)
+			if len(points) >= maxExclusionZonePoints {
+				break
+			}
+		}
+		if len(points) < 3 {
+			continue
+		}
+		kept = append(kept, vrStateZone{Name: strings.TrimSpace(zone.Name), Points: points})
+	}
+	if len(kept) == 0 {
+		return nil
+	}
+	return kept
 }
 
 func validateVRState(state vrState) error {

@@ -32,6 +32,7 @@ type practicalHeadingsRequest struct {
 	RequireRobustScenarios    bool                                `json:"requireRobustScenarios"`
 	Mode                      string                              `json:"mode"`
 	UseVirtualRegattaState    bool                                `json:"useVirtualRegattaState"`
+	ExclusionZones            []exclusionZoneRequest              `json:"exclusionZones"`
 }
 
 type positionRequest struct {
@@ -82,14 +83,17 @@ type calculationProfile struct {
 	CellSize          navigation.NauticalMiles
 	MaxCandidates     int
 	IncludeIsochrones bool
+	// MaxDuration borne l'horizon demandé : au-delà de quelques jours, les
+	// prévisions ne justifient plus un calcul précis.
+	MaxDuration time.Duration
 }
 
 func calculationProfileFor(mode string) (calculationProfile, error) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "precise":
-		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 15, CellSize: 0.5, MaxCandidates: 100, IncludeIsochrones: true}, nil
+		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 15, CellSize: 0.5, MaxCandidates: 100, IncludeIsochrones: true, MaxDuration: 3 * 24 * time.Hour}, nil
 	case "quick":
-		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 50, IncludeIsochrones: true}, nil
+		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 50, IncludeIsochrones: true, MaxDuration: 5 * 24 * time.Hour}, nil
 	default:
 		return calculationProfile{}, fmt.Errorf("mode de calcul %q invalide: quick ou precise attendu", mode)
 	}
@@ -163,6 +167,16 @@ type routePointResponse struct {
 	Stamina  float64         `json:"stamina"`
 	Instant  time.Time       `json:"instant"`
 	Terminal bool            `json:"terminal"`
+	// Les champs suivants décrivent le pas qui se termine à ce point : vent
+	// au départ du pas, allure, vitesse et manœuvre éventuelle.
+	WindDirection    *float64 `json:"twd,omitempty"`
+	WindKnots        *float64 `json:"tws,omitempty"`
+	WindAngle        *float64 `json:"twa,omitempty"`
+	Tack             string   `json:"tack,omitempty"`
+	SpeedKnots       *float64 `json:"speedKnots,omitempty"`
+	FoilPercent      *float64 `json:"foilPercent,omitempty"`
+	SpeedCoefficient *float64 `json:"speedCoefficient,omitempty"`
+	Maneuver         string   `json:"maneuver,omitempty"`
 }
 
 type availableRouteStep struct {
@@ -171,6 +185,57 @@ type availableRouteStep struct {
 	Sail     string
 	Stamina  simulation.StaminaLevel
 	Instant  time.Time
+	Node     routing.IsochroneNode
+}
+
+func floatPointer(value float64) *float64 { return &value }
+
+// routePointFromNode construit le point de route atteint par un nœud, avec le
+// détail du pas qui y mène.
+func routePointFromNode(
+	node routing.IsochroneNode,
+	boatPolar *polar.Polar,
+	owned equipment.EquipmentSet,
+) routePointResponse {
+	step := node.Candidate.Step
+	point := routePointResponse{
+		Position:   positionRequest{Latitude: float64(step.NextPosition.Latitude), Longitude: float64(step.NextPosition.Longitude)},
+		Heading:    float64(node.Candidate.Heading),
+		Sail:       step.BestSail.SailName,
+		Stamina:    float64(node.State.Stamina.Level),
+		Instant:    step.NextInstant,
+		WindAngle:  floatPointer(float64(step.WindAngle)),
+		SpeedKnots: floatPointer(float64(step.BestSail.Speed)),
+	}
+	point.WindDirection = floatPointer(float64(step.Wind.Direction))
+	point.WindKnots = floatPointer(float64(step.WindKnots))
+	switch step.Tack {
+	case navigation.TackStarboard:
+		point.Tack = "starboard"
+	case navigation.TackPort:
+		point.Tack = "port"
+	}
+	if boatPolar != nil && owned.Has(equipment.Foils) && boatPolar.Foil.MaxSpeedRatio > 1 {
+		ratio, err := boatPolar.Foil.RatioAt(polar.WindSpeed(step.WindKnots), polar.TrueWindAngle(step.WindAngle))
+		if err == nil {
+			percent := float64(ratio-1) / float64(boatPolar.Foil.MaxSpeedRatio-1) * 100
+			point.FoilPercent = floatPointer(math.Max(0, math.Min(100, percent)))
+		}
+	}
+	if node.SpeedPenalty != nil && node.SpeedPenalty.AppliedPenalty != nil {
+		point.SpeedCoefficient = floatPointer(float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio))
+	}
+	if node.Maneuver != nil {
+		switch {
+		case node.Maneuver.Kind == simulation.ManeuverTack:
+			point.Maneuver = "tack"
+		case node.Maneuver.Kind == simulation.ManeuverGybe:
+			point.Maneuver = "gybe"
+		case node.Maneuver.SailChanged:
+			point.Maneuver = "sail"
+		}
+	}
+	return point
 }
 
 type practicalCandidateResponse struct {
@@ -253,6 +318,13 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, err.Error())
 		return
 	}
+	if requested := time.Duration(payload.DurationMinutes * float64(time.Minute)); requested > profile.MaxDuration {
+		writeJSONError(response, http.StatusBadRequest, fmt.Sprintf(
+			"durée de %.0f min trop longue pour ce mode : %.0f min au plus (%.0f jours)",
+			payload.DurationMinutes, profile.MaxDuration.Minutes(), profile.MaxDuration.Hours()/24,
+		))
+		return
+	}
 	if len(payload.WeatherFiles) == 0 || strings.TrimSpace(payload.PolarPath) == "" {
 		writeJSONError(response, http.StatusBadRequest, "weatherFiles et polarPath sont requis")
 		return
@@ -320,6 +392,32 @@ func runPracticalHeadings(
 			writeJSONError(response, http.StatusBadRequest, "le point de "+label+" se trouve sur une terre ou la côte")
 			return
 		}
+	}
+	exclusionConstraint, zonesErr := exclusionConstraintFromZones(payload.ExclusionZones)
+	if zonesErr != nil {
+		writeJSONError(response, http.StatusBadRequest, zonesErr.Error())
+		return
+	}
+	routeConstraints := []routing.Constraint{landConstraint}
+	arrivalConstraints := []routing.Constraint{arrivalLandConstraint}
+	if exclusionConstraint != nil {
+		endpoints := []struct {
+			label string
+			point navigation.Position
+		}{{"départ", position}, {"destination", destination}}
+		for _, endpoint := range endpoints {
+			inside, containsErr := exclusionConstraint.Contains(endpoint.point)
+			if containsErr != nil {
+				writeJSONError(response, http.StatusBadRequest, "vérification des zones interdites impossible pour le "+endpoint.label+": "+containsErr.Error())
+				return
+			}
+			if inside {
+				writeJSONError(response, http.StatusBadRequest, "le point de "+endpoint.label+" se trouve dans une zone interdite")
+				return
+			}
+		}
+		routeConstraints = append(routeConstraints, exclusionConstraint)
+		arrivalConstraints = append(arrivalConstraints, exclusionConstraint)
 	}
 	practicalStarted := time.Now()
 	candidates, err := evaluatePracticalHeadings(
@@ -398,7 +496,7 @@ func runPracticalHeadings(
 		requestedDuration,
 		boatPolar.MaxSpeed,
 		virtualRegattaGates,
-		landConstraint,
+		allConstraints(routeConstraints...),
 	)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "optimisation de l'horizon impossible: "+err.Error())
@@ -445,14 +543,14 @@ func runPracticalHeadings(
 		}
 		search, err := buildIsochroneSearch(calculationContext, weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
-			Owned: owned, HeadingSpacing: profile.HeadingSpacing, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
+			Owned: owned, HeadingSpacing: profile.HeadingSpacing, RefineHeadings: true, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
 			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: initialStamina,
 			InitialNavigation:     initialNavigation,
 			TransitionEvaluator:   transitionEvaluator,
 			CombineSpeedPenalties: combineSpeedPenalties,
 			Gates:                 virtualRegattaGates,
-			Constraints:           []routing.Constraint{landConstraint},
-			ArrivalConstraints:    []routing.Constraint{arrivalLandConstraint},
+			Constraints:           routeConstraints,
+			ArrivalConstraints:    arrivalConstraints,
 			Progress:              progressReporter,
 		})
 		if err != nil {
@@ -495,7 +593,7 @@ func runPracticalHeadings(
 			}
 			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(search.Origin.Latitude), Longitude: float64(search.Origin.Longitude)}, Stamina: float64(initialStamina.Level), Instant: search.StartedAt})
 			for _, routeStep := range availableSteps {
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Position.Latitude), Longitude: float64(routeStep.Position.Longitude)}, Heading: float64(routeStep.Heading), Sail: routeStep.Sail, Stamina: float64(routeStep.Stamina), Instant: routeStep.Instant})
+				result.Route = append(result.Route, routePointFromNode(routeStep.Node, boatPolar, owned))
 			}
 		} else if bestRoute, err := search.ReconstructBestRoute(); err == nil {
 			routeSteps := bestRoute.Steps
@@ -520,7 +618,7 @@ func runPracticalHeadings(
 			}
 			result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(bestRoute.Origin.Latitude), Longitude: float64(bestRoute.Origin.Longitude)}, Stamina: float64(initialStamina.Level), Instant: bestRoute.StartedAt})
 			for _, routeStep := range routeSteps {
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(routeStep.Node.Candidate.Step.NextPosition.Latitude), Longitude: float64(routeStep.Node.Candidate.Step.NextPosition.Longitude)}, Heading: float64(routeStep.Node.Candidate.Heading), Sail: routeStep.Node.Candidate.Step.BestSail.SailName, Stamina: float64(routeStep.Node.State.Stamina.Level), Instant: routeStep.Node.Candidate.Step.NextInstant})
+				result.Route = append(result.Route, routePointFromNode(routeStep.Node, boatPolar, owned))
 			}
 			if search.Reached {
 				lastPosition := bestRoute.Origin
@@ -612,6 +710,7 @@ func reconstructBestAvailableRoute(search routing.IsochroneSearch) ([]availableR
 			Sail:     node.Candidate.Step.BestSail.SailName,
 			Stamina:  node.State.Stamina.Level,
 			Instant:  node.Candidate.Step.NextInstant,
+			Node:     node,
 		}
 		nodeIndex = node.ParentIndex
 	}
