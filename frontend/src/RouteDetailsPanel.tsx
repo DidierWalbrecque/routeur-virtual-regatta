@@ -8,9 +8,17 @@ import {
   formatNumber,
   formatPosition,
 } from "./lib/route_details.ts";
-import type { RouteResult } from "./lib/types.ts";
+import type { Point, RouteResult } from "./lib/types.ts";
 
-export function RouteDetailsPanel({ result, onClose }: { result: RouteResult; onClose: () => void }) {
+type Props = {
+  result: RouteResult;
+  /** Indice de la ligne choisie, ou null. */
+  selectedIndex: number | null;
+  onSelect: (index: number, point: Point) => void;
+  onClose: () => void;
+};
+
+export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: Props) {
   const model = useMemo(() => buildRouteDetailsModel(result), [result]);
   const closeButton = useRef<HTMLButtonElement>(null);
 
@@ -69,8 +77,32 @@ export function RouteDetailsPanel({ result, onClose }: { result: RouteResult; on
               </tr>
             </thead>
             <tbody>
-              {model.rows.map((row) => (
-                <tr key={row.index} className={row.maneuver ? "route-report-maneuver" : undefined}>
+              {model.rows.map((row) => {
+                const select = () => {
+                  if (row.latitude !== null && row.longitude !== null) {
+                    onSelect(row.index, { latitude: row.latitude, longitude: row.longitude });
+                  }
+                };
+                const classes = [
+                  "route-report-row",
+                  row.maneuver ? "route-report-maneuver" : "",
+                  row.index === selectedIndex ? "route-report-selected" : "",
+                ].filter(Boolean);
+                return (
+                <tr
+                  key={row.index}
+                  className={classes.join(" ")}
+                  tabIndex={0}
+                  aria-selected={row.index === selectedIndex}
+                  title="Afficher cette position sur la route"
+                  onClick={select}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      select();
+                    }
+                  }}
+                >
                   <td>{formatInstant(row.instant)}</td>
                   <td>{formatElapsed(row.elapsedMinutes)}</td>
                   <td className="route-report-heading">
@@ -87,12 +119,14 @@ export function RouteDetailsPanel({ result, onClose }: { result: RouteResult; on
                   <td className="route-report-sail">{row.sail}</td>
                   <td>{row.stamina === null ? "—" : `${row.stamina.toFixed(1)} %`}</td>
                 </tr>
-              ))}
+                );
+              })}
             </tbody>
           </table>
         </div>
         <p className="route-report-legend">
-          Ligne surlignée : manœuvre (virement, empannage ou changement de voile) sur ce pas.
+          Ligne surlignée en jaune : manœuvre (virement, empannage ou changement de voile) sur ce pas. Cliquez sur une
+          ligne pour afficher sa position sur la route.
         </p>
       </div>
     </aside>

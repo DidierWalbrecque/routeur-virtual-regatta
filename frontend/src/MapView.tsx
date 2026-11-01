@@ -54,6 +54,8 @@ type Props = {
   vrState: VrState | undefined;
   /** Zones interdites dessinées par l'utilisateur. */
   zones: Zone[];
+  /** Position choisie dans le tableau des détails, mise en évidence sur la route. */
+  highlight: Point | null;
   /** Points du tracé en cours, ou null quand aucun tracé n'est actif. */
   draft: Point[] | null;
   onDraftClick: (point: Point, closing: boolean) => void;
@@ -63,7 +65,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, frame, vrState, zones, draft, onDraftClick, rightPadding, onError },
+  { endpoints, frame, vrState, zones, highlight, draft, onDraftClick, rightPadding, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -296,6 +298,26 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           paint: { "text-color": "#145cff", "text-halo-color": "#ffffff", "text-halo-width": 2 },
         });
 
+        // Position choisie dans le tableau des détails : au-dessus de tout le reste.
+        map.addSource("route-highlight", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "route-highlight-halo",
+          type: "circle",
+          source: "route-highlight",
+          paint: { "circle-radius": 16, "circle-color": "#145cff", "circle-opacity": 0.25 },
+        });
+        map.addLayer({
+          id: "route-highlight",
+          type: "circle",
+          source: "route-highlight",
+          paint: {
+            "circle-radius": 8,
+            "circle-color": "#145cff",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 3,
+          },
+        });
+
         const bounds = new maplibregl.LngLatBounds();
         bounds.extend([DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude]);
         bounds.extend([DEFAULT_DESTINATION.longitude, DEFAULT_DESTINATION.latitude]);
@@ -363,6 +385,30 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     if (!ready || !map) return;
     setData(map, "zone-draft", draftFeatureCollection(draft || []));
   }, [ready, draft]);
+
+  // Position choisie dans le tableau : repère sur la route, et la carte la
+  // recentre dans la partie non couverte par les panneaux.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    if (!highlight) {
+      setData(map, "route-highlight", EMPTY);
+      return;
+    }
+    const center: [number, number] = [highlight.longitude, highlight.latitude];
+    setData(map, "route-highlight", {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: center } }],
+    });
+    const right = rightPaddingRef.current();
+    const visible = map.getBounds();
+    const size = map.getContainer();
+    const point = map.project(center);
+    const hidden = point.x > size.clientWidth - right - 40 || !visible.contains(center);
+    if (hidden) {
+      map.easeTo({ center, padding: { top: 0, bottom: 0, left: 0, right }, duration: 400 });
+    }
+  }, [ready, highlight]);
 
   // Clic sur la carte pendant le tracé : ajoute un point, ou ferme la zone en
   // cliquant près du premier point.
