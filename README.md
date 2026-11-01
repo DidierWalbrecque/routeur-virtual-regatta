@@ -18,6 +18,23 @@ go test ./...
 cd ..
 ```
 
+### Interface, extension et relais Flask
+
+Les tests de l'interface React et de l'extension navigateur (Node 22.18 ou
+plus récent) :
+
+```bash
+cd frontend
+npm install
+npm test
+```
+
+Les tests du relais Flask (environnement `.venv-flask` activé) :
+
+```bash
+python -m unittest discover -s flaskapp/tests -p "test_*.py"
+```
+
 ## Démarrer directement avec Go
 
 ### PowerShell
@@ -52,14 +69,13 @@ Pour arrêter le serveur dans les deux terminaux :
 Ctrl + C
 ```
 
-## Utiliser l'interface Flask alternative
+## Utiliser l'interface web
 
-L'interface Flask affiche actuellement uniquement une carte MapLibre avec le
-départ et la destination par défaut. Le formulaire et le calcul seront ajoutés
-progressivement ; la carte React reste disponible comme interface alternative. La procédure complète d'installation,
-de lancement et de test se trouve dans [`docs/flask.md`](docs/flask.md).
+L'interface est une application React (`frontend`) : carte MapLibre, formulaire
+de calcul, état Virtual Regatta, portes et zones de la course, run GFS utilisé
+et rapport de route.
 
-## Utiliser l'interface locale des caps pratiques
+### Lancement
 
 Lancer l'API, depuis un premier terminal à la racine du dépôt :
 
@@ -76,9 +92,103 @@ npm run dev
 ```
 
 Ouvrir ensuite l'adresse affichée par Vite, habituellement
-`http://localhost:5173`. L'interface transmet les chemins locaux des fichiers
-GRIB et de la polaire à l'API exécutée sur la même machine, puis affiche les
-caps pratiques classés. Elle ne se connecte pas à Virtual Regatta.
+`http://localhost:5173`. Vite redirige `/api` vers l'API Go (port 8080).
+Redémarrer l'API après chaque mise à jour du code Go : un ancien processus
+continue sinon de répondre avec l'ancienne version.
+
+### Premier calcul
+
+1. Cliquer sur le bouton du nuage (actualisation des GRIB) : le dernier run GFS
+   disponible est téléchargé dans `data/weather`. Une carte en bas à gauche
+   indique le run, l'horizon de prévision et l'âge des données.
+2. Ouvrir « Calculer une route » avec le premier bouton de la barre d'actions.
+   Si l'extension envoie l'état du bateau, le départ, la stamina, les
+   équipements et la polaire sont renseignés automatiquement.
+3. Choisir l'arrivée (saisie au format Virtual Regatta ou une porte restante),
+   l'heure de départ, l'horizon, le mode et vérifier la polaire.
+4. Lancer le calcul : les isochrones s'affichent au fur et à mesure, puis la
+   route. « Détails de la route » ouvre le rapport.
+
+### Mode et horizon du routage
+
+| Mode | Pas des isochrones | Caps explorés | Horizon maximal |
+|---|---|---|---|
+| Précis | 10 min | tous les 15°, affinés au degré | 3 jours |
+| Rapide | 15 min | tous les 30°, affinés au degré | 5 jours |
+
+L'horizon se choisit dans une liste : « Jusqu'à l'arrivée » (le calcul s'arrête
+dès que l'arrivée est atteinte), 4 heures, 24 heures, 2 jours, 3 jours et, en
+mode Rapide seulement, 5 jours. Il ne dépasse jamais ce que couvrent les
+prévisions téléchargées depuis le départ : l'interface le raccourcit et le
+signale. Le bouton GRIB télécharge de quoi couvrir l'horizon choisi (72 h par
+défaut, 84 h pour 3 jours, 132 h pour 5 jours). L'API refuse une durée au-delà
+du maximum du mode. Au-delà de 3 jours, la prévision GFS devient peu fiable :
+la route donne une tendance, pas des caps à suivre.
+
+Mesuré sur une route Bretagne–Antilles avec les côtes : le mode Précis demande
+environ 0,15 s par heure d'horizon (3 à 4 s pour 24 h, 9 s pour 63 h), le mode
+Rapide environ deux fois moins.
+
+### Polaire du bateau
+
+La liste des polaires vient de `GET /api/polars` (fichiers de `data/polars`).
+L'extension envoie, avec l'état du bateau, les valeurs de la réponse du jeu qui
+peuvent l'identifier (`boatHints`) : l'interface les rapproche de l'identifiant
+(`_id`) ou du nom (`label`) de chaque polaire, sélectionne la bonne et affiche
+« Bateau détecté : … » sous le champ. Sans détection, choisir la polaire à la
+main : le message « Bateau non fourni par Virtual Regatta » le rappelle.
+
+### Rapport de route
+
+Chaque ligne décrit le départ d'un pas : date, temps écoulé, cap à programmer,
+TWA, bord (T tribord, B bâbord), position, TWD, TWS, vitesse, activation des
+foils, coefficient de manœuvre, voile et stamina. Les lignes où une manœuvre
+(virement, empannage ou changement de voile) a lieu sont surlignées.
+
+### Caps et affinage
+
+Le moteur explore une grille de caps puis affine, autour des meilleurs, des caps
+entiers (paliers de 5°, 2° puis 1° pour un pas de 15°), car le jeu n'accepte que
+des caps entiers. La route ne dépend ainsi plus du pas de la grille. Cet affinage
+double environ le temps de calcul des isochrones ; il est toujours activé dans
+l'interface.
+
+### Zones interdites
+
+Le bouton « Zones interdites » de la barre d'actions ouvre la liste des zones.
+Elles sont appliquées à tout le trajet et à l'approche finale, en plus de la
+côte ; un départ ou une arrivée situé dans une zone est refusé.
+
+- **Zones de la course.** L'extension `vr-state-extension` relève les polygones
+  interdits dans la réponse du jeu et les transmet à l'API. Ils apparaissent
+  dans « Zones de la course » (cochables, non modifiables) et sont appliqués
+  comme les zones dessinées. Le nom du champ du jeu n'étant pas documenté,
+  l'extension cherche les listes de polygones dont le nom évoque une zone ; si
+  rien n'apparaît, le panneau affiche la structure de la manche reçue (« Champs
+  reçus de la manche ») pour retrouver le bon champ.
+- **Zones dessinées.** « Dessiner une zone » permet de tracer un polygone sur la
+  carte : un clic par sommet, clic sur le premier point ou Entrée pour terminer,
+  Retour arrière pour défaire le dernier point, Échap pour abandonner. Elles sont
+  conservées dans le navigateur.
+
+Les zones cochées sont envoyées à chaque calcul (`exclusionZones`).
+
+### Portes de la course
+
+L'extension relève les portes de la manche (`leg.checkpoints`) et les groupes
+déjà franchis (`gateGroupCounters`). L'API en déduit les portes à franchir, dans
+l'ordre reçu, avec leur sens (tribord, bâbord ou libre). Les portes dont le milieu
+est sur une terre sont ignorées, comme dans la liste de l'interface. Le calcul s'appuie sur
+ces portes lorsque « Utiliser la position, la stamina et les options reçues de
+Virtual Regatta » est coché.
+
+### Extension et relais Flask
+
+Flask n'est plus une interface : c'est un relais qui sert le build React
+(`npm run build`) et relaie les appels vers l'API Go. Il reste nécessaire pour
+l'extension `vr-state-extension`, qui envoie l'état du bateau à
+`http://localhost:5000`. Voir [`docs/flask.md`](docs/flask.md) et
+[`vr-state-extension/README.md`](vr-state-extension/README.md).
 
 ### Actualiser les GRIB depuis l'API
 
@@ -91,8 +201,10 @@ curl -X POST http://localhost:8080/api/weather/refresh \
   -d '{"forecastHours":[0,3,6,9,12,15,18,21,24],"lookbackHours":48}'
 ```
 
-La requête demande les échéances `f000` à `f024` par pas de trois heures,
-afin de couvrir un calcul pratique de quatre heures.
+Cet exemple demande les échéances `f000` à `f024` par pas de trois heures. Sans
+`forecastHours`, l'API utilise cette même liste ; l'interface en demande davantage
+selon l'horizon choisi (jusqu'à `f072`, `f084` ou `f132`). Un calcul ne peut pas
+dépasser la dernière échéance téléchargée.
 `lookbackHours` indique à l'API de rechercher un run GFS disponible dans les
 48 dernières heures. L'API essaie les cycles récents et revient au run
 précédent si le dernier n'est pas encore publié par NOAA.
@@ -128,12 +240,31 @@ Dans cette réponse :
 Les fichiers retournés peuvent ensuite être transmis à `racecheck`,
 `routecheck` ou à l'interface web.
 
-Les chemins météo ne sont volontairement pas préremplis : ils dépendent du run
-GFS téléchargé pour le test. Saisir un fichier GRIB2 par ligne et utiliser le
-chemin de la polaire, par exemple `../data/polars/ultim_bp_11.json` lorsque
-l'API est lancée depuis `backend`. L'interface refuse les fichiers manquants,
-les durées ou pas invalides et les caps hors de l'intervalle 0-359 degrés avant
-d'envoyer la demande à l'API.
+Les chemins météo dépendent du run GFS téléchargé : l'interface les reprend de
+la réponse de l'actualisation et refuse de calculer tant que les GRIB n'ont pas
+été actualisés. Les chemins de polaire sont relatifs au dossier `backend`, par
+exemple `../data/polars/ultim_bp_11.json`, puisque l'API est lancée depuis ce
+dossier.
+
+## API HTTP
+
+| Route | Rôle |
+|---|---|
+| `GET /health` | contrôle de disponibilité |
+| `GET /api/polars` | polaires de `data/polars` : fichier, `id` et nom du bateau |
+| `POST /api/weather/refresh` | télécharge le dernier run GFS (`forecastHours`, `lookbackHours`) |
+| `POST /api/practical-headings` | calcule la route et renvoie le résultat complet |
+| `POST /api/practical-headings/stream` | même calcul, envoyé en flux SSE (`start`, `frontier`, `complete`) |
+| `POST` / `GET /api/vr/state` | enregistre / lit le dernier état reçu de Virtual Regatta |
+
+Champs principaux de la requête de calcul : `weatherFiles`, `polarPath`,
+`position` et `destination` (`latitude`/`longitude` ou `virtualRegatta`),
+`instant` (RFC 3339), `durationMinutes`, `stepMinutes`, `mode` (`quick` ou
+`precise`), `owned`, `useVirtualRegattaState` et `exclusionZones` (liste de
+`{name, points:[{latitude, longitude}]}`). La durée est limitée à 3 jours en mode
+précis et à 5 jours en mode rapide. Chaque point de la route renvoyée porte le
+détail du pas qui y mène (`twd`, `tws`, `twa`, `tack`, `speedKnots`,
+`foilPercent`, `speedCoefficient`, `maneuver`).
 
 ## Démarrer avec Docker Compose
 
@@ -414,6 +545,10 @@ Les paramètres spécifiques au routage correspondent à :
 - `-minutes` : horizon total du calcul, multiple exact du pas ;
 - `-step-minutes` : durée séparant deux fronts d'isochrones ;
 - `-heading-spacing` : écart en degrés entre les caps explorés ;
+- `-refine-headings` : ajoute des caps entiers autour des meilleurs caps de la
+  grille (paliers de 5°, 2° puis 1° pour un pas de 15°). La route ne dépend alors
+  plus du pas de la grille, au prix d'un calcul environ deux fois plus long.
+  L'interface web l'active toujours ; l'option est désactivée par défaut ici ;
 - `-cell-size` : taille minimale des cellules d'élagage en milles nautiques ;
 - `-max-candidates` : nombre maximal de positions conservées par front,
   par défaut 500 ; la valeur 0 désactive la limite ;
@@ -469,6 +604,11 @@ limite la taille reçue, vérifie entièrement les géométries `Polygon` et
 
 Un fichier local déjà valide est réutilisé sans nouveau téléchargement. Il
 reste dans `data/land/`, qui est ignoré par Git.
+
+Chaque polygone volumineux (Eurasie, Afrique…) est indexé par une grille
+d'arêtes : un segment n'est testé que contre les arêtes voisines. Un calcul avec
+Natural Earth 10 m qui prenait plusieurs minutes dure ainsi une à quelques
+secondes, avec exactement les mêmes résultats.
 
 Le routeur refuse tout segment qui entre dans un polygone, touche sa limite ou
 passe à moins de la distance définie par `-coastal-margin`. Commencer avec
@@ -564,6 +704,11 @@ période pour que l'écart soit interprétable.
 ## État du projet
 
 Phases 1 et 3 terminées : environnement Go et Docker opérationnel, chargement et interpolation des polaires validés.
+
+Interface web React opérationnelle : calcul par isochrones avec affinage des caps,
+côtes et zones interdites (dessinées ou reçues du jeu), portes de la course,
+détection de la polaire du bateau, horizon jusqu'à 3 jours (précis) ou 5 jours
+(rapide) et rapport de route détaillé.
 
 Phase 2 en cours : modèle métier construit progressivement avec les modules concernés.
 

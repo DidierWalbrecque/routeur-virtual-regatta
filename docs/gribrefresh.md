@@ -32,6 +32,12 @@ Bash :
 go run ./cmd/gribrefresh -date 20260920 -cycle 06 -hours 0,3,6 -output ../data/weather
 ```
 
+Pour un routage de plusieurs jours, demander des échéances plus lointaines : par
+exemple `-hours 0,3,...,72` pour trois jours (25 fichiers) ou jusqu'à `132` pour
+cinq jours (45 fichiers). Un calcul ne peut pas dépasser la dernière échéance
+téléchargée ; le bouton GRIB de l'interface choisit les échéances selon
+l'horizon demandé.
+
 Chaque fichier est entièrement décodé et validé avant d'être installé. La
 commande ne planifie pas encore son exécution : elle doit être relancée avant
 un nouveau calcul de route.
