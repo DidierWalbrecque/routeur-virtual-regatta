@@ -77,7 +77,23 @@ et rapport de route.
 
 ### Lancement
 
-Lancer l'API, depuis un premier terminal à la racine du dépôt :
+Une seule commande démarre l'API Go, l'interface et le relais Flask de l'extension,
+dans trois fenêtres, attend qu'ils répondent puis ouvre l'interface :
+
+```powershell
+.\start-dev.ps1
+```
+
+(ou double-clic sur `start-dev.cmd`). Depuis Git Bash, `./start-dev.ps1` ne fonctionne
+pas, car bash essaie d'exécuter le script PowerShell : utiliser `./start-dev.sh`, qui
+le lance avec PowerShell. `.\start-dev.ps1 -Status` indique ce qui tourne,
+`.\start-dev.ps1 -Stop` arrête les services lancés par le script, `-NoBrowser`
+n'ouvre pas le navigateur. Le script crée l'environnement Python et installe les
+dépendances de l'interface s'ils manquent, et refuse de démarrer si un port (8080,
+5173 ou 5000) est déjà occupé : un ancien processus répondrait avec l'ancienne
+version du code.
+
+Ou, à la main, l'API depuis un premier terminal à la racine du dépôt :
 
 ```powershell
 go run -C backend ./cmd/api
