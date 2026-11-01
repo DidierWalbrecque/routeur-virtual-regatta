@@ -1,4 +1,9 @@
-"""Interface web Flask qui délègue les calculs à l'API Go."""
+"""Relais Flask entre l'API Go, l'extension navigateur et l'interface React.
+
+Flask ne contient plus d'interface : il sert les fichiers construits de
+`frontend/dist` et relaie les appels `/api/...` vers l'API Go. L'extension
+`vr-state-extension` continue d'envoyer l'état du bateau à `/api/vr/state`.
+"""
 
 from __future__ import annotations
 
@@ -13,8 +18,8 @@ from typing import Any
 from flask import (
     Flask,
     Response,
+    abort,
     jsonify,
-    render_template,
     request,
     send_from_directory,
     stream_with_context,
@@ -23,27 +28,7 @@ from flask import (
 
 DEFAULT_API_BASE_URL = "http://localhost:8080"
 DEFAULT_TIMEOUT_SECONDS = 300
-MAPLIBRE_DIST = Path(__file__).resolve().parents[1] / "frontend" / "node_modules" / "maplibre-gl" / "dist"
-POLARS_DIR = Path(__file__).resolve().parents[1] / "data" / "polars"
-DEFAULT_POLAR_PATH = "../data/polars/ultim_bp_11.json"
-
-
-def available_polar_options() -> list[dict[str, str]]:
-    """Retourne les polaires JSON disponibles dans le répertoire du projet."""
-
-    try:
-        polar_files = sorted(POLARS_DIR.glob("*.json"), key=lambda path: path.name.lower())
-    except OSError:
-        return []
-
-    return [
-        {
-            "label": polar_file.name,
-            "value": f"../data/polars/{polar_file.name}",
-        }
-        for polar_file in polar_files
-        if polar_file.is_file()
-    ]
+FRONTEND_DIST = Path(__file__).resolve().parents[1] / "frontend" / "dist"
 
 
 def create_app(api_base_url: str | None = None) -> Flask:
@@ -60,24 +45,25 @@ def create_app(api_base_url: str | None = None) -> Flask:
 
     @app.get("/")
     def index():
-        polar_options = available_polar_options()
-        default_polar = next(
-            (
-                option["value"]
-                for option in polar_options
-                if option["value"] == DEFAULT_POLAR_PATH
-            ),
-            polar_options[0]["value"] if polar_options else DEFAULT_POLAR_PATH,
-        )
-        return render_template(
-            "index.html",
-            polar_options=polar_options,
-            default_polar=default_polar,
-        )
+        if not (FRONTEND_DIST / "index.html").is_file():
+            return (
+                "Interface non construite : lancez « npm run build » dans le dossier "
+                "frontend, ou « npm run dev » pour le mode développement.",
+                503,
+            )
+        return send_from_directory(str(FRONTEND_DIST), "index.html")
 
-    @app.get("/vendor/maplibre/<path:filename>")
-    def maplibre_vendor(filename):
-        return send_from_directory(str(MAPLIBRE_DIST), filename)
+    @app.get("/assets/<path:filename>")
+    def frontend_assets(filename):
+        assets = FRONTEND_DIST / "assets"
+        if not assets.is_dir():
+            abort(404)
+        return send_from_directory(str(assets), filename)
+
+    @app.get("/api/polars")
+    def list_polars():
+        body, status = _call_go_get_api(app, "/api/polars")
+        return jsonify(body), status
 
     @app.post("/api/weather/refresh")
     def refresh_weather():

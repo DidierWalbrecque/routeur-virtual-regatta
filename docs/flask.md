@@ -1,18 +1,15 @@
-# Interface Flask
+# Relais Flask
 
-Le projet propose une interface Flask minimale composée uniquement d’une carte
-MapLibre. Cette première étape affiche le fond OpenStreetMap ainsi que les
-marqueurs de départ et de destination par défaut. Le formulaire et le calcul
-seront ajoutés lors des étapes suivantes. Un bouton flottant permet déjà de
-demander l’actualisation des GRIB ; le détail de l’opération est écrit dans la
-console du navigateur et dans les logs Flask, notamment le run, le nombre de
-fichiers téléchargés et le nombre d’anciens fichiers supprimés. Un second
-bouton ouvre le formulaire de calcul ; celui-ci permet de renseigner le départ,
-la destination, la date, la polaire, la durée, le pas, les caps, le mode et les
-équipements avant de lancer le calcul.
+Flask n'est plus une interface web. L'interface est l'application React du
+dossier `frontend`. Flask joue deux rôles :
 
-La carte MapLibre est chargée depuis un CDN : une connexion Internet est donc
-nécessaire pour le script MapLibre et les tuiles OpenStreetMap.
+- relayer les appels `/api/...` vers l'API Go, notamment l'état du bateau envoyé
+  par l'extension `vr-state-extension` (`POST /api/vr/state`) ;
+- servir l'interface React construite (`frontend/dist`) sur un seul port, sans
+  serveur de développement.
+
+Pour travailler sur l'interface, utilisez plutôt `npm run dev` dans `frontend`
+(voir le README) : Vite redirige `/api` directement vers l'API Go.
 
 ## Installation
 
@@ -24,11 +21,6 @@ Depuis la racine du dépôt :
 python -m venv .venv-flask
 .\.venv-flask\Scripts\Activate.ps1
 python -m pip install -r flaskapp\requirements.txt
-
-# À faire une seule fois si frontend/node_modules n'existe pas
-Set-Location frontend
-npm install
-Set-Location ..
 ```
 
 ### Bash
@@ -37,29 +29,39 @@ Set-Location ..
 python -m venv .venv-flask
 source .venv-flask/Scripts/activate
 python -m pip install -r flaskapp/requirements.txt
-
-# À faire une seule fois si frontend/node_modules n'existe pas
-cd frontend
-npm install
-cd ..
 ```
 
 ## Lancement
 
-Depuis la racine du dépôt :
+Construire l'interface (à refaire après chaque modification du frontend) :
+
+```bash
+cd frontend
+npm install
+npm run build
+cd ..
+```
+
+Puis, depuis la racine du dépôt, avec l'API Go lancée sur le port 8080 :
 
 ```bash
 python -m flask --app flaskapp.app run --host 127.0.0.1 --port 5000
 ```
 
-Ouvrir ensuite <http://127.0.0.1:5000>.
+Ouvrir ensuite <http://127.0.0.1:5000>. Si `frontend/dist` n'existe pas, la page
+d'accueil explique comment construire l'interface.
 
-L’API Go n’est pas nécessaire pour cette étape, car la page affiche uniquement
-la carte et les marqueurs par défaut. MapLibre est servi localement lorsque
-`frontend/node_modules` existe, puis deux CDN sont utilisés en secours. Les
-tuiles OpenStreetMap nécessitent toujours une connexion Internet.
+## Routes relayées
 
-L’URL de l’API Go peut être modifiée avec `ROUTEUR_API_URL`. Le délai maximal
+| Route Flask | Destination |
+|---|---|
+| `GET /api/polars` | API Go : liste des polaires disponibles |
+| `POST /api/weather/refresh` | API Go : actualisation des GRIB |
+| `POST /api/practical-headings` | API Go : calcul de la route |
+| `POST /api/practical-headings/stream` | API Go : calcul en flux (SSE) |
+| `POST` / `GET /api/vr/state` | API Go : état Virtual Regatta |
+
+L'URL de l'API Go peut être modifiée avec `ROUTEUR_API_URL`. Le délai maximal
 des appels est configurable avec `ROUTEUR_API_TIMEOUT_SECONDS`.
 
 ## Tests
