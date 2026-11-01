@@ -33,6 +33,7 @@ func evaluateParentHeadingCandidates(
 	owned equipment.EquipmentSet,
 	effects *equipment.Effects,
 	headings []navigation.Heading,
+	refine *headingRefinement,
 ) ([][]HeadingCandidate, error) {
 	if len(parents) == 0 {
 		return nil, nil
@@ -62,14 +63,33 @@ func evaluateParentHeadingCandidates(
 					results <- parentHeadingResult{index: index, err: err}
 					continue
 				}
-				candidates, err := EvaluateHeadingCandidates(ctx, weatherProvider, boatPolar, HeadingCandidatesInput{
+				input := HeadingCandidatesInput{
 					Position: parents[index].Position,
 					Instant:  instant,
 					Duration: duration,
 					Owned:    owned,
 					Effects:  effects,
 					Headings: headings,
-				})
+				}
+				provider := weatherProvider
+				if refine != nil {
+					// Un seul relevé de vent par parent, partagé avec l'affinage.
+					provider = &headingWeatherCache{
+						provider: weatherProvider,
+						position: input.Position,
+						instant:  input.Instant,
+					}
+				}
+				candidates, err := EvaluateHeadingCandidates(ctx, provider, boatPolar, input)
+				if err == nil && refine != nil {
+					nextGate := parents[index].CourseProgress.NextGateIndex
+					if nextGate >= 0 && nextGate < len(refine.targets) {
+						candidates, err = refineHeadingCandidates(
+							ctx, provider, boatPolar, input, candidates,
+							refine.targets[nextGate], refine.spacing,
+						)
+					}
+				}
 				results <- parentHeadingResult{index: index, candidates: candidates, err: err}
 			}
 		}()

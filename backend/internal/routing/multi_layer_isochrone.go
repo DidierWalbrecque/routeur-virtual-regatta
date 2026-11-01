@@ -17,13 +17,16 @@ import (
 
 // IsochroneSearchInput describes a multi-layer isochrone exploration.
 type IsochroneSearchInput struct {
-	Position              navigation.Position
-	Destination           navigation.Position
-	Instant               time.Time
-	StepDuration          time.Duration
-	LayerCount            int
-	Owned                 equipment.EquipmentSet
-	HeadingSpacing        float64
+	Position       navigation.Position
+	Destination    navigation.Position
+	Instant        time.Time
+	StepDuration   time.Duration
+	LayerCount     int
+	Owned          equipment.EquipmentSet
+	HeadingSpacing float64
+	// RefineHeadings ajoute des caps entiers autour des meilleurs caps de la
+	// grille régulière, pour que la route ne dépende pas du pas de la grille.
+	RefineHeadings        bool
 	CellSize              navigation.NauticalMiles
 	MaxCandidates         int
 	ArrivalRadius         navigation.NauticalMiles
@@ -345,6 +348,10 @@ func BuildIsochroneSearch(
 			len(parentStates)*len(headings),
 		)
 
+		var refinement *headingRefinement
+		if input.RefineHeadings {
+			refinement = &headingRefinement{spacing: input.HeadingSpacing, targets: courseTargets}
+		}
 		parentCandidates, err := evaluateParentHeadingCandidates(
 			ctx,
 			weatherProvider,
@@ -355,6 +362,7 @@ func BuildIsochroneSearch(
 			input.Owned,
 			&preparedEffects,
 			headings,
+			refinement,
 		)
 		if err != nil {
 			if contextErr := ctx.Err(); contextErr != nil {
