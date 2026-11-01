@@ -1,6 +1,8 @@
-export function parseSSEBlock(block) {
+export type SSEEvent = { event: string; data: unknown };
+
+export function parseSSEBlock(block: string): SSEEvent | null {
   let event = "message";
-  const dataLines = [];
+  const dataLines: string[] = [];
   for (const line of block.split(/\r?\n/)) {
     if (line.startsWith("event:")) event = line.slice(6).trim();
     if (line.startsWith("data:")) dataLines.push(line.slice(5).trimStart());
@@ -9,7 +11,10 @@ export function parseSSEBlock(block) {
   return { event, data: JSON.parse(dataLines.join("\n")) };
 }
 
-export async function readSSEStream(response, onEvent) {
+export async function readSSEStream(
+  response: Response,
+  onEvent: (event: string, data: any) => void,
+): Promise<void> {
   if (!response.ok) {
     let message = `HTTP ${response.status}`;
     try {

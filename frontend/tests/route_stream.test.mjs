@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { parseSSEBlock, readSSEStream } from "../static/route_stream.js";
+import { parseSSEBlock, readSSEStream } from "../src/lib/route_stream.ts";
 
 test("parseSSEBlock decodes event name and JSON data", () => {
   assert.deepEqual(
