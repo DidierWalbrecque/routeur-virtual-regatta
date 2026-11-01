@@ -575,6 +575,24 @@ body {
   background: #f5c5181f;
 }
 
+.route-report-table tr.route-report-row {
+  cursor: pointer;
+}
+
+.route-report-table tr.route-report-row:hover td {
+  background: #ffffff14;
+}
+
+.route-report-table tr.route-report-selected td,
+.route-report-table tr.route-report-selected:hover td {
+  background: #145cff40;
+}
+
+.route-report-table tr.route-report-row:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: -2px;
+}
+
 .route-report-legend {
   margin: 8px 0 0;
   color: var(--card-muted);

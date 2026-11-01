@@ -20,6 +20,9 @@ data/land/*
 frontend/node_modules/
 frontend/dist/
 
+# Processus lancés par start-dev.ps1
+.dev-pids.json
+
 # Interface Flask
 .venv-flask/
 __pycache__/

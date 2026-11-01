@@ -479,6 +479,8 @@ export function App() {
   };
 
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  const [selectedRow, setSelectedRow] = useState<{ index: number; point: Point } | null>(null);
+  useEffect(() => setSelectedRow(null), [result]);
   const hasRoute = Boolean(result && result.route.length > 0);
 
   return (
@@ -489,9 +491,15 @@ export function App() {
         frame={frame}
         vrState={vrState}
         zones={allZones}
+        highlight={selectedRow?.point ?? null}
         draft={draft}
         onDraftClick={onDraftClick}
-        rightPadding={() => document.getElementById("route-form-panel")?.getBoundingClientRect().width || 0}
+        rightPadding={() =>
+          ["route-form-panel", "route-details-panel"].reduce(
+            (width, id) => Math.max(width, document.getElementById(id)?.getBoundingClientRect().width || 0),
+            0,
+          )
+        }
         onError={() => setMapError(true)}
       />
       {calculating && (
@@ -570,7 +578,12 @@ export function App() {
           Détails de la route
         </button>
       )}
-      {detailsOpen && result && <RouteDetailsPanel result={result} onClose={closeDetails} />}
+      {detailsOpen && result && <RouteDetailsPanel
+          result={result}
+          selectedIndex={selectedRow?.index ?? null}
+          onSelect={(index, point) => setSelectedRow({ index, point })}
+          onClose={closeDetails}
+        />}
       {draft !== null && (
         <div className="draw-banner" role="status" aria-live="polite">
           <span>
