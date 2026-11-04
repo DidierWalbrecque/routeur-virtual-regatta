@@ -10,6 +10,18 @@ import type { VrState } from "./lib/types.ts";
 export const DEFAULT_DEPARTURE: Point = { latitude: 13.121111, longitude: 121.586667 };
 export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.336667 };
 
+// Couleur d'une isochrone selon l'avancement temporel : bleu (tôt) -> vert -> ambre (tard).
+function lerpHex(a: string, b: string, t: number): string {
+  const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
+  const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
+  const p = pa.map((v, i) => Math.round(v + (pb[i] - v) * t));
+  return `rgb(${p[0]}, ${p[1]}, ${p[2]})`;
+}
+function isochroneTimeColor(fraction: number): string {
+  const f = Math.max(0, Math.min(1, fraction));
+  return f < 0.5 ? lerpHex("#1f6fb2", "#1aa589", f * 2) : lerpHex("#1aa589", "#e0a419", (f - 0.5) * 2);
+}
+
 export type Endpoints = { position: Point; destination: Point };
 
 /** Ce que la carte doit afficher pour la route : un résultat partiel ou final. */
@@ -22,6 +34,14 @@ export type RouteFrame = {
 };
 
 export type MapViewHandle = { recenter: () => void };
+
+/** Trace GPX importée à afficher en référence sur la carte. */
+export type GpxOverlay = {
+  /** FeatureCollection GeoJSON (LineString pour les traces, Point pour les repères). */
+  collection: FeatureCollection;
+  /** Change à chaque import pour recadrer la carte sur la nouvelle trace. */
+  key: string;
+};
 
 type MapLibreModule = typeof import("maplibre-gl");
 type FeatureCollection = { type: "FeatureCollection"; features: unknown[] };
@@ -58,14 +78,18 @@ type Props = {
   highlight: Point | null;
   /** Points du tracé en cours, ou null quand aucun tracé n'est actif. */
   draft: Point[] | null;
+  /** Trace GPX importée, ou null quand aucune n'est chargée. */
+  gpx: GpxOverlay | null;
   onDraftClick: (point: Point, closing: boolean) => void;
+  /** Afficher les points d'étape de la route. */
+  showRoutePoints: boolean;
   /** Largeur à réserver à droite pour le formulaire ouvert, 0 sinon. */
   rightPadding: () => number;
   onError: () => void;
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, frame, vrState, zones, highlight, draft, onDraftClick, rightPadding, onError },
+  { endpoints, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, rightPadding, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -78,7 +102,18 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const renderedKey = useRef("");
   const renderedCount = useRef(0);
   const renderedFeatures = useRef<unknown[]>([]);
+  const renderedGpxKey = useRef("");
   const [ready, setReady] = useState(false);
+
+  // Afficher / masquer les points d'étape de la route sans recalculer.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const visibility = showRoutePoints ? "visible" : "none";
+    for (const id of ["route-points", "route-point-labels"]) {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
+    }
+  }, [showRoutePoints, ready]);
   const rightPaddingRef = useRef(rightPadding);
   rightPaddingRef.current = rightPadding;
 
@@ -254,6 +289,50 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           },
         });
 
+        // Trace GPX importée (référence) : sous la route calculée, au-dessus des zones.
+        map.addSource("gpx", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "gpx-line-casing",
+          type: "line",
+          source: "gpx",
+          filter: ["==", ["geometry-type"], "LineString"],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.85 },
+        });
+        map.addLayer({
+          id: "gpx-line",
+          type: "line",
+          source: "gpx",
+          filter: ["==", ["geometry-type"], "LineString"],
+          layout: { "line-cap": "round", "line-join": "round" },
+          paint: { "line-color": "#e64980", "line-width": 3, "line-opacity": 0.95 },
+        });
+        map.addLayer({
+          id: "gpx-waypoints",
+          type: "circle",
+          source: "gpx",
+          filter: ["==", ["geometry-type"], "Point"],
+          paint: {
+            "circle-radius": 5,
+            "circle-color": "#e64980",
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2,
+          },
+        });
+        map.addLayer({
+          id: "gpx-waypoint-labels",
+          type: "symbol",
+          source: "gpx",
+          filter: ["==", ["geometry-type"], "Point"],
+          layout: {
+            "text-field": ["get", "name"],
+            "text-size": 11,
+            "text-offset": [0, -1.4],
+            "text-anchor": "bottom",
+          },
+          paint: { "text-color": "#e64980", "text-halo-color": "#ffffff", "text-halo-width": 2 },
+        });
+
         // Route, isochrones et points de route : au-dessus des portes.
         map.addSource("route", { type: "geojson", data: EMPTY as never });
         map.addLayer({
@@ -268,9 +347,9 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "line",
           source: "isochrones",
           paint: {
-            "line-color": ["case", ["boolean", ["get", "major"], false], "#145cff", "#75b5ff"],
-            "line-width": ["case", ["boolean", ["get", "major"], false], 1.5, 0.8],
-            "line-opacity": ["case", ["boolean", ["get", "major"], false], 0.95, 0.65],
+            "line-color": ["get", "color"],
+            "line-width": ["case", ["boolean", ["get", "major"], false], 2.2, 1.2],
+            "line-opacity": ["case", ["boolean", ["get", "major"], false], 0.95, 0.6],
           },
         });
         map.addSource("route-points", { type: "geojson", data: EMPTY as never });
@@ -386,6 +465,43 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     setData(map, "zone-draft", draftFeatureCollection(draft || []));
   }, [ready, draft]);
 
+  // Trace GPX importée : affichage et recadrage à chaque nouvel import.
+  useEffect(() => {
+    const map = mapRef.current;
+    const api = apiRef.current;
+    if (!ready || !map || !api) return;
+    if (!gpx) {
+      renderedGpxKey.current = "";
+      setData(map, "gpx", EMPTY);
+      return;
+    }
+    setData(map, "gpx", gpx.collection);
+    if (gpx.key !== renderedGpxKey.current) {
+      renderedGpxKey.current = gpx.key;
+      const bounds = new api.LngLatBounds();
+      let extended = false;
+      for (const feature of gpx.collection.features as Array<{
+        geometry: { type: string; coordinates: number[] | number[][] };
+      }>) {
+        const geometry = feature.geometry;
+        if (geometry.type === "LineString") {
+          for (const coordinate of geometry.coordinates as number[][]) {
+            bounds.extend(coordinate as [number, number]);
+            extended = true;
+          }
+        } else if (geometry.type === "Point") {
+          bounds.extend(geometry.coordinates as [number, number]);
+          extended = true;
+        }
+      }
+      if (extended) {
+        boundsRef.current = bounds;
+        map.fitBounds(bounds, { padding: padding(), maxZoom: 12, duration: 500 });
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, gpx]);
+
   // Position choisie dans le tableau : repère sur la route, et la carte la
   // recentre dans la partie non couverte par les panneaux.
   useEffect(() => {
@@ -482,10 +598,12 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         ? Math.round((Date.parse(isochrone.instant) - startedAtMilliseconds) / 60000)
         : 0;
       const coordinates = visibleContour.map((point) => [point.longitude, point.latitude]);
+      const total = isochrone.totalLayers || isochrones.length || 1;
+      const color = isochroneTimeColor((index + 1) / total);
       if (coordinates.length > 1) {
         renderedFeatures.current.push({
           type: "Feature",
-          properties: { major: minutes > 0 && minutes % 30 === 0 },
+          properties: { major: (index + 1) % 6 === 0, color },
           geometry: { type: "LineString", coordinates },
         });
       }

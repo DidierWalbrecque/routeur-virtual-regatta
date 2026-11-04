@@ -5,13 +5,18 @@ import { forwardContour, formatVirtualRegattaPosition, parseLocalDate, parseVirt
 import { checkpointFeatures, equipmentFromVrOptions, usableCheckpoints } from "../src/lib/vr.ts";
 
 test("parseVirtualRegattaPosition et formatVirtualRegattaPosition sont réciproques", () => {
-  const position = parseVirtualRegattaPosition(`13°N 07'16" - 121°E 35'12"`);
+  const position = parseVirtualRegattaPosition(`47°26'11.95"N - 24°54'55.32"W`);
   assert.ok(position);
-  assert.ok(Math.abs(position.latitude - (13 + 7 / 60 + 16 / 3600)) < 1e-9);
-  assert.equal(formatVirtualRegattaPosition(position), `13°N 07'16" - 121°E 35'12"`);
-  const west = parseVirtualRegattaPosition(`49°N 04'21" - 004°W 02'46"`);
+  assert.ok(Math.abs(position.latitude - (47 + 26 / 60 + 11.95 / 3600)) < 1e-9);
+  assert.ok(Math.abs(position.longitude - -(24 + 54 / 60 + 55.32 / 3600)) < 1e-9);
+  assert.equal(formatVirtualRegattaPosition(position), `47°26'11.95"N - 24°54'55.32"W`);
+  // L'ancien format reste accepté en entrée (rétro-compat).
+  const legacy = parseVirtualRegattaPosition(`13°N 07'16" - 121°E 35'12"`);
+  assert.ok(legacy);
+  assert.ok(Math.abs(legacy.latitude - (13 + 7 / 60 + 16 / 3600)) < 1e-9);
+  const west = parseVirtualRegattaPosition(`49°04'21.00"N - 4°02'46.00"W`);
   assert.ok(west && west.longitude < 0);
-  assert.equal(formatVirtualRegattaPosition(west), `49°N 04'21" - 004°W 02'46"`);
+  assert.equal(formatVirtualRegattaPosition(west), `49°04'21.00"N - 4°02'46.00"W`);
   assert.equal(parseVirtualRegattaPosition("n'importe quoi"), null);
 });
 

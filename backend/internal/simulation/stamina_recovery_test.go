@@ -199,3 +199,46 @@ func TestStaminaRecoveryRulesValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestStaminaStateRecoveredForWindCosineModel(t *testing.T) {
+	rules := StaminaRecoveryRules{
+		Points:   1,
+		LowWind:  0,
+		HighWind: 30,
+		LowTime:  5 * time.Minute,
+		HighTime: 15 * time.Minute,
+	}
+	cases := []struct {
+		name     string
+		wind     float64
+		calm     time.Duration
+		expected float64
+	}{
+		{"0 kn : 1 pt / 5 min", 0, 5 * time.Minute, 41},
+		{"30 kn : 1 pt / 15 min", 30, 15 * time.Minute, 41},
+		{"15 kn : 1 pt / 10 min (cosinus)", 15, 10 * time.Minute, 41},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := (StaminaState{Level: 40}).RecoveredForWind(c.calm, c.wind, rules)
+			if err != nil {
+				t.Fatalf("récupération refusée: %v", err)
+			}
+			if math.Abs(float64(got.Level)-c.expected) > 1e-9 {
+				t.Errorf("stamina = %.9f, attendue %.9f", float64(got.Level), c.expected)
+			}
+		})
+	}
+}
+
+func TestStaminaStateRecoveredForWindFallsBackToConstantRate(t *testing.T) {
+	got, err := (StaminaState{Level: 40}).RecoveredForWind(
+		30*time.Minute, 20, StaminaRecoveryRules{PointsPerHour: 12},
+	)
+	if err != nil {
+		t.Fatalf("récupération refusée: %v", err)
+	}
+	if math.Abs(float64(got.Level)-46) > 1e-12 {
+		t.Errorf("stamina = %.12f, attendue 46 (repli taux constant)", float64(got.Level))
+	}
+}

@@ -15,6 +15,7 @@ func TestNextStaminaForStepRecoversDuringCalmStep(t *testing.T) {
 		&simulation.ManeuverState{Kind: simulation.ManeuverNone},
 		nil,
 		30*time.Minute,
+		10,
 		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
 	)
 	if err != nil {
@@ -35,6 +36,7 @@ func TestNextStaminaForStepDoesNotRecoverDuringConsumingManeuver(t *testing.T) {
 		&simulation.ManeuverState{Kind: simulation.ManeuverTack},
 		transition,
 		30*time.Minute,
+		10,
 		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
 	)
 	if err != nil {
@@ -55,6 +57,7 @@ func TestNextStaminaForStepDoesNotRecoverUnknownManeuverCost(t *testing.T) {
 		},
 		nil,
 		30*time.Minute,
+		10,
 		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
 	)
 	if err != nil {
@@ -72,6 +75,7 @@ func TestNextStaminaForStepPreservesStateWhenManeuverIsUnknown(t *testing.T) {
 		nil,
 		nil,
 		30*time.Minute,
+		10,
 		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
 	)
 	if err != nil {
@@ -88,6 +92,7 @@ func TestNextStaminaForStepRejectsInvalidRecovery(t *testing.T) {
 		&simulation.ManeuverState{Kind: simulation.ManeuverNone},
 		nil,
 		-time.Minute,
+		10,
 		&simulation.StaminaRecoveryRules{PointsPerHour: 12},
 	)
 	if err == nil || !strings.Contains(err.Error(), "récupération") {

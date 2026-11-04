@@ -26,6 +26,10 @@ type HeadingCandidatesInput struct {
 	// Effects contains equipment effects prepared for all headings from the
 	// same parent. When nil, they are resolved once for this evaluation.
 	Effects *equipment.Effects
+	// CurrentSailID and SailChangeTolerance carry the parent's current sail and
+	// the polar's autoSailChangeTolerance to enable sail-change hysteresis.
+	CurrentSailID       polar.SailID
+	SailChangeTolerance polar.SpeedRatio
 }
 
 // HeadingCandidate associates a requested heading with its simulated step.
@@ -119,12 +123,14 @@ func EvaluateHeadingCandidates(
 			cachedWeather,
 			boatPolar,
 			simulation.StepInput{
-				Position: input.Position,
-				Instant:  input.Instant,
-				Heading:  heading,
-				Duration: input.Duration,
-				Owned:    input.Owned,
-				Effects:  effects,
+				Position:            input.Position,
+				Instant:             input.Instant,
+				Heading:             heading,
+				Duration:            input.Duration,
+				Owned:               input.Owned,
+				Effects:             effects,
+				CurrentSailID:       input.CurrentSailID,
+				SailChangeTolerance: input.SailChangeTolerance,
 			},
 		)
 		if err != nil {

@@ -616,31 +616,168 @@ body {
   margin: 0;
 }
 
+.weather-run-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.weather-run-title {
+  font-size: 13px;
+}
+
 .weather-run-name {
   color: var(--card-muted);
 }
 
-.weather-run-bar {
-  display: flex;
-  height: 8px;
-  margin: 8px 0 6px;
-  overflow: hidden;
-  border-radius: 4px;
-  background: var(--card-border);
-}
-
-.weather-run-elapsed {
-  background: var(--accent-green);
-}
-
-.weather-run-ahead {
-  flex: 1;
-  background: var(--accent-yellow);
-}
-
-.weather-run-detail {
-  color: var(--card-muted);
+.weather-run-age {
   font-size: 11px;
+  color: var(--card-muted);
+  white-space: nowrap;
+}
+
+.weather-run-track-wrap {
+  margin: 14px 0 4px;
+}
+
+.weather-run-ends {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 5px;
+  font-size: 10px;
+  color: var(--card-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-run-track {
+  position: relative;
+  height: 12px;
+  border-radius: 6px;
+  background: var(--card-field);
+}
+
+.weather-run-ahead-fill {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0 6px 6px 0;
+  background: linear-gradient(90deg, var(--accent-green), #46c07e);
+}
+
+.weather-run-ahead-fill.is-warning {
+  background: linear-gradient(90deg, var(--accent-yellow), #ffd34d);
+}
+
+.weather-run-past-fill {
+  position: absolute;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  border-radius: 6px 0 0 6px;
+  background: repeating-linear-gradient(90deg, #ffffff14 0 2px, transparent 2px 6px);
+}
+
+.weather-run-lowconf {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  border-radius: 0 6px 6px 0;
+  background: repeating-linear-gradient(45deg, #0f172688 0 3px, transparent 3px 7px);
+  pointer-events: none;
+}
+
+.weather-run-ticks {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.weather-run-ticks i {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 1px;
+  background: #0f172699;
+}
+
+.weather-run-cursor {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  background: var(--card-text);
+  box-shadow: 0 0 0 1px #0007;
+}
+
+.weather-run-cursor-label {
+  position: absolute;
+  top: 16px;
+  font-size: 9.5px;
+  color: var(--card-text);
+  background: var(--card-background-solid);
+  border: 1px solid var(--card-border);
+  border-radius: 4px;
+  padding: 0 4px;
+  white-space: nowrap;
+}
+
+.weather-run-cursor-label.is-left {
+  left: -1px;
+}
+
+.weather-run-cursor-label.is-right {
+  right: -1px;
+}
+
+.weather-run-summary {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.weather-run-remaining {
+  font-size: 22px;
+  color: var(--accent-green);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-run-remaining.is-warning {
+  color: var(--accent-yellow);
+}
+
+.weather-run-remaining-label {
+  font-size: 12.5px;
+  color: var(--card-muted);
+}
+
+.weather-run-footline {
+  margin-top: 6px;
+  font-size: 11px;
+  color: var(--card-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-run-legend {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 5px;
+  font-size: 10px;
+  color: var(--card-muted);
+}
+
+.weather-run-legend::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 18px;
+  height: 8px;
+  border-radius: 2px;
+  background-color: var(--card-field);
+  background-image: repeating-linear-gradient(45deg, #ffffff40 0 3px, transparent 3px 7px);
 }
 
 .zones-panel {
@@ -785,4 +922,49 @@ body {
 .zones-diagnostic ul {
   margin: 6px 0 0;
   padding-left: 16px;
+}
+
+/* Badge du bouton d'import GPX : rose, assorti à la trace sur la carte. */
+.dock-badge-gpx {
+  right: 1px;
+  font-weight: 600;
+  background: #e64980;
+}
+
+/* Message d'erreur d'import GPX. */
+.gpx-toast {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(520px, calc(100% - 32px));
+  padding: 10px 10px 10px 14px;
+  border-left: 4px solid var(--accent-red);
+  transform: translateX(-50%);
+}
+
+.gpx-toast .material-symbols-outlined {
+  color: var(--accent-red);
+  font-size: 20px;
+}
+
+.gpx-toast button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--card-text);
+  background: transparent;
+  cursor: pointer;
+}
+
+.gpx-toast button:hover,
+.gpx-toast button:focus-visible {
+  background: var(--card-field);
 }

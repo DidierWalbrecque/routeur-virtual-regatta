@@ -6,7 +6,8 @@
   "description": "Affiche la position, la stamina et les options du bateau Virtual Regatta.",
   "permissions": ["storage"],
   "host_permissions": [
-    "http://localhost:5000/*",
+    "http://localhost/*",
+    "http://192.168.1.5/*",
     "https://*.virtualregatta.com/*",
     "https://*.offshore.virtualregatta.com/*",
     "https://prod.vro.sparks.virtualregatta.com/*",

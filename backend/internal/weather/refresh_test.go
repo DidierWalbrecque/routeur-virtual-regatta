@@ -99,3 +99,63 @@ func TestRefreshLatestGFSDoesNotCleanAfterFailedRun(t *testing.T) {
 		t.Fatalf("ancien fichier supprimé après échec: %v", statErr)
 	}
 }
+
+func TestCurrentGFSRunReturnsNewestRunSortedByHour(t *testing.T) {
+	directory := t.TempDir()
+	for _, name := range []string{
+		"gfs.2026092006.f000.grb2",
+		"gfs.2026092006.f024.grb2",
+		"gfs.2026092012.f120.grb2",
+		"gfs.2026092012.f006.grb2",
+		"gfs.2026092012.f000.grb2",
+		"notes.txt",
+	} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte("test"), 0o600); err != nil {
+			t.Fatalf("écriture de %s impossible: %v", name, err)
+		}
+	}
+
+	result, err := CurrentGFSRun(directory)
+	if err != nil {
+		t.Fatalf("CurrentGFSRun a échoué: %v", err)
+	}
+	if got := result.Run.Date.Format("20060102"); got != "20260920" {
+		t.Fatalf("date de run inattendue: %s", got)
+	}
+	if result.Run.Cycle != 12 {
+		t.Fatalf("cycle inattendu: %d", result.Run.Cycle)
+	}
+	want := []string{
+		filepath.Join(directory, "gfs.2026092012.f000.grb2"),
+		filepath.Join(directory, "gfs.2026092012.f006.grb2"),
+		filepath.Join(directory, "gfs.2026092012.f120.grb2"),
+	}
+	if len(result.Files) != len(want) {
+		t.Fatalf("nombre de fichiers inattendu: %d (%v)", len(result.Files), result.Files)
+	}
+	for index, path := range want {
+		if result.Files[index] != path {
+			t.Fatalf("fichier %d inattendu: %s", index, result.Files[index])
+		}
+	}
+}
+
+func TestCurrentGFSRunEmptyWhenNoGrib(t *testing.T) {
+	result, err := CurrentGFSRun(t.TempDir())
+	if err != nil {
+		t.Fatalf("CurrentGFSRun a échoué: %v", err)
+	}
+	if len(result.Files) != 0 {
+		t.Fatalf("fichiers inattendus: %v", result.Files)
+	}
+}
+
+func TestCurrentGFSRunEmptyWhenDirectoryMissing(t *testing.T) {
+	result, err := CurrentGFSRun(filepath.Join(t.TempDir(), "absent"))
+	if err != nil {
+		t.Fatalf("un répertoire absent ne doit pas être une erreur: %v", err)
+	}
+	if len(result.Files) != 0 {
+		t.Fatalf("fichiers inattendus: %v", result.Files)
+	}
+}

@@ -47,6 +47,21 @@ func weatherRefreshHandler(response http.ResponseWriter, request *http.Request) 
 	})
 }
 
+func weatherCurrentHandler(response http.ResponseWriter, request *http.Request) {
+	result, err := weather.CurrentGFSRun("../data/weather")
+	if err != nil {
+		writeJSONError(response, http.StatusInternalServerError, "lecture des GRIB existants impossible: "+err.Error())
+		return
+	}
+	if len(result.Files) == 0 {
+		writeJSON(response, http.StatusOK, weatherRefreshResponse{Run: "", Files: []string{}, RemovedFiles: []string{}})
+		return
+	}
+	writeJSON(response, http.StatusOK, weatherRefreshResponse{
+		Run: result.Run.Date.Format("20060102") + formatCycle(result.Run.Cycle), Files: result.Files, RemovedFiles: []string{},
+	})
+}
+
 func formatCycle(cycle int) string {
 	return map[int]string{0: "00", 6: "06", 12: "12", 18: "18"}[cycle]
 }

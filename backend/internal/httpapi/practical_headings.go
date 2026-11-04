@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"strings"
@@ -31,6 +32,15 @@ type practicalHeadingsRequest struct {
 	MaxScenarioProgressLossNM float64                             `json:"maxScenarioProgressLossNM"`
 	RequireRobustScenarios    bool                                `json:"requireRobustScenarios"`
 	Mode                      string                              `json:"mode"`
+	// Réglages découplés de l'intégration Virtual Regatta. PositionSource et
+	// StaminaSource valent "vr" ou "manual" ; ManualStamina (0..100) sert quand
+	// StaminaSource vaut "manual".
+	PositionSource            string                              `json:"positionSource"`
+	StaminaSource             string                              `json:"staminaSource"`
+	ManualStamina             *float64                            `json:"manualStamina"`
+	UseCourseGates            bool                                `json:"useCourseGates"`
+	// UseVirtualRegattaState : alias hérité activant les trois réglages ci-dessus
+	// sur Virtual Regatta lorsqu'il est seul présent.
 	UseVirtualRegattaState    bool                                `json:"useVirtualRegattaState"`
 	ExclusionZones            []exclusionZoneRequest              `json:"exclusionZones"`
 }
@@ -83,17 +93,17 @@ type calculationProfile struct {
 	CellSize          navigation.NauticalMiles
 	MaxCandidates     int
 	IncludeIsochrones bool
-	// MaxDuration borne l'horizon demandé : au-delà de quelques jours, les
-	// prévisions ne justifient plus un calcul précis.
+	// MaxDuration borne l'horizon demandé : 2 jours en précis, 10 jours en
+	// rapide (limite du GFS). Au-delà de ~7 jours la prévision devient incertaine.
 	MaxDuration time.Duration
 }
 
 func calculationProfileFor(mode string) (calculationProfile, error) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "precise":
-		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 15, CellSize: 0.5, MaxCandidates: 100, IncludeIsochrones: true, MaxDuration: 3 * 24 * time.Hour}, nil
+		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 6, CellSize: 0.5, MaxCandidates: 300, IncludeIsochrones: true, MaxDuration: 4 * 24 * time.Hour}, nil
 	case "quick":
-		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 50, IncludeIsochrones: true, MaxDuration: 5 * 24 * time.Hour}, nil
+		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 300, IncludeIsochrones: true, MaxDuration: 10 * 24 * time.Hour}, nil
 	default:
 		return calculationProfile{}, fmt.Errorf("mode de calcul %q invalide: quick ou precise attendu", mode)
 	}
@@ -104,7 +114,12 @@ func adaptiveIsochroneDuration(distance navigation.NauticalMiles, requested time
 		return requested
 	}
 	const (
-		conservativeSpeedRatio = 0.6
+		// Fraction de la vitesse max réellement tenue vers la marque, moyenne
+		// sur une vraie route (près compris). 0,6 était trop optimiste et
+		// coupait la recherche avant l'arrivée ; 0,4 ne raccourcit que les
+		// cibles nettement plus proches que le plafond. La boucle s'arrête de
+		// toute façon dès l'arrivée, donc une estimation plus large est sûre.
+		conservativeSpeedRatio = 0.4
 		minimumBuffer          = 60 * time.Minute
 	)
 	estimated := time.Duration(float64(distance) / (float64(maxSpeed) * conservativeSpeedRatio) * float64(time.Hour))
@@ -282,9 +297,12 @@ func runPracticalHeadings(
 		return
 	}
 
+	useVRPosition, useVRStamina, useGates := resolveVRSettings(payload)
+	needVRState := useVRPosition || useVRStamina || useGates
+
 	var receivedVRState *vrState
 	var virtualRegattaGates []routing.CourseGate
-	if payload.UseVirtualRegattaState {
+	if needVRState {
 		if vrStateStore == nil {
 			writeJSONError(response, http.StatusBadRequest, "état Virtual Regatta indisponible pour ce gestionnaire")
 			return
@@ -295,17 +313,21 @@ func runPracticalHeadings(
 			return
 		}
 		receivedVRState = &state
-		gates, gatesErr := courseGatesFromVRState(state)
-		if gatesErr != nil {
-			writeJSONError(response, http.StatusBadRequest, "portes Virtual Regatta invalides: "+gatesErr.Error())
-			return
+		if useGates {
+			gates, gatesErr := courseGatesFromVRState(state)
+			if gatesErr != nil {
+				writeJSONError(response, http.StatusBadRequest, "portes Virtual Regatta invalides: "+gatesErr.Error())
+				return
+			}
+			virtualRegattaGates = gates
 		}
-		virtualRegattaGates = gates
-		payload.Position = positionRequest{
-			Latitude:  state.Position.Latitude,
-			Longitude: state.Position.Longitude,
+		if useVRPosition {
+			payload.Position = positionRequest{
+				Latitude:  state.Position.Latitude,
+				Longitude: state.Position.Longitude,
+			}
+			payload.Owned = equipmentIDsFromVRState(state)
 		}
-		payload.Owned = equipmentIDsFromVRState(state)
 	}
 
 	instant, err := time.Parse(time.RFC3339, payload.Instant)
@@ -352,11 +374,13 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, "chargement polaire impossible: "+err.Error())
 		return
 	}
-	var transitionEvaluator *simulation.TransitionEvaluator
-	var combineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
+	// La stamina est toujours simulée : la pénalité de manœuvre — et donc
+	// l'anti-zigzag — s'applique à tout calcul, que la position et la stamina
+	// viennent de Virtual Regatta ou d'une saisie manuelle.
+	transitionEvaluator, combineSpeedPenalties := staminaManeuverRuntime(boatPolar)
 	var initialNavigation *routing.InitialNavigationState
-	if receivedVRState != nil {
-		transitionEvaluator, combineSpeedPenalties = vrManeuverRuntime(boatPolar)
+	// Le cap et la voile courants ne sont cohérents qu'au départ réel du bateau VR.
+	if useVRPosition && receivedVRState != nil {
 		initialNavigation = initialNavigationFromVRState(receivedVRState)
 	}
 	position, err := parsePositionRequest(payload.Position)
@@ -369,6 +393,22 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, "destination invalide: "+err.Error())
 		return
 	}
+	positionSourceLabel := "manuelle"
+	if useVRPosition {
+		positionSourceLabel = "VR"
+	}
+	staminaSourceLabel := "manuelle"
+	if useVRStamina {
+		staminaSourceLabel = "VR"
+	}
+	log.Printf(
+		"[ROUTE] polaire=%q bateau=%q (cache=%t) · mode=%s · durée=%.0f min (%.1f j) · position=%s · stamina=%s · portes=%t · départ=%.4f,%.4f arrivée=%.4f,%.4f",
+		payload.PolarPath, boatPolar.Label, polarHit, payload.Mode,
+		payload.DurationMinutes, payload.DurationMinutes/1440,
+		positionSourceLabel, staminaSourceLabel, useGates,
+		float64(position.Latitude), float64(position.Longitude),
+		float64(destination.Latitude), float64(destination.Longitude),
+	)
 	landStarted := time.Now()
 	landConstraint, landHit, err := loadLandForRequest(landGeoJSONPath)
 	landMilliseconds := elapsedMilliseconds(landStarted)
@@ -443,9 +483,9 @@ func runPracticalHeadings(
 	}
 	result.Performance.VirtualRegattaStateUsed = receivedVRState != nil
 	result.Performance.VirtualRegattaGatesUsed = len(virtualRegattaGates)
-	initialStamina := initialStaminaForVRState(receivedVRState)
+	initialStamina, staminaFromVR := resolveInitialStamina(useVRStamina, receivedVRState, payload.ManualStamina)
 	result.Performance.InitialStamina = float64(initialStamina.Level)
-	result.Performance.StaminaFromVirtualRegatta = receivedVRState != nil && receivedVRState.Stamina != nil
+	result.Performance.StaminaFromVirtualRegatta = staminaFromVR
 	result.Performance.CacheHits = weatherStats.Hits
 	result.Performance.CacheMisses = weatherStats.Misses
 	if polarHit {
@@ -541,6 +581,7 @@ func runPracticalHeadings(
 				}
 			}
 		}
+		recoveryRules := staminaRecoveryRules()
 		search, err := buildIsochroneSearch(calculationContext, weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
 			Owned: owned, HeadingSpacing: profile.HeadingSpacing, RefineHeadings: true, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
@@ -548,6 +589,7 @@ func runPracticalHeadings(
 			InitialNavigation:     initialNavigation,
 			TransitionEvaluator:   transitionEvaluator,
 			CombineSpeedPenalties: combineSpeedPenalties,
+			StaminaRecoveryRules:  &recoveryRules,
 			Gates:                 virtualRegattaGates,
 			Constraints:           routeConstraints,
 			ArrivalConstraints:    arrivalConstraints,
@@ -717,12 +759,37 @@ func reconstructBestAvailableRoute(search routing.IsochroneSearch) ([]availableR
 	return steps, nil
 }
 
-func initialStaminaForVRState(state *vrState) simulation.StaminaState {
-	initial := simulation.StaminaState{Level: 100}
-	if state != nil && state.Stamina != nil {
-		initial.Level = simulation.StaminaLevel(*state.Stamina)
+func resolveVRSettings(payload practicalHeadingsRequest) (useVRPosition, useVRStamina, useGates bool) {
+	// Compatibilité : un ancien client n'envoyant que useVirtualRegattaState
+	// active les trois réglages sur Virtual Regatta.
+	if payload.UseVirtualRegattaState {
+		return true, true, true
 	}
-	return initial
+	useVRPosition = strings.EqualFold(strings.TrimSpace(payload.PositionSource), "vr")
+	useVRStamina = strings.EqualFold(strings.TrimSpace(payload.StaminaSource), "vr")
+	useGates = payload.UseCourseGates
+	return useVRPosition, useVRStamina, useGates
+}
+
+// resolveInitialStamina choisit le niveau de stamina initial : la valeur reçue
+// de Virtual Regatta lorsqu'elle est demandée et disponible, sinon la valeur
+// saisie (bornée à 0..100), sinon 100 par défaut. Le second retour indique si
+// la valeur provient de Virtual Regatta.
+func resolveInitialStamina(useVR bool, state *vrState, manual *float64) (simulation.StaminaState, bool) {
+	if useVR && state != nil && state.Stamina != nil {
+		return simulation.StaminaState{Level: simulation.StaminaLevel(*state.Stamina)}, true
+	}
+	if manual != nil {
+		level := *manual
+		if level < 0 {
+			level = 0
+		}
+		if level > 100 {
+			level = 100
+		}
+		return simulation.StaminaState{Level: simulation.StaminaLevel(level)}, false
+	}
+	return simulation.StaminaState{Level: 100}, false
 }
 
 func routeStepPassesDestination(from, to, destination navigation.Position) (bool, error) {

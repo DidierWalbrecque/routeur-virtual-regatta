@@ -140,3 +140,52 @@ func gfsRunKey(name string) (string, bool) {
 	}
 	return parts[0], true
 }
+
+// CurrentGFSRun inspecte le répertoire de sortie et retourne le run GFS le plus
+// récent déjà présent sur disque, sans rien télécharger. Les fichiers sont
+// retournés triés par échéance (le nom fXXX zéro-rempli trie numériquement).
+// Un répertoire absent ou sans fichier GFS retourne un résultat vide sans erreur.
+func CurrentGFSRun(outputDirectory string) (GFSRefreshResult, error) {
+	entries, err := os.ReadDir(outputDirectory)
+	if errors.Is(err, os.ErrNotExist) {
+		return GFSRefreshResult{}, nil
+	}
+	if err != nil {
+		return GFSRefreshResult{}, fmt.Errorf("weather: lecture du répertoire %q impossible: %w", outputDirectory, err)
+	}
+	filesByRun := map[string][]string{}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		runKey, ok := gfsRunKey(entry.Name())
+		if !ok {
+			continue
+		}
+		filesByRun[runKey] = append(filesByRun[runKey], entry.Name())
+	}
+	if len(filesByRun) == 0 {
+		return GFSRefreshResult{}, nil
+	}
+	newestKey := ""
+	for key := range filesByRun {
+		if key > newestKey {
+			newestKey = key
+		}
+	}
+	names := filesByRun[newestKey]
+	sort.Strings(names)
+	paths := make([]string, len(names))
+	for index, name := range names {
+		paths[index] = filepath.Join(outputDirectory, name)
+	}
+	cycle, err := strconv.Atoi(newestKey[8:])
+	if err != nil {
+		return GFSRefreshResult{}, fmt.Errorf("weather: cycle GFS %q invalide: %w", newestKey, err)
+	}
+	run, err := NewGFSForecastRequest(newestKey[:8], cycle, 0)
+	if err != nil {
+		return GFSRefreshResult{}, err
+	}
+	return GFSRefreshResult{Run: run, Files: paths}, nil
+}
