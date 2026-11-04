@@ -35,14 +35,14 @@ type practicalHeadingsRequest struct {
 	// Réglages découplés de l'intégration Virtual Regatta. PositionSource et
 	// StaminaSource valent "vr" ou "manual" ; ManualStamina (0..100) sert quand
 	// StaminaSource vaut "manual".
-	PositionSource            string                              `json:"positionSource"`
-	StaminaSource             string                              `json:"staminaSource"`
-	ManualStamina             *float64                            `json:"manualStamina"`
-	UseCourseGates            bool                                `json:"useCourseGates"`
+	PositionSource string   `json:"positionSource"`
+	StaminaSource  string   `json:"staminaSource"`
+	ManualStamina  *float64 `json:"manualStamina"`
+	UseCourseGates bool     `json:"useCourseGates"`
 	// UseVirtualRegattaState : alias hérité activant les trois réglages ci-dessus
 	// sur Virtual Regatta lorsqu'il est seul présent.
-	UseVirtualRegattaState    bool                                `json:"useVirtualRegattaState"`
-	ExclusionZones            []exclusionZoneRequest              `json:"exclusionZones"`
+	UseVirtualRegattaState bool                   `json:"useVirtualRegattaState"`
+	ExclusionZones         []exclusionZoneRequest `json:"exclusionZones"`
 }
 
 type positionRequest struct {
@@ -836,8 +836,3 @@ func writeJSON(response http.ResponseWriter, status int, value any) {
 	response.WriteHeader(status)
 	_ = json.NewEncoder(response).Encode(value)
 }
-
-
-
-
-
