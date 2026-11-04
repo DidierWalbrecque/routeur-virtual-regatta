@@ -12,7 +12,10 @@ import {
 
 export type FormState = {
   start: string;
-  useVrState: boolean;
+  positionSource: "vr" | "manual";
+  staminaSource: "vr" | "manual";
+  staminaManual: string;
+  useCourseGates: boolean;
   destination: string;
   instant: string;
   polar: string;
@@ -73,9 +76,16 @@ export function RouteForm(props: Props) {
             Départ
             <input id="route-start" ref={props.startInput} required value={form.start} onChange={(event) => props.onStart(event.target.value)} />
           </label>
-          <label className="form-check vr-use">
-            <input id="route-use-vr-state" type="checkbox" checked={form.useVrState} onChange={(event) => props.onField("useVrState", event.target.checked)} />
-            Utiliser la position, la stamina et les options reçues de Virtual Regatta
+          <label>
+            Source de la position
+            <select
+              id="route-position-source"
+              value={form.positionSource}
+              onChange={(event) => props.onField("positionSource", event.target.value as FormState["positionSource"])}
+            >
+              <option value="vr">Virtual Regatta (live)</option>
+              <option value="manual">Saisie manuelle</option>
+            </select>
           </label>
           <label>
             Arrivée
@@ -97,6 +107,44 @@ export function RouteForm(props: Props) {
               })}
             </select>
           )}
+        </fieldset>
+
+        <fieldset className="form-section">
+          <legend>Simulation</legend>
+          <label>
+            Stamina
+            <select
+              id="route-stamina-source"
+              value={form.staminaSource}
+              onChange={(event) => props.onField("staminaSource", event.target.value as FormState["staminaSource"])}
+            >
+              <option value="vr">Virtual Regatta (live)</option>
+              <option value="manual">Valeur manuelle</option>
+            </select>
+          </label>
+          {form.staminaSource === "manual" && (
+            <label>
+              Stamina manuelle (%)
+              <input
+                id="route-stamina-manual"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={form.staminaManual}
+                onChange={(event) => props.onField("staminaManual", event.target.value)}
+              />
+            </label>
+          )}
+          <label className="form-check">
+            <input
+              id="route-use-course-gates"
+              type="checkbox"
+              checked={form.useCourseGates}
+              onChange={(event) => props.onField("useCourseGates", event.target.checked)}
+            />
+            Portes de course (Virtual Regatta)
+          </label>
         </fieldset>
 
         <fieldset className="form-section">

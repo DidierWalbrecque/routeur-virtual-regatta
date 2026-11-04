@@ -23,6 +23,16 @@
         <dt>Mise à jour</dt><dd id="updated-at">—</dd>
       </dl>
       <button id="copy" type="button" disabled>Copier le JSON</button>
+      <section id="config">
+        <label for="endpoint">Endpoint du routeur</label>
+        <input id="endpoint" type="url" spellcheck="false" autocomplete="off"
+               placeholder="http://localhost:5000/api/vr/state">
+        <div class="row">
+          <button id="save-endpoint" type="button">Enregistrer</button>
+          <button id="reset-endpoint" type="button" class="secondary">Défaut</button>
+        </div>
+        <p id="endpoint-status" class="muted"></p>
+      </section>
     </main>
     <script src="popup.js"></script>
   </body>

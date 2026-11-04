@@ -126,11 +126,10 @@ func TestPruneIsochroneNodesToLimitKeepsHardCandidateLimit(t *testing.T) {
 			len(selected),
 		)
 	}
-	if cellSize < maximumStateAwareCellSize {
+	if cellSize != 1 {
 		t.Errorf(
-			"cellule finale = %.1f NM, attendue au moins %.1f NM",
+			"cellule finale = %.1f NM, attendue 1 NM (cap par secteurs, plus de doublement)",
 			cellSize,
-			maximumStateAwareCellSize,
 		)
 	}
 	for index, node := range selected {

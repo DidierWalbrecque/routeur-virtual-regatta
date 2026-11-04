@@ -1,14 +1,15 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
+import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type GpxOverlay, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
 import { RouteDetailsPanel } from "./RouteDetailsPanel.tsx";
 import { RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
 import { WeatherRunCard } from "./WeatherRunCard.tsx";
 import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
-import { forecastHoursFor, formatDuration, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
+import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
 import { matchPolar } from "./lib/polar_match.ts";
+import { parseGpx, gpxFeatureCollection, gpxPointCount } from "./lib/gpx.ts";
 import { buildWeatherRunModel } from "./lib/weather_run.ts";
 import {
   DISABLED_GAME_ZONES_KEY,
@@ -31,9 +32,12 @@ const PRACTICAL_HEADINGS = Array.from({ length: 24 }, (_, index) => index * 15);
 
 function initialForm(): FormState {
   return {
-    start: `13°N 07'16" - 121°E 35'12"`,
-    useVrState: true,
-    destination: `13°N 10'16" - 121°E 20'12"`,
+    start: `13°07'16.00"N - 121°35'12.00"E`,
+    positionSource: "vr",
+    staminaSource: "vr",
+    staminaManual: "100",
+    useCourseGates: true,
+    destination: `13°10'16.00"N - 121°20'12.00"E`,
     instant: formatLocalDateTime(new Date()),
     polar: DEFAULT_POLAR,
     horizon: "arrival",
@@ -44,9 +48,67 @@ function initialForm(): FormState {
   };
 }
 
+// Réglages du formulaire mémorisés d'une session à l'autre (sauf l'heure de
+// départ, toujours réinitialisée à « maintenant »).
+const FORM_STORAGE_KEY = "routeur-form";
+
+function loadForm(): FormState {
+  const base = initialForm();
+  try {
+    const raw = window.localStorage.getItem(FORM_STORAGE_KEY);
+    if (!raw) return base;
+    const saved = JSON.parse(raw) as Partial<Omit<FormState, "equipment">> & {
+      equipment?: Equipment[];
+      useVrState?: boolean;
+    };
+    const merged: FormState = {
+      ...base,
+      ...saved,
+      instant: base.instant,
+      equipment: new Set<Equipment>(saved.equipment ?? []),
+    };
+    // Migration de l'ancien réglage unique vers les trois réglages découplés.
+    if (saved.positionSource === undefined && typeof saved.useVrState === "boolean") {
+      const vr = saved.useVrState;
+      merged.positionSource = vr ? "vr" : "manual";
+      merged.staminaSource = vr ? "vr" : "manual";
+      merged.useCourseGates = vr;
+    }
+    return merged;
+  } catch {
+    return base;
+  }
+}
+
 // randomUUID n'existe que dans un contexte sécurisé (localhost, HTTPS).
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `zone-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Lecture tolérante d'une réponse JSON : un corps vide (backend injoignable,
+// proxy Vite en erreur) ne doit pas faire planter l'appelant avec
+// « Unexpected end of JSON input ». On lit le texte puis on parse si possible.
+async function readJsonResponse<T = unknown>(response: Response): Promise<T> {
+  const text = await response.text();
+  let body: unknown;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = undefined;
+    }
+  }
+  if (!response.ok) {
+    const message =
+      body && typeof body === "object" && "error" in body && typeof (body as { error?: unknown }).error === "string"
+        ? (body as { error: string }).error
+        : `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  if (body === undefined) {
+    throw new Error("réponse vide du serveur (backend injoignable ?)");
+  }
+  return body as T;
 }
 
 function MaterialIcon({ name }: { name: string }) {
@@ -58,7 +120,7 @@ function MaterialIcon({ name }: { name: string }) {
 }
 
 export function App() {
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(loadForm);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState("");
   const [polars, setPolars] = useState<PolarOption[]>([{ label: "ultim_bp_11.json", value: DEFAULT_POLAR }]);
@@ -89,7 +151,10 @@ export function App() {
     }
   });
   const [zonesOpen, setZonesOpen] = useState(false);
+  const [showRoutePoints, setShowRoutePoints] = useState(true);
   const [draft, setDraft] = useState<Point[] | null>(null);
+  const [gpx, setGpx] = useState<{ name: string; count: number; overlay: GpxOverlay } | null>(null);
+  const [gpxError, setGpxError] = useState("");
 
   const mapHandle = useRef<MapViewHandle>(null);
   const startInput = useRef<HTMLInputElement>(null);
@@ -98,6 +163,8 @@ export function App() {
   const streamIsochrones = useRef<Isochrone[]>([]);
   const streamBase = useRef<RouteResult | null>(null);
   const frameCounter = useRef(0);
+  const gpxInput = useRef<HTMLInputElement>(null);
+  const gpxCounter = useRef(0);
 
   const weatherModel = useMemo(
     () => (weather.run ? buildWeatherRunModel(weather.run, weather.files) : null),
@@ -139,7 +206,7 @@ export function App() {
   useEffect(() => {
     if (!polarMatch || polarMatch.polar.value === autoPolar.current) return;
     autoPolar.current = polarMatch.polar.value;
-    setForm((previous) => ({ ...previous, polar: polarMatch.polar.value }));
+    setForm((previous) => (previous.positionSource === "vr" ? { ...previous, polar: polarMatch.polar.value } : previous));
   }, [polarMatch]);
   const polarNote = polarMatch
     ? {
@@ -155,7 +222,7 @@ export function App() {
         title: undefined,
       };
 
-  // En mode précis, l'horizon de 5 jours n'existe pas : on revient à 3 jours.
+  // Un horizon trop long pour le mode choisi (ex. 10/16 j en précis) est ramené au maximum permis.
   useEffect(() => {
     const allowed = horizonAllowedIn(form.horizon, form.mode);
     if (allowed !== form.horizon) setForm((previous) => ({ ...previous, horizon: allowed }));
@@ -186,6 +253,15 @@ export function App() {
   const setField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((previous) => ({ ...previous, [field]: value }));
   }, []);
+
+  // Mémorise les réglages (la Set d'équipements est sérialisée en tableau).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify({ ...form, equipment: [...form.equipment] }));
+    } catch {
+      // Stockage indisponible : les réglages restent valables pour la session.
+    }
+  }, [form]);
 
   // --- Réinitialisation de la route (uniquement sur action de l'utilisateur) ---
   const resetRoute = useCallback(() => {
@@ -310,19 +386,18 @@ export function App() {
   const refreshVrState = useCallback(async () => {
     try {
       const response = await fetch("/api/vr/state", { cache: "no-store" });
-      const state = (await response.json()) as VrState & { error?: string };
-      if (!response.ok) throw new Error(state.error || `HTTP ${response.status}`);
+      const state = await readJsonResponse<VrState>(response);
       (state.checkpoints || []).forEach((checkpoint, index) => {
         checkpointCache.current.set(checkpointKey(checkpoint, index), { start: checkpoint.start, end: checkpoint.end });
       });
       setVrState(state);
       const position = formatVirtualRegattaPosition(state.position);
       // Mise à jour silencieuse : la route affichée n'est pas effacée.
-      setForm((previous) => ({
-        ...previous,
-        start: position || previous.start,
-        equipment: equipmentFromVrOptions(state.options),
-      }));
+      setForm((previous) =>
+        previous.positionSource === "vr"
+          ? { ...previous, start: position || previous.start, equipment: equipmentFromVrOptions(state.options) }
+          : previous,
+      );
       const stamina = state.stamina == null ? "inconnue" : `${Number(state.stamina).toFixed(1)} %`;
       const remaining = usableCheckpoints(state).length;
       setVrStatus({
@@ -359,10 +434,9 @@ export function App() {
       const response = await fetch("/api/weather/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ forecastHours: forecastHoursFor(form.horizon), lookbackHours: 48 }),
+        body: JSON.stringify({ forecastHours: GRIB_FORECAST_HOURS, lookbackHours: 48 }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
+      const body = await readJsonResponse<{ files?: string[]; run?: string; removedFiles?: string[] }>(response);
       const files: string[] = body.files || [];
       const run: string = body.run || "";
       setWeather({ files, run });
@@ -375,6 +449,27 @@ export function App() {
       setRefreshing(false);
     }
   };
+
+  // Au démarrage, adopter les GRIB déjà présents sur disque sans re-télécharger.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/weather/current", { cache: "no-store" });
+        const body = await readJsonResponse<{ files?: string[]; run?: string }>(response);
+        const files: string[] = body.files || [];
+        const run: string = body.run || "";
+        if (cancelled || !run || files.length === 0) return;
+        setWeather({ files, run });
+        console.info(`[GRIB] Run existant adopté : ${run}, ${files.length} fichier(s)`);
+      } catch (error) {
+        console.warn("[GRIB] État initial des GRIB indisponible", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // --- Calcul de la route en flux ---
   const submit = async () => {
@@ -422,7 +517,10 @@ export function App() {
           fixedSailID: 0,
           mode: form.mode,
           requireRobustScenarios: false,
-          useVirtualRegattaState: form.useVrState,
+          positionSource: form.positionSource,
+          staminaSource: form.staminaSource,
+          manualStamina: form.staminaSource === "manual" ? Number(form.staminaManual) : null,
+          useCourseGates: form.useCourseGates,
           exclusionZones: zonesForRequest(allZones),
         }),
         signal: controller.signal,
@@ -478,6 +576,32 @@ export function App() {
     }
   };
 
+  // --- Trace GPX importée (affichée en référence sur la carte) ---
+  const onGpxFile = useCallback(async (file: File | null) => {
+    if (!file) return;
+    try {
+      const geometry = parseGpx(await file.text());
+      const count = gpxPointCount(geometry);
+      if (count === 0) throw new Error("aucune trace ni point de passage exploitable.");
+      gpxCounter.current += 1;
+      setGpx({
+        name: file.name,
+        count,
+        overlay: { collection: gpxFeatureCollection(geometry), key: String(gpxCounter.current) },
+      });
+      setGpxError("");
+      console.info(`[GPX] ${file.name} importé : ${count} point(s)`);
+    } catch (error) {
+      setGpx(null);
+      setGpxError(`GPX illisible (${file.name}) : ${(error as Error).message}`);
+      console.error("[GPX] Import impossible", error);
+    }
+  }, []);
+  const clearGpx = useCallback(() => {
+    setGpx(null);
+    setGpxError("");
+  }, []);
+
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
   const [selectedRow, setSelectedRow] = useState<{ index: number; point: Point } | null>(null);
   useEffect(() => setSelectedRow(null), [result]);
@@ -493,7 +617,9 @@ export function App() {
         zones={allZones}
         highlight={selectedRow?.point ?? null}
         draft={draft}
+        gpx={gpx?.overlay ?? null}
         onDraftClick={onDraftClick}
+        showRoutePoints={showRoutePoints}
         rightPadding={() =>
           ["route-form-panel", "route-details-panel"].reduce(
             (width, id) => Math.max(width, document.getElementById(id)?.getBoundingClientRect().width || 0),
@@ -511,7 +637,26 @@ export function App() {
       <div id="map-error" role="alert" className={mapError ? "visible" : undefined}>
         MapLibre n’a pas pu être chargé.
       </div>
-      <WeatherRunCard model={weatherModel} />
+      <input
+        ref={gpxInput}
+        type="file"
+        accept=".gpx,application/gpx+xml,application/xml,text/xml"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          void onGpxFile(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+      {gpxError && (
+        <div className="gpx-toast floating-card" role="alert">
+          <MaterialIcon name="warning" />
+          <span>{gpxError}</span>
+          <button type="button" aria-label="Fermer" onClick={() => setGpxError("")}>
+            <MaterialIcon name="close" />
+          </button>
+        </div>
+      )}
+      <WeatherRunCard model={weatherModel} warning={horizonNote.warning} />
       <div className="map-dock" role="toolbar" aria-label="Actions de la carte" aria-orientation="vertical">
         <button
           id="calculate-route"
@@ -525,6 +670,18 @@ export function App() {
           }}
         >
           <MaterialIcon name="alt_route" />
+        </button>
+        <hr />
+        <button
+          id="toggle-route-points"
+          className={showRoutePoints ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Afficher les points de la route"
+          aria-pressed={showRoutePoints}
+          data-tooltip="Points de la route"
+          onClick={() => setShowRoutePoints((value) => !value)}
+        >
+          <MaterialIcon name="scatter_plot" />
         </button>
         <hr />
         <button
@@ -542,6 +699,35 @@ export function App() {
           <MaterialIcon name="block" />
           {enabledZoneCount > 0 && <span className="dock-badge">{enabledZoneCount}</span>}
         </button>
+        <hr />
+        <button
+          id="import-gpx"
+          className={gpx ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Importer une trace GPX"
+          aria-pressed={Boolean(gpx)}
+          data-tooltip={
+            gpx
+              ? `Trace GPX : ${gpx.name}\n${gpx.count} point(s) · cliquez pour remplacer`
+              : "Importer une trace GPX"
+          }
+          onClick={() => gpxInput.current?.click()}
+        >
+          <MaterialIcon name="timeline" />
+          {gpx && <span className="dock-badge dock-badge-gpx">GPX</span>}
+        </button>
+        {gpx && (
+          <button
+            id="clear-gpx"
+            className="map-dock-button"
+            type="button"
+            aria-label="Retirer la trace GPX"
+            data-tooltip="Retirer la trace GPX"
+            onClick={clearGpx}
+          >
+            <MaterialIcon name="close" />
+          </button>
+        )}
         <hr />
         <button
           id="refresh-weather"

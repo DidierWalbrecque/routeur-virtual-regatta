@@ -12,6 +12,7 @@ func nextStaminaForStep(
 	maneuver *simulation.ManeuverState,
 	transition *simulation.TransitionEvaluation,
 	stepDuration time.Duration,
+	windKnots float64,
 	rules *simulation.StaminaRecoveryRules,
 ) (simulation.StaminaState, error) {
 	if transition != nil {
@@ -32,7 +33,7 @@ func nextStaminaForStep(
 		return current, nil
 	}
 
-	recovered, err := current.RecoveredFor(stepDuration, *rules)
+	recovered, err := current.RecoveredForWind(stepDuration, windKnots, *rules)
 	if err != nil {
 		return simulation.StaminaState{}, fmt.Errorf(
 			"récupération de stamina du pas impossible: %w",

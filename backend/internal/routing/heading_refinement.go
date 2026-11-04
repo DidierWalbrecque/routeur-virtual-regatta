@@ -21,11 +21,12 @@ const (
 )
 
 // headingRefinement enables the search of integer headings around the best
-// headings of the regular grid. targets holds, for each course gate index, the
-// position the boat is heading to.
+// headings of the regular grid. waypoints holds, for each course gate index,
+// the moving target used for progress: the nearest point on the gate line, or
+// the final destination once every gate has been crossed.
 type headingRefinement struct {
-	spacing float64
-	targets []navigation.Position
+	spacing   float64
+	waypoints []courseWaypoint
 }
 
 // refinementSteps returns the successive integer steps, in degrees, used to

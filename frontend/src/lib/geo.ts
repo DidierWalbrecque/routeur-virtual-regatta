@@ -1,18 +1,31 @@
 import type { Point } from "./types.ts";
 
-const POSITION_PATTERN =
-  /^(\d{1,3})°\s*([NS])\s*(\d{1,2})['’]\s*(\d+(?:\.\d+)?)"\s*-\s*(\d{1,3})°\s*([EW])\s*(\d{1,2})['’]\s*(\d+(?:\.\d+)?)"$/i;
+// Accepte deux écritures DMS : l'hémisphère juste après les degrés
+// (13°N 07'16") ou en fin de coordonnée (13°07'16.00"N), avec des secondes
+// éventuellement décimales. Les deux coordonnées sont séparées par un tiret.
+const COORDINATE_PATTERN = /^\s*(\d{1,3})\s*°\s*(\d{1,2})\s*['’′]\s*(\d+(?:\.\d+)?)\s*["”″]\s*$/;
+
+function parseCoordinate(token: string, isLatitude: boolean): number | null {
+  const hemispheres = token.match(/[NSEW]/gi);
+  if (!hemispheres || hemispheres.length !== 1) return null;
+  const hemisphere = hemispheres[0].toUpperCase();
+  const allowed = isLatitude ? ["N", "S"] : ["E", "W"];
+  if (!allowed.includes(hemisphere)) return null;
+  const match = token.replace(/[NSEW]/gi, " ").match(COORDINATE_PATTERN);
+  if (!match) return null;
+  const [, degrees, minutes, seconds] = match;
+  if (Number(minutes) >= 60 || Number(seconds) >= 60) return null;
+  const value = Number(degrees) + Number(minutes) / 60 + Number(seconds) / 3600;
+  return hemisphere === "S" || hemisphere === "W" ? -value : value;
+}
 
 export function parseVirtualRegattaPosition(value: string): Point | null {
-  const match = value.trim().match(POSITION_PATTERN);
-  if (!match) return null;
-  const [, latitudeDegrees, latitudeHemisphere, latitudeMinutes, latitudeSeconds, longitudeDegrees, longitudeHemisphere, longitudeMinutes, longitudeSeconds] = match;
-  const latitude = Number(latitudeDegrees) + Number(latitudeMinutes) / 60 + Number(latitudeSeconds) / 3600;
-  const longitude = Number(longitudeDegrees) + Number(longitudeMinutes) / 60 + Number(longitudeSeconds) / 3600;
-  return {
-    latitude: latitudeHemisphere.toUpperCase() === "S" ? -latitude : latitude,
-    longitude: longitudeHemisphere.toUpperCase() === "W" ? -longitude : longitude,
-  };
+  const parts = value.trim().split(/\s*[-–—]\s*/);
+  if (parts.length !== 2) return null;
+  const latitude = parseCoordinate(parts[0], true);
+  const longitude = parseCoordinate(parts[1], false);
+  if (latitude === null || longitude === null) return null;
+  return { latitude, longitude };
 }
 
 function formatVirtualRegattaCoordinate(value: number, isLatitude: boolean): string {
@@ -20,18 +33,18 @@ function formatVirtualRegattaCoordinate(value: number, isLatitude: boolean): str
   let degrees = Math.floor(absolute);
   const minutesValue = (absolute - degrees) * 60;
   let minutes = Math.floor(minutesValue);
-  let seconds = Math.round((minutesValue - minutes) * 60);
+  let seconds = Math.round((minutesValue - minutes) * 60 * 100) / 100;
   if (seconds >= 60) {
-    seconds = 0;
+    seconds -= 60;
     minutes += 1;
   }
   if (minutes >= 60) {
-    minutes = 0;
+    minutes -= 60;
     degrees += 1;
   }
   const hemisphere = isLatitude ? (Number(value) < 0 ? "S" : "N") : Number(value) < 0 ? "W" : "E";
-  const degreeText = isLatitude ? String(degrees) : String(degrees).padStart(3, "0");
-  return `${degreeText}°${hemisphere} ${String(minutes).padStart(2, "0")}'${String(seconds).padStart(2, "0")}"`;
+  const secondsText = seconds.toFixed(2).padStart(5, "0");
+  return `${degrees}°${String(minutes).padStart(2, "0")}'${secondsText}"${hemisphere}`;
 }
 
 export function formatVirtualRegattaPosition(position: Partial<Point> | null | undefined): string {

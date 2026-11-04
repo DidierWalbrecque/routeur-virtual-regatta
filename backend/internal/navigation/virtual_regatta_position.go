@@ -8,40 +8,32 @@ import (
 	"strings"
 )
 
-var virtualRegattaPositionPattern = regexp.MustCompile(
-	`^\s*([0-9]{1,2})°\s*([NS])\s+([0-9]{1,2})['′]\s*([0-9]{1,2})["″]\s*[-–—]\s*([0-9]{1,3})°\s*([EW])\s+([0-9]{1,2})['′]\s*([0-9]{1,2})["″]\s*$`,
+var (
+	coordinatePairSeparator = regexp.MustCompile(`\s*[-–—]\s*`)
+	coordinatePattern       = regexp.MustCompile(
+		`(?i)^\s*([0-9]{1,3})\s*°\s*([NSEW])?\s*([0-9]{1,2})\s*['’′]\s*([0-9]+(?:\.[0-9]+)?)\s*["”″]\s*([NSEW])?\s*$`,
+	)
 )
 
-// ParseVirtualRegattaPosition convertit les coordonnées en degrés, minutes et
-// secondes affichées par Virtual Regatta en Position.
+// ParseVirtualRegattaPosition convertit une position en degrés, minutes et
+// secondes en Position. L'hémisphère peut suivre les degrés (13°N 07'16") ou
+// terminer la coordonnée (13°07'16.0"N), et les secondes peuvent être décimales.
 func ParseVirtualRegattaPosition(value string) (Position, error) {
-	matches := virtualRegattaPositionPattern.FindStringSubmatch(
-		strings.ToUpper(strings.TrimSpace(value)),
-	)
-	if len(matches) != 9 {
+	parts := coordinatePairSeparator.Split(strings.TrimSpace(value), -1)
+	if len(parts) != 2 {
 		return Position{}, fmt.Errorf(
-			"navigation: format attendu: 13°N 04'08\" - 121°E 37'42\"",
+			"navigation: format attendu: 47°26'11.95\"N - 24°54'55.32\"W",
 		)
 	}
 
-	latitude, err := parseDMSCoordinate(
-		matches[1],
-		matches[2],
-		matches[3],
-		matches[4],
-	)
+	latitude, err := parseDMSCoordinate(parts[0], true)
 	if err != nil {
 		return Position{}, fmt.Errorf(
 			"navigation: latitude invalide: %w",
 			err,
 		)
 	}
-	longitude, err := parseDMSCoordinate(
-		matches[5],
-		matches[6],
-		matches[7],
-		matches[8],
-	)
+	longitude, err := parseDMSCoordinate(parts[1], false)
 	if err != nil {
 		return Position{}, fmt.Errorf(
 			"navigation: longitude invalide: %w",
@@ -75,21 +67,46 @@ func FormatVirtualRegattaPosition(position Position) (string, error) {
 	), nil
 }
 
-func parseDMSCoordinate(
-	degreesText string,
-	hemisphere string,
-	minutesText string,
-	secondsText string,
-) (float64, error) {
-	degrees, err := strconv.Atoi(degreesText)
+func parseDMSCoordinate(token string, isLatitude bool) (float64, error) {
+	matches := coordinatePattern.FindStringSubmatch(
+		strings.ToUpper(strings.TrimSpace(token)),
+	)
+	if len(matches) != 6 {
+		return 0, fmt.Errorf("format DMS invalide: %q", token)
+	}
+
+	hemisphere := matches[2]
+	if matches[5] != "" {
+		if hemisphere != "" {
+			return 0, fmt.Errorf("hémisphère en double dans %q", token)
+		}
+		hemisphere = matches[5]
+	}
+	if hemisphere == "" {
+		return 0, fmt.Errorf("hémisphère manquant dans %q", token)
+	}
+	if isLatitude && hemisphere != "N" && hemisphere != "S" {
+		return 0, fmt.Errorf(
+			"hémisphère %q invalide pour une latitude",
+			hemisphere,
+		)
+	}
+	if !isLatitude && hemisphere != "E" && hemisphere != "W" {
+		return 0, fmt.Errorf(
+			"hémisphère %q invalide pour une longitude",
+			hemisphere,
+		)
+	}
+
+	degrees, err := strconv.Atoi(matches[1])
 	if err != nil {
 		return 0, fmt.Errorf("degrés invalides: %w", err)
 	}
-	minutes, err := strconv.Atoi(minutesText)
+	minutes, err := strconv.Atoi(matches[3])
 	if err != nil {
 		return 0, fmt.Errorf("minutes invalides: %w", err)
 	}
-	seconds, err := strconv.Atoi(secondsText)
+	seconds, err := strconv.ParseFloat(matches[4], 64)
 	if err != nil {
 		return 0, fmt.Errorf("secondes invalides: %w", err)
 	}
@@ -101,7 +118,7 @@ func parseDMSCoordinate(
 
 	coordinate := float64(degrees) +
 		float64(minutes)/60 +
-		float64(seconds)/3600
+		seconds/3600
 	if hemisphere == "S" || hemisphere == "W" {
 		coordinate = -coordinate
 	}

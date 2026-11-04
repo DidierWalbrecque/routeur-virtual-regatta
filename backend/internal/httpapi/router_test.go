@@ -257,14 +257,14 @@ func TestCalculationProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !quick.IncludeIsochrones || quick.HeadingSpacing != 30 || quick.MaxCandidates != 50 || quick.MaxDuration != 5*24*time.Hour {
+	if !quick.IncludeIsochrones || quick.HeadingSpacing != 30 || quick.MaxCandidates != 300 || quick.MaxDuration != 10*24*time.Hour {
 		t.Fatalf("profil rapide inattendu: %+v", quick)
 	}
 	precise, err := calculationProfileFor("precise")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !precise.IncludeIsochrones || precise.HeadingSpacing != 15 || precise.MaxCandidates != 100 || precise.MaxDuration != 3*24*time.Hour {
+	if !precise.IncludeIsochrones || precise.HeadingSpacing != 6 || precise.MaxCandidates != 300 || precise.MaxDuration != 4*24*time.Hour {
 		t.Fatalf("profil précis inattendu: %+v", precise)
 	}
 	if _, err := calculationProfileFor("unknown"); err == nil {
@@ -354,5 +354,88 @@ func TestCalculationDurationForRouteUsesAdaptiveHorizonOnlyForDirectOpenWater(t 
 	}
 	if got != requested {
 		t.Fatalf("horizon avec porte obligatoire = %s, attendu %s", got, requested)
+	}
+}
+
+func TestPracticalHeadingsManualPositionAndStaminaStillPenalizeManeuvers(t *testing.T) {
+	originalWeatherLoader := loadWeatherProviderForRequest
+	originalPolarLoader := loadPolarForRequest
+	originalLandLoader := loadLandForRequest
+	originalEvaluate := evaluatePracticalHeadings
+	originalBuild := buildIsochroneSearch
+	t.Cleanup(func() {
+		loadWeatherProviderForRequest = originalWeatherLoader
+		loadPolarForRequest = originalPolarLoader
+		loadLandForRequest = originalLandLoader
+		evaluatePracticalHeadings = originalEvaluate
+		buildIsochroneSearch = originalBuild
+	})
+
+	loadWeatherProviderForRequest = func(...string) (weather.WeatherProvider, cacheLoadStats, error) {
+		return nil, cacheLoadStats{}, nil
+	}
+	loadPolarForRequest = func(string) (*polar.Polar, bool, error) {
+		return &polar.Polar{MaxSpeed: 10}, false, nil
+	}
+	loadLandForRequest = func(string) (*land.GeoJSONConstraint, bool, error) {
+		constraint, err := land.DecodeGeoJSON(strings.NewReader(testLandGeoJSON))
+		return constraint, false, err
+	}
+	evaluatePracticalHeadings = func(
+		context.Context,
+		weather.WeatherProvider,
+		*polar.Polar,
+		routing.PracticalHeadingInput,
+	) ([]routing.PracticalHeadingCandidate, error) {
+		return nil, nil
+	}
+	var capturedGates []routing.CourseGate
+	var capturedInitialStamina simulation.StaminaState
+	var capturedInitialNavigation *routing.InitialNavigationState
+	var capturedTransitionEvaluator *simulation.TransitionEvaluator
+	var capturedPosition navigation.Position
+	buildIsochroneSearch = func(
+		_ context.Context,
+		_ weather.WeatherProvider,
+		_ *polar.Polar,
+		input routing.IsochroneSearchInput,
+	) (routing.IsochroneSearch, error) {
+		capturedGates = append([]routing.CourseGate(nil), input.Gates...)
+		capturedInitialStamina = input.InitialStamina
+		capturedInitialNavigation = input.InitialNavigation
+		capturedTransitionEvaluator = input.TransitionEvaluator
+		capturedPosition = input.Position
+		instant := input.Instant.Add(input.StepDuration)
+		return routing.IsochroneSearch{
+			Origin: input.Position, Destination: input.Destination, StartedAt: input.Instant,
+			StepDuration: input.StepDuration, Frontiers: []routing.IsochroneFrontier{
+				streamTestFrontier(input.Position, instant, 1, -1),
+			}, ArrivalRadius: input.ArrivalRadius, Reached: false,
+		}, nil
+	}
+
+	routeRequest := httptest.NewRequest(http.MethodPost, "/api/practical-headings", bytes.NewBufferString(`{"weatherFiles":["fake"],"polarPath":"fake","position":{"latitude":-10,"longitude":-10},"destination":{"latitude":-10,"longitude":-9.9},"instant":"2026-09-05T07:30:00Z","durationMinutes":10,"stepMinutes":10,"headings":[0],"mode":"quick","positionSource":"manual","staminaSource":"manual","manualStamina":62.5,"useCourseGates":false}`))
+	routeResponse := httptest.NewRecorder()
+	NewHandler().ServeHTTP(routeResponse, routeRequest)
+	if routeResponse.Code != http.StatusOK {
+		t.Fatalf("calcul: statut = %d, corps = %s", routeResponse.Code, routeResponse.Body.String())
+	}
+	if capturedTransitionEvaluator == nil {
+		t.Fatal("la pénalité de manœuvre doit s'appliquer dès que la stamina est active, même sans état VR")
+	}
+	if len(capturedGates) != 0 {
+		t.Fatalf("aucune porte attendue sans portes de course, obtenu %+v", capturedGates)
+	}
+	if capturedInitialNavigation != nil {
+		t.Fatalf("navigation initiale attendue nil avec une position manuelle, obtenu %+v", capturedInitialNavigation)
+	}
+	if capturedInitialStamina.Level != 62.5 {
+		t.Fatalf("stamina initiale = %.2f, attendue 62.5", float64(capturedInitialStamina.Level))
+	}
+	if float64(capturedPosition.Latitude) != -10 || float64(capturedPosition.Longitude) != -10 {
+		t.Fatalf("position transmise = %+v, attendue la saisie manuelle -10,-10", capturedPosition)
+	}
+	if !strings.Contains(routeResponse.Body.String(), `"initialStamina":62.5`) || !strings.Contains(routeResponse.Body.String(), `"staminaFromVirtualRegatta":false`) {
+		t.Fatalf("métadonnées de stamina inattendues: %s", routeResponse.Body.String())
 	}
 }
