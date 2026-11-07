@@ -11,7 +11,7 @@ export const DEFAULT_DEPARTURE: Point = { latitude: 13.121111, longitude: 121.58
 export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.336667 };
 
 // Couleur d'une isochrone selon l'avancement temporel : bleu (tôt) -> vert -> ambre (tard).
-// Teintes soutenues, pour rester lisibles sur le bleu de la carte marine.
+// Teintes claires, pour rester lisibles sur la carte marine sombre.
 function lerpHex(a: string, b: string, t: number): string {
   const pa = [1, 3, 5].map((i) => parseInt(a.slice(i, i + 2), 16));
   const pb = [1, 3, 5].map((i) => parseInt(b.slice(i, i + 2), 16));
@@ -20,7 +20,7 @@ function lerpHex(a: string, b: string, t: number): string {
 }
 function isochroneTimeColor(fraction: number): string {
   const f = Math.max(0, Math.min(1, fraction));
-  return f < 0.5 ? lerpHex("#1c3d7a", "#7b2cbf", f * 2) : lerpHex("#7b2cbf", "#d6336c", (f - 0.5) * 2);
+  return f < 0.5 ? lerpHex("#4dabf7", "#38d9a9", f * 2) : lerpHex("#38d9a9", "#ffd43b", (f - 0.5) * 2);
 }
 
 // Grille des latitudes et longitudes, comme sur une carte marine : un trait
@@ -179,9 +179,10 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         style: {
           version: 8,
           sources: {
-            // Carte marine sans clé d'API : relief sous-marin Esri Ocean (publié
-            // jusqu'au zoom 10, agrandi au-delà), noms de l'océan, balisage
-            // OpenSeaMap (phares, bouées) et grille des latitudes et longitudes.
+            // Carte marine de nuit sans clé d'API : relief sous-marin Esri Ocean
+            // assombri (publié jusqu'au zoom 10, agrandi au-delà), noms de lieux
+            // clairs, balisage OpenSeaMap (phares, bouées) et grille des
+            // latitudes et longitudes.
             basemap: {
               type: "raster",
               tiles: [
@@ -194,10 +195,10 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "basemap-labels": {
               type: "raster",
               tiles: [
-                "https://services.arcgisonline.com/ArcGIS/rest/services/Ocean/World_Ocean_Reference/MapServer/tile/{z}/{y}/{x}",
+                "https://services.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Reference/MapServer/tile/{z}/{y}/{x}",
               ],
               tileSize: 256,
-              maxzoom: 10,
+              maxzoom: 16,
             },
             seamarks: {
               type: "raster",
@@ -210,15 +211,21 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             graticule: { type: "geojson", data: graticule() as never },
           },
           layers: [
-            { id: "basemap", type: "raster", source: "basemap" },
-            { id: "basemap-labels", type: "raster", source: "basemap-labels" },
+            // Le relief marin est assombri : carte marine de nuit.
+            {
+              id: "basemap",
+              type: "raster",
+              source: "basemap",
+              paint: { "raster-brightness-max": 0.32, "raster-saturation": -0.25, "raster-contrast": 0.15 },
+            },
+            { id: "basemap-labels", type: "raster", source: "basemap-labels", paint: { "raster-opacity": 0.85 } },
             {
               id: "graticule",
               type: "line",
               source: "graticule",
               paint: {
-                "line-color": "#1c3d7a",
-                "line-opacity": ["case", ["boolean", ["get", "major"], false], 0.6, 0.4],
+                "line-color": "#a5d8ff",
+                "line-opacity": ["case", ["boolean", ["get", "major"], false], 0.35, 0.18],
                 "line-width": ["case", ["boolean", ["get", "major"], false], 1.2, 0.8],
                 "line-dasharray": [4, 3],
               },
@@ -266,7 +273,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           source: "vr-checkpoints",
           filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "rhumb"], false]],
           paint: {
-            "line-color": ["match", ["get", "side"], "stbd", "#2b8a3e", "port", "#d9480f", "#7048e8"],
+            "line-color": ["match", ["get", "side"], "stbd", "#51cf66", "port", "#ff922b", "#9775fa"],
             "line-width": 3,
             "line-opacity": 0.9,
             "line-dasharray": [1, 0],
@@ -277,7 +284,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "line",
           source: "vr-checkpoints",
           filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "rhumb"], true]],
-          paint: { "line-color": "#7048e8", "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] },
+          paint: { "line-color": "#9775fa", "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] },
         });
         map.addLayer({
           id: "vr-checkpoint-marks",
@@ -286,7 +293,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "mark"]],
           paint: {
             "circle-radius": 7,
-            "circle-color": ["match", ["get", "mark"], "start", "#2b8a3e", "end", "#e03131", "#7048e8"],
+            "circle-color": ["match", ["get", "mark"], "start", "#51cf66", "end", "#ff6b6b", "#9775fa"],
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 2,
           },
@@ -311,7 +318,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "text-anchor": "bottom",
             "text-allow-overlap": true,
           },
-          paint: { "text-color": "#5f3dc4", "text-halo-color": "#ffffff", "text-halo-width": 2 },
+          paint: { "text-color": "#d0bfff", "text-halo-color": "#101418", "text-halo-width": 2 },
         });
 
         // Zones interdites et tracé en cours : sous la route.
@@ -321,7 +328,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "fill",
           source: "zones",
           paint: {
-            "fill-color": ["case", ["boolean", ["get", "enabled"], true], "#e03131", "#868e96"],
+            "fill-color": ["case", ["boolean", ["get", "enabled"], true], "#ff6b6b", "#868e96"],
             "fill-opacity": ["case", ["boolean", ["get", "enabled"], true], 0.28, 0.12],
           },
         });
@@ -330,7 +337,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "line",
           source: "zones",
           paint: {
-            "line-color": ["case", ["boolean", ["get", "enabled"], true], "#e03131", "#868e96"],
+            "line-color": ["case", ["boolean", ["get", "enabled"], true], "#ff6b6b", "#868e96"],
             "line-width": 2,
           },
         });
@@ -340,7 +347,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "line",
           source: "zone-draft",
           filter: ["==", ["geometry-type"], "LineString"],
-          paint: { "line-color": "#e03131", "line-width": 2, "line-dasharray": [2, 2] },
+          paint: { "line-color": "#ff6b6b", "line-width": 2, "line-dasharray": [2, 2] },
         });
         map.addLayer({
           id: "zone-draft-points",
@@ -349,8 +356,8 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           filter: ["==", ["geometry-type"], "Point"],
           paint: {
             "circle-radius": ["case", ["boolean", ["get", "first"], false], 8, 4],
-            "circle-color": ["case", ["boolean", ["get", "first"], false], "#ffffff", "#e03131"],
-            "circle-stroke-color": "#e03131",
+            "circle-color": ["case", ["boolean", ["get", "first"], false], "#ffffff", "#ff6b6b"],
+            "circle-stroke-color": "#ff6b6b",
             "circle-stroke-width": 2,
           },
         });
@@ -363,7 +370,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           source: "gpx",
           filter: ["==", ["geometry-type"], "LineString"],
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#ffffff", "line-width": 6, "line-opacity": 0.85 },
+          paint: { "line-color": "#101418", "line-width": 6, "line-opacity": 0.85 },
         });
         map.addLayer({
           id: "gpx-line",
@@ -371,7 +378,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           source: "gpx",
           filter: ["==", ["geometry-type"], "LineString"],
           layout: { "line-cap": "round", "line-join": "round" },
-          paint: { "line-color": "#c2255c", "line-width": 3, "line-opacity": 0.95 },
+          paint: { "line-color": "#f783ac", "line-width": 3, "line-opacity": 0.95 },
         });
         map.addLayer({
           id: "gpx-waypoints",
@@ -380,7 +387,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           filter: ["==", ["geometry-type"], "Point"],
           paint: {
             "circle-radius": 5,
-            "circle-color": "#c2255c",
+            "circle-color": "#f783ac",
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 2,
           },
@@ -396,7 +403,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "text-offset": [0, -1.4],
             "text-anchor": "bottom",
           },
-          paint: { "text-color": "#a61e4d", "text-halo-color": "#ffffff", "text-halo-width": 2 },
+          paint: { "text-color": "#f783ac", "text-halo-color": "#101418", "text-halo-width": 2 },
         });
 
         // Route, isochrones et points de route : au-dessus des portes.
@@ -440,7 +447,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "text-offset": [0, -1.5],
             "text-anchor": "bottom",
           },
-          paint: { "text-color": "#1c3d7a", "text-halo-color": "#ffffff", "text-halo-width": 2 },
+          paint: { "text-color": "#a5d8ff", "text-halo-color": "#101418", "text-halo-width": 2 },
         });
 
         // Position choisie dans le tableau des détails : au-dessus de tout le reste.
@@ -449,7 +456,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           id: "route-highlight-halo",
           type: "circle",
           source: "route-highlight",
-          paint: { "circle-radius": 16, "circle-color": "#1c3d7a", "circle-opacity": 0.25 },
+          paint: { "circle-radius": 16, "circle-color": "#4dabf7", "circle-opacity": 0.3 },
         });
         map.addLayer({
           id: "route-highlight",
@@ -457,7 +464,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           source: "route-highlight",
           paint: {
             "circle-radius": 8,
-            "circle-color": "#1c3d7a",
+            "circle-color": "#4dabf7",
             "circle-stroke-color": "#ffffff",
             "circle-stroke-width": 3,
           },

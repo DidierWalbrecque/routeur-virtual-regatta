@@ -33,8 +33,18 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
-  /* Bleu de la carte marine, visible avant le chargement des tuiles. */
-  background: #a9c8e4;
+  /* Bleu nuit de la carte marine, visible avant le chargement des tuiles. */
+  background: #0b1a2b;
+}
+
+/* Attribution du fond de carte, accordée à la carte de nuit. */
+#map .maplibregl-ctrl-attrib {
+  background: #0b1a2bcc;
+  color: var(--card-muted);
+}
+
+#map .maplibregl-ctrl-attrib a {
+  color: var(--card-text);
 }
 
 .floating-card,
