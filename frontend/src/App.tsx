@@ -393,6 +393,14 @@ export function App() {
   };
   const onCheckpoint = (key: string) => {
     setField("checkpoint", key);
+    if (key === "game-arrival") {
+      const arrival = vrState?.arrival;
+      if (!arrival) return;
+      const destination = formatVirtualRegattaPosition({ latitude: arrival.latitude, longitude: arrival.longitude });
+      setForm((previous) => ({ ...previous, checkpoint: key, destination }));
+      updateEndpoints(form.start, destination);
+      return;
+    }
     const checkpoint = checkpointCache.current.get(key);
     if (!checkpoint?.start) return;
     const destination = formatVirtualRegattaPosition(checkpoint.start);
@@ -912,6 +920,7 @@ export function App() {
           polars={polars}
           checkpoints={checkpoints}
           checkpointCache={checkpointCache.current}
+          gameArrivalName={vrState?.arrival ? vrState.arrival.name || "arrivée du jeu" : null}
           polarNote={polarNote}
           horizonNote={horizonNote}
           vrStatus={vrStatus}
