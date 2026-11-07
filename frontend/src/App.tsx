@@ -22,7 +22,7 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, usableCheckpoints, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const DEFAULT_POLAR = "../data/polars/ultim_bp_11.json";
@@ -921,7 +921,7 @@ export function App() {
           polars={polars}
           checkpoints={checkpoints}
           checkpointCache={checkpointCache.current}
-          gameArrivalName={vrState?.arrival ? vrState.arrival.name || "arrivée du jeu" : null}
+          gameArrivalName={vrState?.arrival ? (meaningfulName(vrState.arrival.name) ?? "arrivée du jeu") : null}
           polarNote={polarNote}
           horizonNote={horizonNote}
           vrStatus={vrStatus}

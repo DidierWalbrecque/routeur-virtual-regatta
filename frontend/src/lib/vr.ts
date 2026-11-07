@@ -36,8 +36,28 @@ export function checkpointKey(checkpoint: Checkpoint, index: number): string {
   return `${checkpoint.group ?? index + 1}.${checkpoint.id ?? index + 1}`;
 }
 
+// Valeurs que le jeu envoie à la place d'un vrai nom.
+const PLACEHOLDER_NAMES = new Set(["", "none", "null", "undefined", "-", "—"]);
+
+/** Nom lisible, ou null quand le jeu n'envoie qu'un nom vide ou « none ». */
+export function meaningfulName(value: string | null | undefined): string | null {
+  const name = String(value ?? "").trim();
+  return PLACEHOLDER_NAMES.has(name.toLowerCase()) ? null : name;
+}
+
+export function checkpointSideLabel(checkpoint: Checkpoint): string {
+  if (checkpoint.rhumb) return "dans les deux sens";
+  const side = String(checkpoint.side || "").toLowerCase();
+  return side === "stbd" ? "tribord" : side === "port" ? "bâbord" : "sens libre";
+}
+
+/** Nom de la porte, ou son sens de passage quand le jeu ne la nomme pas. */
+export function checkpointName(checkpoint: Checkpoint): string {
+  return meaningfulName(checkpoint.name) ?? meaningfulName(checkpoint.display) ?? checkpointSideLabel(checkpoint);
+}
+
 export function checkpointLabel(checkpoint: Checkpoint, index: number): string {
-  return `P${checkpointKey(checkpoint, index)} — ${checkpoint.name || checkpoint.display || "Porte"}`;
+  return `P${checkpointKey(checkpoint, index)} — ${checkpointName(checkpoint)}`;
 }
 
 export function checkpointTitle(checkpoint: Checkpoint): string {
@@ -56,9 +76,9 @@ export function checkpointFeatures(state: VrState | undefined): MapFeature[] {
     if (![start, end].every((point) => point && Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude)))) return [];
     const group = checkpoint.group ?? index + 1;
     const id = checkpoint.id ?? index + 1;
-    const name = checkpoint.name || checkpoint.display || "Porte";
+    const name = checkpointName(checkpoint);
     const side = checkpoint.rhumb ? "any" : String(checkpoint.side || "").toLowerCase();
-    const sideLabel = checkpoint.rhumb ? "dans les deux sens" : side === "stbd" ? "tribord" : side === "port" ? "bâbord" : "sens libre";
+    const sideLabel = checkpointSideLabel(checkpoint);
     const properties = {
       checkpoint: `${group}.${id}`,
       label: `Porte ${group}.${id} — ${name}`,

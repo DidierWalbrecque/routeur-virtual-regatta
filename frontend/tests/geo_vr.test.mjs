@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { forwardContour, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "../src/lib/geo.ts";
-import { checkpointFeatures, equipmentFromVrOptions, usableCheckpoints } from "../src/lib/vr.ts";
+import { checkpointFeatures, checkpointLabel, equipmentFromVrOptions, meaningfulName, usableCheckpoints } from "../src/lib/vr.ts";
 
 test("parseVirtualRegattaPosition et formatVirtualRegattaPosition sont réciproques", () => {
   const position = parseVirtualRegattaPosition(`47°26'11.95"N - 24°54'55.32"W`);
@@ -45,6 +45,22 @@ test("les portes passées ou à terre ne sont pas utilisables", () => {
   const features = checkpointFeatures(state);
   assert.equal(features.length, 4);
   assert.equal(features[0].geometry.type, "LineString");
+});
+
+test("une porte nommée « none » par le jeu affiche son sens de passage", () => {
+  const point = { latitude: 1, longitude: 2 };
+  assert.equal(checkpointLabel({ group: 4, id: 4, name: "none", side: "port", start: point, end: point }, 0), "P4.4 — bâbord");
+  assert.equal(checkpointLabel({ group: 4, id: 5, name: " None ", display: "", start: point, end: point }, 1), "P4.5 — sens libre");
+  assert.equal(checkpointLabel({ group: 1, id: 1, name: "none", display: "Bouée de Marie-Galante", start: point, end: point }, 0), "P1.1 — Bouée de Marie-Galante");
+  assert.equal(checkpointLabel({ group: 2, id: 1, name: "Cap Horn", rhumb: true, start: point, end: point }, 0), "P2.1 — Cap Horn");
+
+  const [line, label] = checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: "none", side: "stbd", start: point, end: point }] });
+  assert.equal(line.properties.name, "tribord");
+  assert.equal(label.properties.label, "P4.4 — tribord");
+
+  assert.equal(meaningfulName("none"), null);
+  assert.equal(meaningfulName(undefined), null);
+  assert.equal(meaningfulName(" Pointe-à-Pitre "), "Pointe-à-Pitre");
 });
 
 test("forwardContour garde l'arc tourné vers la destination", () => {

@@ -157,14 +157,19 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         style: {
           version: 8,
           sources: {
-            openstreetmap: {
+            // Fond clair et peu détaillé (CARTO Positron) : la route, les
+            // isochrones et les portes restent les seuls éléments en couleur.
+            basemap: {
               type: "raster",
-              tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+              tiles: ["a", "b", "c", "d"].map(
+                (subdomain) => `https://${subdomain}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}.png`,
+              ),
               tileSize: 256,
-              attribution: "© OpenStreetMap contributors",
+              maxzoom: 19,
+              attribution: "© OpenStreetMap contributors © CARTO",
             },
           },
-          layers: [{ id: "openstreetmap", type: "raster", source: "openstreetmap" }],
+          layers: [{ id: "basemap", type: "raster", source: "basemap" }],
         },
         center: [DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude],
         zoom: 10,
