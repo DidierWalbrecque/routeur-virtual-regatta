@@ -182,6 +182,9 @@ export function App() {
     const label = `${gribTarget.run.slice(0, 8)} ${gribTarget.run.slice(8)}Z`;
     return `Run ${label} en cours de publication : ${gribTarget.downloaded}/${gribTarget.expected} échéances`;
   }, [gribTarget]);
+
+  // Le bouton tourne pendant un clic « Actualiser » et pendant le téléchargement du run suivant en arrière-plan.
+  const gribDownloading = refreshing || (gribTarget !== null && !gribTarget.complete && gribTarget.downloaded > 0);
   const checkpoints = useMemo(() => usableCheckpoints(vrState), [vrState]);
 
   // Ce que les prévisions téléchargées permettent pour l'horizon choisi.
@@ -773,12 +776,12 @@ export function App() {
         <hr />
         <button
           id="refresh-weather"
-          className={refreshing ? "map-dock-button is-busy" : "map-dock-button"}
+          className={gribDownloading ? "map-dock-button is-busy" : "map-dock-button"}
           type="button"
           aria-label="Actualiser les GRIB"
           data-tooltip={
-            refreshing
-              ? "Téléchargement des GRIB…"
+            gribDownloading
+              ? gribProgressText || "Téléchargement des GRIB…"
               : weatherModel
                 ? `Actualiser les GRIB\nRun ${weatherModel.runText} · +${weatherModel.horizonHours} h`
                 : "Actualiser les GRIB"
