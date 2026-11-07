@@ -45,8 +45,19 @@ func TestGFSWatcherSwitchesOnlyWhenTargetRunIsComplete(t *testing.T) {
 		t.Fatalf("run actif attendu 06Z complet, obtenu %+v", status.Active)
 	}
 
+	// À 12:15 UTC, le cycle 12Z n'est pas encore publié : la cible reste 06Z.
 	now = time.Date(2026, 11, 7, 12, 15, 0, 0, time.UTC)
 	status, removed, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Target.Run.Cycle != 6 || status.Target.Complete() != true {
+		t.Fatalf("cible attendue 06Z complète avant publication du 12Z, obtenu %+v", status.Target)
+	}
+
+	// À 16:15 UTC, le cycle 12Z est publiable : la cible devient 12Z.
+	now = time.Date(2026, 11, 7, 16, 15, 0, 0, time.UTC)
+	status, removed, err = watcher.Tick(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

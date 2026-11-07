@@ -16,6 +16,8 @@ import (
 const (
 	gfsForecastStepHours = 3
 	gfsMaxForecastHour   = 384
+	// gfsPublicationLag : délai après le cycle avant que NOAA publie ses premières échéances.
+	gfsPublicationLag = 4 * time.Hour
 )
 
 // DefaultGFSForecastHours retourne la cadence native du GFS 0,25° : f000 à f384 toutes les 3 heures.
@@ -141,7 +143,8 @@ func (watcher *GFSWatcher) Tick(ctx context.Context) (GFSWatcherStatus, []string
 // passage télécharge sans tenir mu, puis met à jour l'état sous mu.
 func (watcher *GFSWatcher) passage(ctx context.Context, hours []int) ([]string, error) {
 	now := watcher.now().UTC()
-	cycleTime := now.Truncate(6 * time.Hour)
+	// Le run ciblé est le dernier cycle publié, pas le dernier cycle commencé.
+	cycleTime := now.Add(-gfsPublicationLag).Truncate(6 * time.Hour)
 	candidate, err := NewGFSForecastRequest(cycleTime.Format(gfsDateLayout), cycleTime.Hour(), 0)
 	if err != nil {
 		return nil, err
