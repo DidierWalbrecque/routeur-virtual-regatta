@@ -108,9 +108,9 @@ type calculationProfile struct {
 func calculationProfileFor(mode string) (calculationProfile, error) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "precise":
-		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 6, CellSize: 0.5, MaxCandidates: 300, IncludeIsochrones: true, MaxDuration: 4 * 24 * time.Hour}, nil
+		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 6, CellSize: 0.5, MaxCandidates: 2400, IncludeIsochrones: true, MaxDuration: 4 * 24 * time.Hour}, nil
 	case "quick":
-		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 300, IncludeIsochrones: true, MaxDuration: 10 * 24 * time.Hour}, nil
+		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 1200, IncludeIsochrones: true, MaxDuration: 10 * 24 * time.Hour}, nil
 	default:
 		return calculationProfile{}, fmt.Errorf("mode de calcul %q invalide: quick ou precise attendu", mode)
 	}

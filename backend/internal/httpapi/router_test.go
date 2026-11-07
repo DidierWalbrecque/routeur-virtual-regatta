@@ -257,14 +257,14 @@ func TestCalculationProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !quick.IncludeIsochrones || quick.HeadingSpacing != 30 || quick.MaxCandidates != 300 || quick.MaxDuration != 10*24*time.Hour {
+	if !quick.IncludeIsochrones || quick.HeadingSpacing != 30 || quick.MaxCandidates != 1200 || quick.MaxDuration != 10*24*time.Hour {
 		t.Fatalf("profil rapide inattendu: %+v", quick)
 	}
 	precise, err := calculationProfileFor("precise")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !precise.IncludeIsochrones || precise.HeadingSpacing != 6 || precise.MaxCandidates != 300 || precise.MaxDuration != 4*24*time.Hour {
+	if !precise.IncludeIsochrones || precise.HeadingSpacing != 6 || precise.MaxCandidates != 2400 || precise.MaxDuration != 4*24*time.Hour {
 		t.Fatalf("profil précis inattendu: %+v", precise)
 	}
 	if _, err := calculationProfileFor("unknown"); err == nil {
