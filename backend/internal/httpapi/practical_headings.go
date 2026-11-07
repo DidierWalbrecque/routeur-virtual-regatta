@@ -246,18 +246,17 @@ func routePointFromNode(
 	}
 	if node.SpeedPenalty != nil && node.SpeedPenalty.AppliedPenalty != nil {
 		point.SpeedCoefficient = floatPointer(float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio))
-		log.Printf("[ROUTE] pénalité vitesse : coeff=%.2f durée_pénalisée=%v voile_avant=%d voile_après=%d",
+		log.Printf("[ROUTE] pénalité vitesse : coeff=%.2f durée_pénalisée=%v voile_choisie=%d",
 			float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio),
 			node.SpeedPenalty.PenalizedDuration,
-			node.State.SailID,
 			node.Candidate.Step.BestSail.SailID,
 		)
 	}
 	if node.Maneuver != nil {
 		if node.Maneuver.Kind != simulation.ManeuverNone || node.Maneuver.SailChanged {
-			log.Printf("[ROUTE] manœuvre détectée : type=%d sailChanged=%t voile=%d→%d",
+			log.Printf("[ROUTE] manœuvre détectée : type=%v sailChanged=%t voile_choisie=%d",
 				node.Maneuver.Kind, node.Maneuver.SailChanged,
-				node.State.SailID, node.Candidate.Step.BestSail.SailID,
+				node.Candidate.Step.BestSail.SailID,
 			)
 		}
 		switch {
