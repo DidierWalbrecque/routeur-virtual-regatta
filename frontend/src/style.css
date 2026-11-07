@@ -150,6 +150,38 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+.route-calculation-weather {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  margin: 0;
+  color: var(--card-muted);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.route-calculation-weather .material-symbols-outlined {
+  color: var(--accent-blue);
+  font-size: 16px;
+}
+
+.route-calculation-weather.is-warning {
+  color: var(--card-text);
+}
+
+.route-calculation-weather.is-warning .material-symbols-outlined {
+  color: var(--accent-yellow);
+}
+
+/* Avertissement météo après le calcul : même carte que l'erreur GPX, en jaune. */
+.weather-toast {
+  border-left-color: var(--accent-yellow);
+}
+
+.weather-toast .material-symbols-outlined:first-child {
+  color: var(--accent-yellow);
+}
+
 .route-calculation-cancel {
   display: flex;
   align-items: center;

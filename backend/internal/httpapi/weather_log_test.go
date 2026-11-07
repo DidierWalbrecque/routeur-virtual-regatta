@@ -69,11 +69,11 @@ func TestLogGRIBUsageWarnsWhenTheActiveRunIsNotUsed(t *testing.T) {
 
 	// Prévisions jusqu'au 09/11 06:00Z ; période jusqu'au 09/11 21:20Z, soit 15 h de trop.
 	start := time.Date(2026, 11, 7, 21, 20, 0, 0, time.UTC)
-	logGRIBUsage(gribPaths("2026110706", everyThreeHours(0, 48)...), start, 48*time.Hour, "2026110712", cacheLoadStats{Hits: 10, Misses: 7}, 42)
+	logGRIBUsage(gribPaths("2026110706", everyThreeHours(0, 48)...), start, 48*time.Hour, nil, "2026110712", cacheLoadStats{Hits: 10, Misses: 7}, 42)
 
 	text := output.String()
 	for _, want := range []string{
-		"[GRIB] calcul : run 2026110706 · 17 fichier(s) f000→f048",
+		"[GRIB] calcul : run 2026110706 · 17 fichier(s) · prévisions du 07/11 06:00Z au 09/11 06:00Z",
 		"[GRIB] période calculée : 07/11 21:20Z → 09/11 21:20Z",
 		"[GRIB] chargement : 10 en cache, 7 lu(s) sur disque, 42 ms",
 		"n'utilise pas le run actif du serveur (2026110712)",

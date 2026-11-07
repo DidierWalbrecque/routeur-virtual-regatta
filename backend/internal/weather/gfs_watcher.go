@@ -34,6 +34,8 @@ type GFSRunProgress struct {
 	Run        GFSForecastRequest
 	Downloaded int
 	Expected   int
+	// Files contient les échéances déjà téléchargées, dans l'ordre.
+	Files []string
 }
 
 // Complete indique que toutes les échéances attendues sont présentes.
@@ -221,6 +223,7 @@ func downloadRunPrefix(ctx context.Context, downloader GFSDownloader, run GFSFor
 		}
 		files = append(files, path)
 		progress.Downloaded++
+		progress.Files = append([]string(nil), files...)
 	}
 	return progress, files, nil
 }

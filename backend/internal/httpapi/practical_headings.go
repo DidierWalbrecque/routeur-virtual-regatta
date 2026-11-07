@@ -66,6 +66,8 @@ type practicalHeadingsResponse struct {
 	Isochrones  []isochroneFrontierResponse  `json:"isochrones"`
 	Route       []routePointResponse         `json:"route"`
 	Performance performanceResponse          `json:"performance"`
+	// Weather signale un run récent encore partiel, complété par le précédent.
+	Weather *weatherBlendResponse `json:"weather,omitempty"`
 }
 
 type performanceResponse struct {
@@ -370,22 +372,20 @@ func runPracticalHeadings(
 	for index, heading := range payload.Headings {
 		headings[index] = navigation.Heading(heading)
 	}
+	requestedDuration := time.Duration(payload.DurationMinutes * float64(time.Minute))
+	// Le run le plus récent sert même s'il est encore en téléchargement ; le run
+	// complet précédent prend le relais au-delà de ses échéances disponibles.
+	weatherStatus := gribWatcher.Status()
+	weatherFiles, weatherSwitch := blendLatestGRIB(payload.WeatherFiles, weatherStatus)
 	weatherStarted := time.Now()
-	weatherProvider, weatherStats, err := loadWeatherProviderForRequest(payload.WeatherFiles...)
+	weatherProvider, weatherStats, err := loadWeatherProviderForRequest(weatherFiles...)
 	weatherMilliseconds := elapsedMilliseconds(weatherStarted)
 	if err != nil {
-		log.Printf("[GRIB] chargement impossible (%d fichier(s) envoyé(s)) : %v", len(payload.WeatherFiles), err)
+		log.Printf("[GRIB] chargement impossible (%d fichier(s)) : %v", len(weatherFiles), err)
 		writeJSONError(response, http.StatusBadRequest, "chargement météo impossible: "+err.Error())
 		return
 	}
-	logGRIBUsage(
-		payload.WeatherFiles,
-		instant,
-		time.Duration(payload.DurationMinutes*float64(time.Minute)),
-		runLabel(gribWatcher.Status().Active.Run),
-		weatherStats,
-		weatherMilliseconds,
-	)
+	logGRIBUsage(weatherFiles, instant, requestedDuration, weatherSwitch, runLabel(weatherStatus.Active.Run), weatherStats, weatherMilliseconds)
 	polarStarted := time.Now()
 	boatPolar, polarHit, err := loadPolarForRequest(payload.PolarPath)
 	polarMilliseconds := elapsedMilliseconds(polarStarted)
@@ -521,6 +521,7 @@ func runPracticalHeadings(
 		Isochrones:  make([]isochroneFrontierResponse, 0),
 		Route:       make([]routePointResponse, 0),
 	}
+	result.Weather = weatherSwitch.response(instant, requestedDuration)
 	result.Performance.VirtualRegattaStateUsed = receivedVRState != nil
 	result.Performance.VirtualRegattaGatesUsed = len(virtualRegattaGates)
 	initialStamina, staminaFromVR := resolveInitialStamina(useVRStamina, receivedVRState, payload.ManualStamina)
@@ -561,7 +562,6 @@ func runPracticalHeadings(
 		isochroneStep = time.Duration(payload.StepMinutes * float64(time.Minute))
 	}
 	isochroneStarted := time.Now()
-	requestedDuration := time.Duration(payload.DurationMinutes * float64(time.Minute))
 	distance, err := navigation.DistanceBetween(position, destination)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "distance de destination impossible: "+err.Error())
@@ -591,6 +591,7 @@ func runPracticalHeadings(
 				Destination: result.Destination,
 				StartedAt:   instant,
 				TotalLayers: layerCount,
+				Weather:     result.Weather,
 			}); err != nil {
 				cancelCalculation()
 				return

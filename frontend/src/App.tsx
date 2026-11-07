@@ -9,6 +9,7 @@ import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, pars
 import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
 import type { CalculationProgress } from "./lib/calculation_progress.ts";
+import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.ts";
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
 import { matchPolar } from "./lib/polar_match.ts";
 import { parseGpx, gpxFeatureCollection, gpxPointCount } from "./lib/gpx.ts";
@@ -138,6 +139,9 @@ export function App() {
   const [calculating, setCalculating] = useState(false);
   const [progress, setProgress] = useState<CalculationProgress | null>(null);
   const [calculationStartedAt, setCalculationStartedAt] = useState(0);
+  // Run récent encore partiel utilisé par le dernier calcul, et avertissement à afficher.
+  const [routeWeather, setRouteWeather] = useState<WeatherSwitch | null>(null);
+  const [weatherNotice, setWeatherNotice] = useState("");
   const [vrState, setVrState] = useState<VrState | undefined>();
   const [vrStatus, setVrStatus] = useState<VrStatus>({ ok: false, text: "Virtual Regatta : lecture en cours…" });
   const [weather, setWeather] = useState<{ files: string[]; run: string }>({ files: [], run: "" });
@@ -610,6 +614,8 @@ export function App() {
       setCalculating(true);
       setProgress(null);
       setCalculationStartedAt(Date.now());
+      setRouteWeather(null);
+      setWeatherNotice("");
       const response = await fetch("/api/practical-headings/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -641,6 +647,8 @@ export function App() {
         if (eventName === "start") {
           const start = data as RouteStart;
           if (start.totalLayers) setProgress({ completed: 0, total: start.totalLayers });
+          setRouteWeather(start.weather ?? null);
+          if (start.weather) console.info(`[GRIB] ${weatherSwitchMessage(start.weather)}`);
           const position = start.position || DEFAULT_DEPARTURE;
           const destination = start.destination || DEFAULT_DESTINATION;
           frameCounter.current += 1;
@@ -667,6 +675,7 @@ export function App() {
         if (eventName === "complete") {
           const complete = data as RouteResult;
           setResult(complete);
+          if (complete.weather?.affectsRoute) setWeatherNotice(weatherSwitchMessage(complete.weather));
           setFrame({ result: complete, showRoute: true, fit: true, key: String(frameCounter.current) });
           return;
         }
@@ -756,7 +765,13 @@ export function App() {
         onError={() => setMapError(true)}
       />
       {calculating && (
-        <CalculationStatus progress={progress} startedAt={calculationStartedAt} onCancel={cancelCalculation} />
+        <CalculationStatus
+          progress={progress}
+          startedAt={calculationStartedAt}
+          onCancel={cancelCalculation}
+          weatherNote={routeWeather ? weatherSwitchMessage(routeWeather) : ""}
+          weatherWarning={routeWeather?.affectsRoute ?? false}
+        />
       )}
       <div id="map-error" role="alert" className={mapError ? "visible" : undefined}>
         MapLibre n’a pas pu être chargé.
@@ -771,6 +786,15 @@ export function App() {
           event.target.value = "";
         }}
       />
+      {weatherNotice && !calculating && (
+        <div className="gpx-toast weather-toast floating-card" role="status">
+          <MaterialIcon name="cloud_sync" />
+          <span>{weatherNotice}</span>
+          <button type="button" aria-label="Fermer" onClick={() => setWeatherNotice("")}>
+            <MaterialIcon name="close" />
+          </button>
+        </div>
+      )}
       {gpxError && (
         <div className="gpx-toast floating-card" role="alert">
           <MaterialIcon name="warning" />

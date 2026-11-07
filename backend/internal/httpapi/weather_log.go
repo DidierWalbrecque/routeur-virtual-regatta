@@ -104,23 +104,31 @@ func describeGRIBFiles(paths []string, start time.Time, duration time.Duration) 
 
 // logGRIBUsage écrit dans le journal les GRIB envoyés au calcul, leur
 // chargement et ce qui mérite l'attention.
-func logGRIBUsage(paths []string, start time.Time, duration time.Duration, activeRun string, stats cacheLoadStats, milliseconds float64) {
+func logGRIBUsage(paths []string, start time.Time, duration time.Duration, blend *weatherBlend, activeRun string, stats cacheLoadStats, milliseconds float64) {
 	usage := describeGRIBFiles(paths, start, duration)
 	if usage.FirstHour < 0 {
 		log.Printf("[GRIB] calcul : %d fichier(s), aucun nom de fichier GFS reconnu (%s)", usage.Count, strings.Join(firstItems(usage.Unknown, 3), ", "))
 		return
 	}
-	log.Printf("[GRIB] calcul : run %s · %d fichier(s) f%03d→f%03d · prévisions du %s au %s",
-		strings.Join(usage.Runs, "+"), usage.Count, usage.FirstHour, usage.LastHour,
+	log.Printf("[GRIB] calcul : run %s · %d fichier(s) · prévisions du %s au %s",
+		strings.Join(usage.Runs, "+"), usage.Count,
 		usage.FirstValid.Format(gribLogTime), usage.LastValid.Format(gribLogTime))
-	log.Printf("[GRIB] période calculée : %s → %s · échéances utilisées f%03d→f%03d",
-		start.UTC().Format(gribLogTime), start.Add(duration).UTC().Format(gribLogTime), usage.UsedFirst, usage.UsedLast)
+	if blend != nil {
+		log.Printf("[GRIB] run le plus récent %s en téléchargement (%d/%d échéances) : utilisé jusqu'au %s, puis run %s",
+			blend.LatestRun, blend.Downloaded, blend.Expected, blend.SwitchAt.Format(gribLogTime), blend.FallbackRun)
+		if start.Add(duration).After(blend.SwitchAt) {
+			log.Printf("[GRIB] attention : la route dépasse le %s, le vent vient ensuite du run %s, plus ancien",
+				blend.SwitchAt.Format(gribLogTime), blend.FallbackRun)
+		}
+	}
+	log.Printf("[GRIB] période calculée : %s → %s",
+		start.UTC().Format(gribLogTime), start.Add(duration).UTC().Format(gribLogTime))
 	log.Printf("[GRIB] chargement : %d en cache, %d lu(s) sur disque, %.0f ms", stats.Hits, stats.Misses, milliseconds)
 
-	if len(usage.Runs) > 1 {
+	if blend == nil && len(usage.Runs) > 1 {
 		log.Printf("[GRIB] attention : plusieurs runs mélangés dans le calcul (%s)", strings.Join(usage.Runs, ", "))
 	}
-	if activeRun != "" && (len(usage.Runs) != 1 || usage.Runs[0] != activeRun) {
+	if blend == nil && activeRun != "" && (len(usage.Runs) != 1 || usage.Runs[0] != activeRun) {
 		log.Printf("[GRIB] attention : le calcul n'utilise pas le run actif du serveur (%s)", activeRun)
 	}
 	if len(usage.Missing) > 0 {

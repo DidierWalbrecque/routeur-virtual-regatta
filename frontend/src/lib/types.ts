@@ -1,3 +1,5 @@
+import type { WeatherSwitch } from "./weather_switch.ts";
+
 export type Point = { latitude: number; longitude: number };
 
 export type RoutePoint = {
@@ -26,6 +28,8 @@ export type Isochrone = {
 };
 
 export type RouteResult = {
+  /** Run récent encore partiel, complété par le précédent. */
+  weather?: WeatherSwitch;
   position?: Point;
   destination?: Point;
   destinationReached?: boolean;
@@ -38,6 +42,7 @@ export type RouteStart = {
   destination?: Point;
   startedAt?: string;
   totalLayers?: number;
+  weather?: WeatherSwitch;
 };
 
 export type Checkpoint = {

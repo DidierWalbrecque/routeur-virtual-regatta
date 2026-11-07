@@ -5,10 +5,13 @@ type Props = {
   progress: CalculationProgress | null;
   startedAt: number;
   onCancel: () => void;
+  /** Origine du vent quand le run le plus récent est encore partiel. */
+  weatherNote?: string;
+  weatherWarning?: boolean;
 };
 
 /** Fenêtre d'avancement du calcul de route, avec un bouton pour l'annuler. */
-export function CalculationStatus({ progress, startedAt, onCancel }: Props) {
+export function CalculationStatus({ progress, startedAt, onCancel, weatherNote = "", weatherWarning = false }: Props) {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
@@ -63,6 +66,14 @@ export function CalculationStatus({ progress, startedAt, onCancel }: Props) {
           <span>Préparation : météo, polaire et côtes…</span>
         )}
       </div>
+      {weatherNote && (
+        <p className={weatherWarning ? "route-calculation-weather is-warning" : "route-calculation-weather"}>
+          <span className="material-symbols-outlined" aria-hidden="true">
+            {weatherWarning ? "warning" : "cloud_sync"}
+          </span>
+          {weatherNote}
+        </p>
+      )}
       <button type="button" className="route-calculation-cancel" onClick={onCancel}>
         <span className="material-symbols-outlined" aria-hidden="true">
           close
