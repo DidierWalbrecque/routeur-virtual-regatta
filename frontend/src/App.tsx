@@ -89,8 +89,8 @@ function newId(): string {
 // proxy Vite en erreur) ne doit pas faire planter l'appelant avec
 // « Unexpected end of JSON input ». On lit le texte puis on parse si possible.
 type GribTarget = { run: string; downloaded: number; expected: number; complete: boolean };
-type GribStatusBody = { files?: string[]; run?: string; removedFiles?: string[]; target?: GribTarget | null };
-const GRIB_STATUS_POLL_MS = 60_000;
+type GribStatusBody = { files?: string[]; run?: string; removedFiles?: string[]; target?: GribTarget | null; busy?: boolean };
+const GRIB_STATUS_POLL_MS = 10_000;
 
 async function readJsonResponse<T = unknown>(response: Response): Promise<T> {
   const text = await response.text();
@@ -140,6 +140,7 @@ export function App() {
   const [weatherStatus, setWeatherStatus] = useState("");
   const [refreshing, setRefreshing] = useState(false);
   const [gribTarget, setGribTarget] = useState<GribTarget | null>(null);
+  const [gribBusy, setGribBusy] = useState(false);
   const lastGribRunRef = useRef("");
   const [mapError, setMapError] = useState(false);
   const [zones, setZones] = useState<Zone[]>(() => {
@@ -184,7 +185,8 @@ export function App() {
   }, [gribTarget]);
 
   // Le bouton tourne pendant un clic « Actualiser » et pendant le téléchargement du run suivant en arrière-plan.
-  const gribDownloading = refreshing || (gribTarget !== null && !gribTarget.complete && gribTarget.downloaded > 0);
+  const gribDownloading =
+    refreshing || gribBusy || (gribTarget !== null && !gribTarget.complete && gribTarget.downloaded > 0);
   const checkpoints = useMemo(() => usableCheckpoints(vrState), [vrState]);
 
   // Ce que les prévisions téléchargées permettent pour l'horizon choisi.
@@ -468,6 +470,7 @@ export function App() {
     const files: string[] = body.files || [];
     const run: string = body.run || "";
     setGribTarget(body.target ?? null);
+    setGribBusy(body.busy ?? false);
     if (!run || files.length === 0) return;
     if (lastGribRunRef.current !== run) {
       console.info(`[GRIB] Run actif : ${run}, ${files.length} fichier(s)`);

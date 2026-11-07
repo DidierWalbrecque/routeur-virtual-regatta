@@ -121,3 +121,53 @@ func TestCompleteGFSRunEmptyWhenNoRunIsComplete(t *testing.T) {
 		t.Fatalf("aucun run complet attendu, obtenu %+v", result)
 	}
 }
+
+// gateDownloader bloque chaque téléchargement jusqu'à la fermeture de release.
+type gateDownloader struct {
+	started chan struct{}
+	release chan struct{}
+}
+
+func (downloader *gateDownloader) Download(_ context.Context, request GFSForecastRequest, directory string) (string, error) {
+	select {
+	case downloader.started <- struct{}{}:
+	default:
+	}
+	<-downloader.release
+	path := filepath.Join(directory, request.LocalFileName())
+	if err := os.WriteFile(path, []byte("grib"), 0o600); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+func TestGFSWatcherStatusDoesNotWaitForDownload(t *testing.T) {
+	directory := t.TempDir()
+	downloader := &gateDownloader{started: make(chan struct{}, 1), release: make(chan struct{})}
+	now := time.Date(2026, 11, 7, 12, 15, 0, 0, time.UTC)
+	watcher := NewGFSWatcher(downloader, directory, []int{0}, func() time.Time { return now })
+
+	done := make(chan struct{})
+	go func() {
+		_, _, _ = watcher.Tick(context.Background())
+		close(done)
+	}()
+	<-downloader.started
+
+	statusCh := make(chan GFSWatcherStatus, 1)
+	go func() { statusCh <- watcher.Status() }()
+	select {
+	case status := <-statusCh:
+		if !status.Busy {
+			t.Fatal("statut attendu occupé pendant le téléchargement")
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("Status bloqué pendant le téléchargement")
+	}
+
+	close(downloader.release)
+	<-done
+	if watcher.Status().Busy {
+		t.Fatal("statut toujours occupé après le passage")
+	}
+}

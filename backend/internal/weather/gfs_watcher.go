@@ -44,6 +44,7 @@ type GFSWatcherStatus struct {
 	Active    GFSRefreshResult
 	Target    GFSRunProgress
 	HasTarget bool
+	Busy      bool
 	Waiting   string
 	LastError string
 	Updated   time.Time
@@ -53,6 +54,8 @@ type GFSWatcherStatus struct {
 // run le plus récent se télécharge au fil de sa publication par NOAA. Le run
 // actif ne change qu'une fois le run cible entièrement téléchargé.
 type GFSWatcher struct {
+	// tickMu sérialise les passages ; mu ne protège que l'état, jamais les téléchargements.
+	tickMu     sync.Mutex
 	mu         sync.Mutex
 	downloader GFSDownloader
 	directory  string
@@ -61,6 +64,7 @@ type GFSWatcher struct {
 	active     GFSRefreshResult
 	target     GFSRunProgress
 	hasTarget  bool
+	busy       bool
 	waiting    string
 	lastError  string
 	updated    time.Time
@@ -117,21 +121,39 @@ func (watcher *GFSWatcher) Tick(ctx context.Context) (GFSWatcherStatus, []string
 	if ctx == nil {
 		return GFSWatcherStatus{}, nil, errors.New("weather: contexte requis")
 	}
-	watcher.mu.Lock()
-	defer watcher.mu.Unlock()
+	watcher.tickMu.Lock()
+	defer watcher.tickMu.Unlock()
 
+	watcher.mu.Lock()
+	watcher.busy = true
+	hours := append([]int(nil), watcher.hours...)
+	watcher.mu.Unlock()
+
+	removed, err := watcher.passage(ctx, hours)
+
+	watcher.mu.Lock()
+	watcher.busy = false
+	status := watcher.statusLocked()
+	watcher.mu.Unlock()
+	return status, removed, err
+}
+
+// passage télécharge sans tenir mu, puis met à jour l'état sous mu.
+func (watcher *GFSWatcher) passage(ctx context.Context, hours []int) ([]string, error) {
 	now := watcher.now().UTC()
 	cycleTime := now.Truncate(6 * time.Hour)
 	candidate, err := NewGFSForecastRequest(cycleTime.Format(gfsDateLayout), cycleTime.Hour(), 0)
 	if err != nil {
-		return watcher.statusLocked(), nil, err
+		return nil, err
 	}
 
-	progress, files, downloadErr := downloadRunPrefix(ctx, watcher.downloader, candidate, watcher.hours, watcher.directory)
+	progress, files, downloadErr := downloadRunPrefix(ctx, watcher.downloader, candidate, hours, watcher.directory)
 	if ctxErr := ctx.Err(); ctxErr != nil {
-		return watcher.statusLocked(), nil, ctxErr
+		return nil, ctxErr
 	}
 
+	watcher.mu.Lock()
+	defer watcher.mu.Unlock()
 	watcher.updated = now
 	watcher.target = progress
 	watcher.hasTarget = true
@@ -141,16 +163,16 @@ func (watcher *GFSWatcher) Tick(ctx context.Context) (GFSWatcherStatus, []string
 	}
 	watcher.lastError = ""
 
-	var removed []string
-	if progress.Complete() && gfsRunKeyOf(candidate) > gfsRunKeyOf(watcher.active.Run) {
-		removed, err = RemoveOldGFSFiles(watcher.directory, candidate)
-		if err != nil {
-			watcher.lastError = err.Error()
-			return watcher.statusLocked(), removed, err
-		}
-		watcher.active = GFSRefreshResult{Run: candidate, Files: files, RemovedFiles: removed}
+	if !progress.Complete() || gfsRunKeyOf(candidate) <= gfsRunKeyOf(watcher.active.Run) {
+		return nil, nil
 	}
-	return watcher.statusLocked(), removed, nil
+	removed, err := RemoveOldGFSFiles(watcher.directory, candidate)
+	if err != nil {
+		watcher.lastError = err.Error()
+		return removed, err
+	}
+	watcher.active = GFSRefreshResult{Run: candidate, Files: files, RemovedFiles: removed}
+	return removed, nil
 }
 
 // Run exécute Tick immédiatement, puis à chaque intervalle, jusqu'à l'annulation du contexte.
@@ -175,6 +197,7 @@ func (watcher *GFSWatcher) statusLocked() GFSWatcherStatus {
 		Active:    watcher.active,
 		Target:    watcher.target,
 		HasTarget: watcher.hasTarget,
+		Busy:      watcher.busy,
 		Waiting:   watcher.waiting,
 		LastError: watcher.lastError,
 		Updated:   watcher.updated,

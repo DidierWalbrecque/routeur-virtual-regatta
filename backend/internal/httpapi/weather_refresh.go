@@ -40,6 +40,7 @@ type weatherStatusResponse struct {
 	Files        []string               `json:"files"`
 	RemovedFiles []string               `json:"removedFiles"`
 	Refreshed    string                 `json:"refreshed"`
+	Busy         bool                   `json:"busy"`
 	Target       *weatherTargetResponse `json:"target,omitempty"`
 	Waiting      string                 `json:"waiting,omitempty"`
 	LastError    string                 `json:"lastError,omitempty"`
@@ -87,6 +88,7 @@ func weatherStatusFrom(status weather.GFSWatcherStatus, removed []string, err er
 		Files:        files,
 		RemovedFiles: removed,
 		Refreshed:    status.Updated.Format(time.RFC3339),
+		Busy:         status.Busy,
 		Waiting:      status.Waiting,
 		LastError:    status.LastError,
 	}
