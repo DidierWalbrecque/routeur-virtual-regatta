@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type GpxOverlay, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
+import { CalculationStatus } from "./CalculationStatus.tsx";
 import { RouteDetailsPanel } from "./RouteDetailsPanel.tsx";
 import { RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
 import { WeatherRunCard } from "./WeatherRunCard.tsx";
@@ -7,6 +8,7 @@ import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
 import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
+import type { CalculationProgress } from "./lib/calculation_progress.ts";
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
 import { matchPolar } from "./lib/polar_match.ts";
 import { parseGpx, gpxFeatureCollection, gpxPointCount } from "./lib/gpx.ts";
@@ -134,7 +136,8 @@ export function App() {
   const [result, setResult] = useState<RouteResult | undefined>();
   const [detailsOpen, setDetailsOpen] = useState(false);
   const [calculating, setCalculating] = useState(false);
-  const [progress, setProgress] = useState("");
+  const [progress, setProgress] = useState<CalculationProgress | null>(null);
+  const [calculationStartedAt, setCalculationStartedAt] = useState(0);
   const [vrState, setVrState] = useState<VrState | undefined>();
   const [vrStatus, setVrStatus] = useState<VrStatus>({ ok: false, text: "Virtual Regatta : lecture en cours…" });
   const [weather, setWeather] = useState<{ files: string[]; run: string }>({ files: [], run: "" });
@@ -167,6 +170,8 @@ export function App() {
   const mapHandle = useRef<MapViewHandle>(null);
   const startInput = useRef<HTMLInputElement>(null);
   const activeController = useRef<AbortController | null>(null);
+  // Contrôleur du calcul annulé à la demande : son interruption n'est pas une erreur.
+  const cancelledController = useRef<AbortController | null>(null);
   const checkpointCache = useRef(new Map<string, { start: Checkpoint["start"]; end: Checkpoint["end"] }>());
   const streamIsochrones = useRef<Isochrone[]>([]);
   const streamBase = useRef<RouteResult | null>(null);
@@ -600,7 +605,8 @@ export function App() {
         throw new Error("Le pas est invalide pour cet horizon.");
       }
       setCalculating(true);
-      setProgress("");
+      setProgress(null);
+      setCalculationStartedAt(Date.now());
       const response = await fetch("/api/practical-headings/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -631,6 +637,7 @@ export function App() {
         if (activeController.current !== controller) return;
         if (eventName === "start") {
           const start = data as RouteStart;
+          if (start.totalLayers) setProgress({ completed: 0, total: start.totalLayers });
           const position = start.position || DEFAULT_DEPARTURE;
           const destination = start.destination || DEFAULT_DESTINATION;
           frameCounter.current += 1;
@@ -651,7 +658,7 @@ export function App() {
           const partial = { ...base, isochrones: streamIsochrones.current };
           setFrame({ result: partial, showRoute: false, fit: false, key: String(frameCounter.current) });
           const frontier = data as Isochrone;
-          setProgress(` (${frontier.completedLayers}/${frontier.totalLayers})`);
+          if (frontier.totalLayers) setProgress({ completed: frontier.completedLayers ?? 0, total: frontier.totalLayers });
           return;
         }
         if (eventName === "complete") {
@@ -666,7 +673,12 @@ export function App() {
       setFormOpen(false);
       console.info("[ROUTE] Flux de calcul terminé");
     } catch (error) {
-      if (!(controller.signal.aborted && activeController.current !== controller)) {
+      if (cancelledController.current === controller) {
+        // Annulation demandée : les isochrones déjà calculées restent affichées.
+        cancelledController.current = null;
+        setFormError("Routage annulé. Les isochrones déjà calculées restent affichées.");
+        console.info("[ROUTE] Calcul annulé à la demande");
+      } else if (!(controller.signal.aborted && activeController.current !== controller)) {
         setFormError((error as Error).message || "Le calcul a échoué.");
         console.error("[ROUTE] Échec du calcul", error);
       }
@@ -677,6 +689,14 @@ export function App() {
       }
     }
   };
+
+  // Annule le calcul en cours : le serveur arrête la recherche quand la connexion se ferme.
+  const cancelCalculation = useCallback(() => {
+    const controller = activeController.current;
+    if (!controller) return;
+    cancelledController.current = controller;
+    controller.abort();
+  }, []);
 
   // --- Trace GPX importée (affichée en référence sur la carte) ---
   const onGpxFile = useCallback(async (file: File | null) => {
@@ -733,10 +753,7 @@ export function App() {
         onError={() => setMapError(true)}
       />
       {calculating && (
-        <div id="route-calculation-status" className="route-calculation-status" role="status" aria-live="polite">
-          <MaterialIcon name="progress_activity" />
-          <span>{`Calcul de la route en cours…${progress}`}</span>
-        </div>
+        <CalculationStatus progress={progress} startedAt={calculationStartedAt} onCancel={cancelCalculation} />
       )}
       <div id="map-error" role="alert" className={mapError ? "visible" : undefined}>
         MapLibre n’a pas pu être chargé.

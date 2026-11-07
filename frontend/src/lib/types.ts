@@ -37,6 +37,7 @@ export type RouteStart = {
   position?: Point;
   destination?: Point;
   startedAt?: string;
+  totalLayers?: number;
 };
 
 export type Checkpoint = {

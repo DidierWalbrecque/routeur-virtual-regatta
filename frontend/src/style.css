@@ -80,10 +80,11 @@ body {
   top: 20px;
   left: 50%;
   z-index: 5;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
+  display: grid;
+  gap: 10px;
+  width: min(340px, calc(100vw - 32px));
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
   transform: translateX(-50%);
 }
 
@@ -91,10 +92,107 @@ body {
   display: none;
 }
 
-.route-calculation-status .material-symbols-outlined {
+.route-calculation-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+}
+
+.route-calculation-spinner {
   color: var(--accent-yellow);
   animation: route-calculation-spin 1.2s linear infinite;
   font-size: 20px;
+}
+
+.route-calculation-elapsed {
+  margin-left: auto;
+  color: var(--card-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.route-calculation-bar {
+  position: relative;
+  height: 6px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--card-field);
+}
+
+.route-calculation-bar > div {
+  height: 100%;
+  border-radius: inherit;
+  background: var(--accent-yellow);
+  transition: width 0.3s ease;
+}
+
+/* Avant le premier front, le total est inconnu : bande qui défile. */
+.route-calculation-bar.is-indeterminate > div {
+  width: 35%;
+  animation: route-calculation-indeterminate 1.4s ease-in-out infinite;
+}
+
+@keyframes route-calculation-indeterminate {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.route-calculation-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  color: var(--card-muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-calculation-cancel {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-red);
+  border-radius: 8px;
+  color: var(--accent-red);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-calculation-cancel:hover,
+.route-calculation-cancel:focus-visible {
+  color: var(--card-background-solid);
+  background: var(--accent-red);
+}
+
+.route-calculation-cancel:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.route-calculation-cancel .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.route-calculation-cancel kbd {
+  padding: 1px 5px;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  font: 11px system-ui, sans-serif;
+  opacity: 0.75;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .route-calculation-spinner,
+  .route-calculation-bar.is-indeterminate > div {
+    animation: none;
+  }
 }
 
 @keyframes route-calculation-spin {
