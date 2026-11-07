@@ -285,14 +285,6 @@ type practicalCandidateResponse struct {
 	SpeedKnots             float64         `json:"speedKnots"`
 }
 
-func practicalHeadingsHandler(response http.ResponseWriter, request *http.Request) {
-	runPracticalHeadings(response, request, nil, nil)
-}
-
-func practicalHeadingsStreamHandler(response http.ResponseWriter, request *http.Request) {
-	runPracticalHeadings(response, request, &practicalHeadingsStream{}, nil)
-}
-
 func runPracticalHeadings(
 	response http.ResponseWriter,
 	request *http.Request,
