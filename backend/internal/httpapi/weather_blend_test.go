@@ -47,11 +47,15 @@ func TestBlendLatestGRIBUsesTheNewestRunThenThePreviousOne(t *testing.T) {
 	if want := time.Date(2026, 11, 8, 6, 0, 0, 0, time.UTC); !blend.SwitchAt.Equal(want) {
 		t.Fatalf("bascule à %v, attendu %v", blend.SwitchAt, want)
 	}
-	if len(files) != 5+(129-7) {
-		t.Fatalf("%d fichiers, attendu %d", len(files), 5+(129-7))
+	// 12Z f000→f003 (avant 18:00Z, départ dans le passé), 18Z f000→f012, puis 12Z f021→f384.
+	if len(files) != 2+5+(129-7) {
+		t.Fatalf("%d fichiers, attendu %d", len(files), 2+5+(129-7))
 	}
-	if filepath.Base(files[4]) != "gfs.2026110718.f012.grb2" || filepath.Base(files[5]) != "gfs.2026110712.f021.grb2" {
-		t.Fatalf("raccord = %s puis %s", filepath.Base(files[4]), filepath.Base(files[5]))
+	if filepath.Base(files[1]) != "gfs.2026110712.f003.grb2" || filepath.Base(files[2]) != "gfs.2026110718.f000.grb2" {
+		t.Fatalf("début = %s puis %s", filepath.Base(files[1]), filepath.Base(files[2]))
+	}
+	if filepath.Base(files[6]) != "gfs.2026110718.f012.grb2" || filepath.Base(files[7]) != "gfs.2026110712.f021.grb2" {
+		t.Fatalf("raccord = %s puis %s", filepath.Base(files[6]), filepath.Base(files[7]))
 	}
 	seen := map[time.Time]bool{}
 	for _, path := range files {

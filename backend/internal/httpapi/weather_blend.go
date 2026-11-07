@@ -53,28 +53,38 @@ func blendLatestGRIB(files []string, status weather.GFSWatcherStatus) ([]string,
 		return files, nil
 	}
 
-	var switchAt time.Time
+	var latestFrom, switchAt time.Time
 	for _, path := range status.Target.Files {
 		run, valid, ok := gribFileValidity(path)
 		if !ok || run != latestRun {
 			return files, nil
+		}
+		if latestFrom.IsZero() || valid.Before(latestFrom) {
+			latestFrom = valid
 		}
 		if valid.After(switchAt) {
 			switchAt = valid
 		}
 	}
 
-	blended := append([]string(nil), status.Target.Files...)
+	// Le run précédent ne sert qu'en dehors de la période du run récent : avant
+	// sa première échéance (départ dans le passé) et après sa dernière.
+	blended := make([]string, 0, len(files)+len(status.Target.Files))
+	var before, after []string
 	for _, path := range files {
 		run, valid, ok := gribFileValidity(path)
 		if !ok || run != activeRun {
 			// Le calcul ne vient pas du run actif du serveur : on n'y touche pas.
 			return files, nil
 		}
-		if valid.After(switchAt) {
-			blended = append(blended, path)
+		switch {
+		case valid.Before(latestFrom):
+			before = append(before, path)
+		case valid.After(switchAt):
+			after = append(after, path)
 		}
 	}
+	blended = append(append(append(blended, before...), status.Target.Files...), after...)
 	return blended, &weatherBlend{
 		LatestRun:   latestRun,
 		FallbackRun: activeRun,
