@@ -83,6 +83,16 @@ def create_app(api_base_url: str | None = None) -> Flask:
             )
         return jsonify(body), status
 
+    @app.get("/api/weather/current")
+    def current_weather():
+        body, status = _call_go_get_api(app, "/api/weather/current")
+        return jsonify(body), status
+
+    @app.get("/api/weather/status")
+    def weather_status():
+        body, status = _call_go_get_api(app, "/api/weather/status")
+        return jsonify(body), status
+
     @app.post("/api/practical-headings")
     def calculate_practical_headings():
         payload = request.get_json(silent=True) or {}

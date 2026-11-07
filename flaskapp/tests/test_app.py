@@ -71,6 +71,22 @@ class FlaskRelayTests(unittest.TestCase):
             {"forecastHours": [0, 3], "lookbackHours": 48},
         )
 
+    @patch("flaskapp.app._call_go_get_api")
+    def test_weather_current_and_status_are_proxied(self, call_go_get_api):
+        for path in ("/api/weather/current", "/api/weather/status"):
+            with self.subTest(path=path):
+                call_go_get_api.reset_mock()
+                call_go_get_api.return_value = (
+                    {"run": "2026110712", "files": ["gfs.2026110712.f000.grb2"]},
+                    200,
+                )
+
+                response = self.client.get(path)
+
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.get_json()["run"], "2026110712")
+                call_go_get_api.assert_called_once_with(ANY, path)
+
     @patch("flaskapp.app._call_go_api")
     def test_vr_state_post_is_proxied(self, call_go_api):
         call_go_api.return_value = ({"stamina": 87.5}, 200)
