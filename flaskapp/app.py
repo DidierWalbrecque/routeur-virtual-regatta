@@ -97,6 +97,7 @@ def create_app(api_base_url: str | None = None) -> Flask:
     def calculate_practical_headings():
         payload = request.get_json(silent=True) or {}
         app.logger.info("[ROUTE] Demande de calcul reçue")
+        app.logger.info("[GRIB] Fichiers envoyés au calcul : %s", _grib_summary(payload))
         app.logger.info(
             "[ROUTE] État Virtual Regatta utilisé : %s",
             payload.get("useVirtualRegattaState", False),
@@ -116,6 +117,7 @@ def create_app(api_base_url: str | None = None) -> Flask:
     def stream_practical_headings():
         payload = request.get_json(silent=True) or {}
         app.logger.info("[ROUTE] Demande de calcul streaming reçue")
+        app.logger.info("[GRIB] Fichiers envoyés au calcul : %s", _grib_summary(payload))
         upstream, body, status = _open_go_stream(
             app, "/api/practical-headings/stream", payload
         )
@@ -246,6 +248,17 @@ def _relay_go_stream(upstream: Any):
             yield chunk
     finally:
         upstream.close()
+
+
+def _grib_summary(payload: dict[str, Any]) -> str:
+    """Résume les fichiers GRIB d'une demande de calcul : nombre, premier et dernier."""
+
+    files = [Path(str(name)).name for name in payload.get("weatherFiles") or []]
+    if not files:
+        return "aucun"
+    if len(files) == 1:
+        return f"1 fichier ({files[0]})"
+    return f"{len(files)} fichiers ({files[0]} → {files[-1]})"
 
 
 def _decode_json(raw_body: bytes) -> Any:

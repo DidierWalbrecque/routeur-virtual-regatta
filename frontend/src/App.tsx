@@ -589,6 +589,9 @@ export function App() {
     const controller = new AbortController();
     activeController.current = controller;
     console.info(`[ROUTE] Calcul demandé avec le run ${gribRun}`);
+    console.info(
+      `[GRIB] ${gribFiles.length} fichier(s) envoyé(s) au calcul : ${gribFiles[0]?.split(/[\\/]/).pop() ?? "aucun"} → ${gribFiles[gribFiles.length - 1]?.split(/[\\/]/).pop() ?? "aucun"}`,
+    );
     try {
       const instant = parseLocalDate(form.instant);
       if (!gribModel) throw new Error("Run GRIB invalide : actualisez les GRIB.");

@@ -374,9 +374,18 @@ func runPracticalHeadings(
 	weatherProvider, weatherStats, err := loadWeatherProviderForRequest(payload.WeatherFiles...)
 	weatherMilliseconds := elapsedMilliseconds(weatherStarted)
 	if err != nil {
+		log.Printf("[GRIB] chargement impossible (%d fichier(s) envoyé(s)) : %v", len(payload.WeatherFiles), err)
 		writeJSONError(response, http.StatusBadRequest, "chargement météo impossible: "+err.Error())
 		return
 	}
+	logGRIBUsage(
+		payload.WeatherFiles,
+		instant,
+		time.Duration(payload.DurationMinutes*float64(time.Minute)),
+		runLabel(gribWatcher.Status().Active.Run),
+		weatherStats,
+		weatherMilliseconds,
+	)
 	polarStarted := time.Now()
 	boatPolar, polarHit, err := loadPolarForRequest(payload.PolarPath)
 	polarMilliseconds := elapsedMilliseconds(polarStarted)

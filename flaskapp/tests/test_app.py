@@ -131,6 +131,27 @@ class FlaskRelayTests(unittest.TestCase):
         self.assertFalse(response.get_json()["destinationReached"])
         call_go_api.assert_called_once_with(ANY, "/api/practical-headings", payload)
 
+    def test_grib_summary_names_the_files_sent_to_the_calculation(self):
+        from flaskapp.app import _grib_summary
+
+        self.assertEqual(_grib_summary({}), "aucun")
+        self.assertEqual(
+            _grib_summary({"weatherFiles": ["../data/weather/gfs.2026110712.f000.grb2"]}),
+            "1 fichier (gfs.2026110712.f000.grb2)",
+        )
+        self.assertEqual(
+            _grib_summary(
+                {
+                    "weatherFiles": [
+                        "../data/weather/gfs.2026110712.f000.grb2",
+                        "../data/weather/gfs.2026110712.f003.grb2",
+                        "../data/weather/gfs.2026110712.f384.grb2",
+                    ]
+                }
+            ),
+            "3 fichiers (gfs.2026110712.f000.grb2 → gfs.2026110712.f384.grb2)",
+        )
+
     @patch("flaskapp.app.urllib.request.urlopen")
     def test_calculation_stream_is_relayed_without_decoding(self, urlopen):
         class FakeUpstream:
