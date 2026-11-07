@@ -33,6 +33,18 @@ body {
   inset: 0;
   width: 100%;
   height: 100%;
+  /* Couleur du fond sombre, visible avant le chargement des tuiles. */
+  background: #0e0e0e;
+}
+
+/* Attribution du fond de carte, accordée au fond sombre. */
+#map .maplibregl-ctrl-attrib {
+  background: #0e0e0ecc;
+  color: var(--card-muted);
+}
+
+#map .maplibregl-ctrl-attrib a {
+  color: var(--card-text);
 }
 
 .floating-card,
