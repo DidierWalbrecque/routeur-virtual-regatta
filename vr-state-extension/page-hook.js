@@ -265,6 +265,8 @@
           name: sailName(currentSail),
           automatic: Number(currentSail) >= 10,
         },
+        // Valeur brute du jeu (boat.sail) pour diagnostiquer l'encodage de la voile.
+        rawSail: currentSail,
         heading: Number.isFinite(Number(boat.heading)) ? Number(boat.heading) : null,
         speed: Number.isFinite(Number(boat.speed)) ? Number(boat.speed) : null,
         state: boat.state || "",
