@@ -439,14 +439,15 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const raceStartLon = raceStart?.longitude;
   useEffect(() => {
     const map = mapRef.current;
-    if (!ready || !map) return;
+    const api = apiRef.current;
+    if (!ready || !map || !api) return;
     if (raceStartLat === undefined || raceStartLon === undefined) {
       raceStartMarker.current?.remove();
       raceStartMarker.current = undefined;
       return;
     }
     if (!raceStartMarker.current) {
-      raceStartMarker.current = new maplibregl.Marker({ color: "#f59f00" }).addTo(map);
+      raceStartMarker.current = new api.Marker({ color: "#f59f00" }).addTo(map);
       raceStartMarker.current.getElement().title = "Départ de la course";
     }
     raceStartMarker.current.setLngLat([raceStartLon, raceStartLat]);
