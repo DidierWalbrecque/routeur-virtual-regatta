@@ -301,6 +301,12 @@ export function App() {
     [resetRoute],
   );
 
+  // Les marqueurs suivent toujours le formulaire, y compris au chargement (valeurs mémorisées)
+  // et après une modification indirecte (point de porte, saisie).
+  useEffect(() => {
+    updateEndpoints(form.start, form.destination);
+  }, [form.start, form.destination, updateEndpoints]);
+
   // --- Zones interdites (actions de l'utilisateur : la route affichée devient périmée) ---
   const startDrawing = () => {
     setFormOpen(false);
