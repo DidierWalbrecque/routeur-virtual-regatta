@@ -317,15 +317,13 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameArrivalKey]);
 
-  // Départ officiel du leg : tant que le bateau est en attente, il remplace le départ.
-  const gameStartKey = vrState?.legStart ? `${vrState.legStart.latitude},${vrState.legStart.longitude}` : "";
+  // En mode Virtual Regatta, le marqueur de calcul suit la position live du bateau.
+  const boatLatitude = vrState?.position?.latitude;
+  const boatLongitude = vrState?.position?.longitude;
   useEffect(() => {
-    if (!vrState?.legStart || vrState.state !== "waiting") return;
-    const text = formatVirtualRegattaPosition({ latitude: vrState.legStart.latitude, longitude: vrState.legStart.longitude });
-    setForm((previous) => (previous.start === text ? previous : { ...previous, start: text, positionSource: "manual" }));
-    console.info(`[VR] Départ du jeu : ${vrState.legStart.name || "sans nom"}`);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameStartKey, vrState?.state]);
+    if (form.positionSource !== "vr" || boatLatitude === undefined || boatLongitude === undefined) return;
+    setEndpoints((previous) => ({ ...previous, position: { latitude: boatLatitude, longitude: boatLongitude } }));
+  }, [form.positionSource, boatLatitude, boatLongitude]);
 
   // --- Zones interdites (actions de l'utilisateur : la route affichée devient périmée) ---
   const startDrawing = () => {
@@ -708,6 +706,7 @@ export function App() {
       <MapView
         ref={mapHandle}
         endpoints={endpoints}
+        raceStart={vrState?.legStart ? { latitude: vrState.legStart.latitude, longitude: vrState.legStart.longitude } : null}
         frame={frame}
         vrState={vrState}
         zones={allZones}

@@ -70,6 +70,8 @@ function elapsedMinutes(startedAt: string | undefined, instant: string | undefin
 
 type Props = {
   endpoints: Endpoints;
+  /** Départ officiel de la course : marqueur fixe, distinct du bateau. */
+  raceStart?: Point | null;
   frame: RouteFrame | null;
   vrState: VrState | undefined;
   /** Zones interdites dessinées par l'utilisateur. */
@@ -89,7 +91,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, rightPadding, onError },
+  { endpoints, raceStart, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, rightPadding, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -97,6 +99,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const apiRef = useRef<MapLibreModule | undefined>(undefined);
   const departureMarker = useRef<Marker | undefined>(undefined);
   const destinationMarker = useRef<Marker | undefined>(undefined);
+  const raceStartMarker = useRef<Marker | undefined>(undefined);
   const boundsRef = useRef<LngLatBounds | undefined>(undefined);
   const checkpointKeyRef = useRef("");
   const renderedKey = useRef("");
@@ -430,6 +433,25 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     boundsRef.current = bounds;
     map.triggerRepaint();
   }, [ready, endpoints]);
+
+  // Départ officiel de la course (fixe), affiché seulement s'il est connu.
+  const raceStartLat = raceStart?.latitude;
+  const raceStartLon = raceStart?.longitude;
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    if (raceStartLat === undefined || raceStartLon === undefined) {
+      raceStartMarker.current?.remove();
+      raceStartMarker.current = undefined;
+      return;
+    }
+    if (!raceStartMarker.current) {
+      raceStartMarker.current = new maplibregl.Marker({ color: "#f59f00" }).addTo(map);
+      raceStartMarker.current.getElement().title = "Départ de la course";
+    }
+    raceStartMarker.current.setLngLat([raceStartLon, raceStartLat]);
+    map.triggerRepaint();
+  }, [ready, raceStartLat, raceStartLon]);
 
   // Portes Virtual Regatta.
   useEffect(() => {
