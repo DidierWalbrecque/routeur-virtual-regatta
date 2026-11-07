@@ -91,16 +91,18 @@ export function RouteForm(props: Props) {
             </select>
           </label>
           <label>
-            Arrivée
+            Destination du routage
             <input id="route-destination" required value={form.destination} onChange={(event) => props.onDestination(event.target.value)} />
           </label>
           {(checkpoints.length > 0 || props.gameArrivalName) && (
-            <select id="route-checkpoints-list" aria-label="Portes restantes" value={form.checkpoint} onChange={(event) => props.onCheckpoint(event.target.value)}>
+            <label>
+              Remplir la destination depuis le jeu
+              <select id="route-checkpoints-list" aria-label="Porte ou arrivée du jeu" value={form.checkpoint} onChange={(event) => props.onCheckpoint(event.target.value)}>
               <option value="" disabled>
-                Ou choisir une porte restante…
+                Choisir une porte ou l'arrivée…
               </option>
               {props.gameArrivalName && (
-                <option value="game-arrival">Arrivée du jeu — {props.gameArrivalName}</option>
+                <option value="game-arrival">Arrivée officielle — {props.gameArrivalName}</option>
               )}
               {checkpoints.map((checkpoint, index) => {
                 const key = checkpointKey(checkpoint, index);
@@ -111,7 +113,8 @@ export function RouteForm(props: Props) {
                   </option>
                 );
               })}
-            </select>
+              </select>
+            </label>
           )}
         </fieldset>
 
