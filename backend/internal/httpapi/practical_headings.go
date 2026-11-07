@@ -43,7 +43,12 @@ type practicalHeadingsRequest struct {
 	// sur Virtual Regatta lorsqu'il est seul présent.
 	UseVirtualRegattaState bool                   `json:"useVirtualRegattaState"`
 	ExclusionZones         []exclusionZoneRequest `json:"exclusionZones"`
+	// CoastalMarginNM : marge minimale à la côte, en milles nautiques (0 à 10).
+	// Absente, elle vaut defaultCoastalMarginNM.
+	CoastalMarginNM *float64 `json:"coastalMarginNM"`
 }
+
+const defaultCoastalMarginNM = 2.0
 
 type positionRequest struct {
 	Latitude       float64 `json:"latitude"`
@@ -417,7 +422,15 @@ func runPracticalHeadings(
 		return
 	}
 	arrivalLandConstraint := landConstraint
-	landConstraint, err = landConstraint.WithCoastalMargin(navigation.NauticalMiles(2))
+	coastalMarginNM := defaultCoastalMarginNM
+	if payload.CoastalMarginNM != nil {
+		coastalMarginNM = *payload.CoastalMarginNM
+	}
+	if !(coastalMarginNM >= 0 && coastalMarginNM <= 10) {
+		writeJSONError(response, http.StatusBadRequest, "marge côtière invalide: valeur entre 0 et 10 NM attendue")
+		return
+	}
+	landConstraint, err = landConstraint.WithCoastalMargin(navigation.NauticalMiles(coastalMarginNM))
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "marge côtière impossible: "+err.Error())
 		return

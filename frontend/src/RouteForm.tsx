@@ -16,6 +16,7 @@ export type FormState = {
   staminaSource: "vr" | "manual";
   staminaManual: string;
   useCourseGates: boolean;
+  coastalMarginNM: string;
   destination: string;
   instant: string;
   polar: string;
@@ -183,6 +184,10 @@ export function RouteForm(props: Props) {
               </select>
             </label>
           </div>
+          <label>
+            Marge à la côte (NM)
+            <input id="route-coastal-margin" type="number" min="0" max="10" step="0.5" required value={form.coastalMarginNM} onChange={(event) => props.onField("coastalMarginNM", event.target.value)} />
+          </label>
           <label>
             Polaire
             <select id="route-polar" required value={form.polar} onChange={(event) => props.onField("polar", event.target.value)}>
