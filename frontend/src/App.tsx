@@ -88,6 +88,10 @@ function newId(): string {
 // Lecture tolérante d'une réponse JSON : un corps vide (backend injoignable,
 // proxy Vite en erreur) ne doit pas faire planter l'appelant avec
 // « Unexpected end of JSON input ». On lit le texte puis on parse si possible.
+type GribTarget = { run: string; downloaded: number; expected: number; complete: boolean };
+type GribStatusBody = { files?: string[]; run?: string; removedFiles?: string[]; target?: GribTarget | null };
+const GRIB_STATUS_POLL_MS = 60_000;
+
 async function readJsonResponse<T = unknown>(response: Response): Promise<T> {
   const text = await response.text();
   let body: unknown;
@@ -135,6 +139,8 @@ export function App() {
   const [weather, setWeather] = useState<{ files: string[]; run: string }>({ files: [], run: "" });
   const [weatherStatus, setWeatherStatus] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [gribTarget, setGribTarget] = useState<GribTarget | null>(null);
+  const lastGribRunRef = useRef("");
   const [mapError, setMapError] = useState(false);
   const [zones, setZones] = useState<Zone[]>(() => {
     try {
@@ -170,6 +176,12 @@ export function App() {
     () => (weather.run ? buildWeatherRunModel(weather.run, weather.files) : null),
     [weather],
   );
+
+  const gribProgressText = useMemo(() => {
+    if (!gribTarget || gribTarget.complete || gribTarget.downloaded === 0) return "";
+    const label = `${gribTarget.run.slice(0, 8)} ${gribTarget.run.slice(8)}Z`;
+    return `Run ${label} en cours de publication : ${gribTarget.downloaded}/${gribTarget.expected} échéances`;
+  }, [gribTarget]);
   const checkpoints = useMemo(() => usableCheckpoints(vrState), [vrState]);
 
   // Ce que les prévisions téléchargées permettent pour l'horizon choisi.
@@ -436,12 +448,10 @@ export function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ forecastHours: GRIB_FORECAST_HOURS, lookbackHours: 48 }),
       });
-      const body = await readJsonResponse<{ files?: string[]; run?: string; removedFiles?: string[] }>(response);
-      const files: string[] = body.files || [];
-      const run: string = body.run || "";
-      setWeather({ files, run });
+      const body = await readJsonResponse<GribStatusBody>(response);
+      applyGribStatus(body);
       setWeatherStatus("");
-      console.info(`[GRIB] Actualisation réussie : run ${run}, ${files.length} fichier(s), ${body.removedFiles?.length || 0} ancien(s) supprimé(s)`);
+      console.info(`[GRIB] Actualisation réussie : run ${body.run || "aucun"}, ${body.files?.length || 0} fichier(s), ${body.removedFiles?.length || 0} ancien(s) supprimé(s)`);
     } catch (error) {
       setWeatherStatus(`Actualisation des GRIB impossible : ${(error as Error).message}`);
       console.error("[GRIB] Échec de l’actualisation", error);
@@ -450,18 +460,50 @@ export function App() {
     }
   };
 
+  // Adopte le run actif renvoyé par le serveur. Il ne change qu'une fois le run suivant entièrement téléchargé.
+  const applyGribStatus = (body: GribStatusBody) => {
+    const files: string[] = body.files || [];
+    const run: string = body.run || "";
+    setGribTarget(body.target ?? null);
+    if (!run || files.length === 0) return;
+    if (lastGribRunRef.current !== run) {
+      console.info(`[GRIB] Run actif : ${run}, ${files.length} fichier(s)`);
+      lastGribRunRef.current = run;
+    }
+    setWeather(previous =>
+      previous.run === run && previous.files.length === files.length ? previous : { files, run },
+    );
+  };
+
+  // Suivi de la publication du run suivant : le serveur le télécharge en arrière-plan.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/weather/status", { cache: "no-store" });
+        const body = await readJsonResponse<GribStatusBody>(response);
+        if (!cancelled) applyGribStatus(body);
+      } catch (error) {
+        console.warn("[GRIB] Suivi de publication indisponible", error);
+      }
+    };
+    const timer = window.setInterval(() => void poll(), GRIB_STATUS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
   // Au démarrage, adopter les GRIB déjà présents sur disque sans re-télécharger.
   useEffect(() => {
     let cancelled = false;
     void (async () => {
       try {
         const response = await fetch("/api/weather/current", { cache: "no-store" });
-        const body = await readJsonResponse<{ files?: string[]; run?: string }>(response);
-        const files: string[] = body.files || [];
-        const run: string = body.run || "";
-        if (cancelled || !run || files.length === 0) return;
-        setWeather({ files, run });
-        console.info(`[GRIB] Run existant adopté : ${run}, ${files.length} fichier(s)`);
+        const body = await readJsonResponse<GribStatusBody>(response);
+        if (cancelled) return;
+        applyGribStatus(body);
+        if (body.run) console.info(`[GRIB] Run existant adopté : ${body.run}, ${body.files?.length || 0} fichier(s)`);
       } catch (error) {
         console.warn("[GRIB] État initial des GRIB indisponible", error);
       }
@@ -822,6 +864,7 @@ export function App() {
           vrStatus={vrStatus}
           weatherStatus={
             weatherStatus ||
+            gribProgressText ||
             (weatherModel
               ? `${weatherModel.title} · run ${weatherModel.runText} · +${weatherModel.horizonHours} h`
               : "Actualisez les GRIB avant de lancer le calcul.")

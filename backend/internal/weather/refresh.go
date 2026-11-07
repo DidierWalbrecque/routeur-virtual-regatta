@@ -92,6 +92,7 @@ func RefreshLatestGFS(ctx context.Context, downloader GFSDownloader, options GFS
 }
 
 // RemoveOldGFSFiles removes recognized GRIB files belonging to older runs.
+// Runs more recent than current (possibly still being published) are kept.
 // Files are removed only after a complete run has been downloaded successfully.
 func RemoveOldGFSFiles(outputDirectory string, current GFSForecastRequest) ([]string, error) {
 	if strings.TrimSpace(outputDirectory) == "" {
@@ -111,7 +112,7 @@ func RemoveOldGFSFiles(outputDirectory string, current GFSForecastRequest) ([]st
 			continue
 		}
 		runKey, ok := gfsRunKey(entry.Name())
-		if !ok || runKey == currentKey {
+		if !ok || runKey >= currentKey {
 			continue
 		}
 		path := filepath.Join(outputDirectory, entry.Name())
