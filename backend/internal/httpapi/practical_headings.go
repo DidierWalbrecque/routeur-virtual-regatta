@@ -246,8 +246,20 @@ func routePointFromNode(
 	}
 	if node.SpeedPenalty != nil && node.SpeedPenalty.AppliedPenalty != nil {
 		point.SpeedCoefficient = floatPointer(float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio))
+		log.Printf("[ROUTE] pénalité vitesse : coeff=%.2f durée_pénalisée=%v voile_avant=%d voile_après=%d",
+			float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio),
+			node.SpeedPenalty.PenalizedDuration,
+			node.State.SailID,
+			node.Candidate.Step.BestSail.SailID,
+		)
 	}
 	if node.Maneuver != nil {
+		if node.Maneuver.Kind != simulation.ManeuverNone || node.Maneuver.SailChanged {
+			log.Printf("[ROUTE] manœuvre détectée : type=%d sailChanged=%t voile=%d→%d",
+				node.Maneuver.Kind, node.Maneuver.SailChanged,
+				node.State.SailID, node.Candidate.Step.BestSail.SailID,
+			)
+		}
 		switch {
 		case node.Maneuver.Kind == simulation.ManeuverTack:
 			point.Maneuver = "tack"
@@ -389,6 +401,19 @@ func runPracticalHeadings(
 	// Le cap et la voile courants ne sont cohérents qu'au départ réel du bateau VR.
 	if useVRPosition && receivedVRState != nil {
 		initialNavigation = initialNavigationFromVRState(receivedVRState)
+		if initialNavigation != nil {
+			log.Printf("[ROUTE] état initial VR : cap=%.1f° voile=%d (%s)",
+				float64(initialNavigation.Heading),
+				initialNavigation.SailID,
+				receivedVRState.CurrentSail.Name,
+			)
+		} else {
+			log.Printf("[ROUTE] état initial VR : cap ou voile indisponible (heading=%v currentSail=%v)",
+				receivedVRState.Heading, receivedVRState.CurrentSail)
+		}
+	} else {
+		log.Printf("[ROUTE] état initial : pas de VR (useVR=%t, statePresent=%t)",
+			useVRPosition, receivedVRState != nil)
 	}
 	position, err := parsePositionRequest(payload.Position)
 	if err != nil {
