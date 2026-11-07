@@ -447,7 +447,9 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       return;
     }
     if (!raceStartMarker.current) {
-      raceStartMarker.current = new api.Marker({ color: "#f59f00" }).addTo(map);
+      raceStartMarker.current = new api.Marker({ color: "#f59f00" })
+        .setLngLat([raceStartLon, raceStartLat])
+        .addTo(map);
       raceStartMarker.current.getElement().title = "Départ de la course";
     }
     raceStartMarker.current.setLngLat([raceStartLon, raceStartLat]);
