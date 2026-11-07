@@ -46,6 +46,8 @@ type practicalHeadingsRequest struct {
 	// CoastalMarginNM : marge minimale à la côte, en milles nautiques (0 à 10).
 	// Absente, elle vaut defaultCoastalMarginNM.
 	CoastalMarginNM *float64 `json:"coastalMarginNM"`
+	// ArrivalRadiusNM : rayon d'arrivée du jeu, en NM. Absent ou invalide : 1 NM.
+	ArrivalRadiusNM *float64 `json:"arrivalRadiusNM"`
 }
 
 const defaultCoastalMarginNM = 2.0
@@ -594,11 +596,15 @@ func runPracticalHeadings(
 				}
 			}
 		}
+		arrivalRadius := navigation.NauticalMiles(1)
+		if payload.ArrivalRadiusNM != nil && *payload.ArrivalRadiusNM > 0 && *payload.ArrivalRadiusNM <= 20 {
+			arrivalRadius = navigation.NauticalMiles(*payload.ArrivalRadiusNM)
+		}
 		recoveryRules := staminaRecoveryRules()
 		search, err := buildIsochroneSearch(calculationContext, weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
 			Owned: owned, HeadingSpacing: profile.HeadingSpacing, RefineHeadings: true, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
-			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: initialStamina,
+			ArrivalRadius: arrivalRadius, InitialStamina: initialStamina,
 			InitialNavigation:     initialNavigation,
 			TransitionEvaluator:   transitionEvaluator,
 			CombineSpeedPenalties: combineSpeedPenalties,

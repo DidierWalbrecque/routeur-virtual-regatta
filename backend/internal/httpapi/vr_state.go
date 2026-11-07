@@ -52,6 +52,14 @@ type vrStateCheckpoint struct {
 	OnLand  *bool           `json:"onLand,omitempty"`
 }
 
+// vrStateArrival est l'arrivée officielle du leg (fin du leg dans l'API Virtual Regatta).
+type vrStateArrival struct {
+	Latitude  float64  `json:"latitude"`
+	Longitude float64  `json:"longitude"`
+	Radius    *float64 `json:"radius,omitempty"`
+	Name      string   `json:"name,omitempty"`
+}
+
 type vrState struct {
 	RaceID            string              `json:"raceId"`
 	LegNum            string              `json:"legNum"`
@@ -72,6 +80,7 @@ type vrState struct {
 	BoatHints         []vrBoatHint        `json:"boatHints,omitempty"`
 	Zones             []vrStateZone       `json:"zones,omitempty"`
 	LegShape          []vrBoatHint        `json:"legShape,omitempty"`
+	Arrival           *vrStateArrival     `json:"arrival,omitempty"`
 	SourceURL         string              `json:"sourceUrl,omitempty"`
 	ReceivedAt        int64               `json:"receivedAt"`
 }
@@ -164,6 +173,10 @@ func (store *vrStateStore) snapshot() (vrState, bool) {
 	if store.current.CurrentSail != nil {
 		currentSail := *store.current.CurrentSail
 		state.CurrentSail = &currentSail
+	}
+	if store.current.Arrival != nil {
+		arrival := *store.current.Arrival
+		state.Arrival = &arrival
 	}
 	return state, true
 }

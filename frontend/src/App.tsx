@@ -307,6 +307,16 @@ export function App() {
     updateEndpoints(form.start, form.destination);
   }, [form.start, form.destination, updateEndpoints]);
 
+  // L'arrivée officielle du jeu remplace la destination dès qu'elle change (nouveau leg, première lecture).
+  const gameArrivalKey = vrState?.arrival ? `${vrState.arrival.latitude},${vrState.arrival.longitude}` : "";
+  useEffect(() => {
+    if (!vrState?.arrival) return;
+    const text = formatVirtualRegattaPosition({ latitude: vrState.arrival.latitude, longitude: vrState.arrival.longitude });
+    setForm((previous) => (previous.destination === text ? previous : { ...previous, destination: text, checkpoint: "" }));
+    console.info(`[VR] Arrivée du jeu : ${vrState.arrival.name || "sans nom"}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameArrivalKey]);
+
   // --- Zones interdites (actions de l'utilisateur : la route affichée devient périmée) ---
   const startDrawing = () => {
     setFormOpen(false);
@@ -596,6 +606,7 @@ export function App() {
           manualStamina: form.staminaSource === "manual" ? Number(form.staminaManual) : null,
           useCourseGates: form.useCourseGates,
           coastalMarginNM: Number(form.coastalMarginNM),
+          arrivalRadiusNM: vrState?.arrival?.radius ?? null,
           exclusionZones: zonesForRequest(allZones),
         }),
         signal: controller.signal,
