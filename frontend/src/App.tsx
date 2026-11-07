@@ -522,23 +522,42 @@ export function App() {
   // --- Calcul de la route en flux ---
   const submit = async () => {
     setFormError("");
-    if (weather.files.length === 0 || !weather.run) {
-      setFormError("Actualisez les GRIB avant de lancer le calcul.");
-      console.warn("[ROUTE] Calcul impossible : actualisez d’abord les GRIB");
+    // L'état local peut être en retard sur le watcher : le serveur fait foi pour le run actif.
+    let gribFiles = weather.files;
+    let gribRun = weather.run;
+    if (gribFiles.length === 0 || !gribRun) {
+      try {
+        const response = await fetch("/api/weather/current", { cache: "no-store" });
+        const body = await readJsonResponse<GribStatusBody>(response);
+        applyGribStatus(body);
+        gribFiles = body.files || [];
+        gribRun = body.run || "";
+      } catch (error) {
+        console.warn("[ROUTE] Run GRIB actif indisponible", error);
+      }
+    }
+    if (gribFiles.length === 0 || !gribRun) {
+      setFormError(
+        gribProgressText
+          ? `${gribProgressText}. Le calcul sera possible dès que le run est complet.`
+          : "Aucun run GRIB disponible : actualisez les GRIB.",
+      );
+      console.warn("[ROUTE] Calcul impossible : aucun run GRIB complet");
       return;
     }
+    const gribModel = buildWeatherRunModel(gribRun, gribFiles);
     activeController.current?.abort();
     resetRoute();
     const controller = new AbortController();
     activeController.current = controller;
-    console.info(`[ROUTE] Calcul demandé avec le run ${weather.run}`);
+    console.info(`[ROUTE] Calcul demandé avec le run ${gribRun}`);
     try {
       const instant = parseLocalDate(form.instant);
-      if (!weatherModel) throw new Error("Run GRIB invalide : actualisez les GRIB.");
+      if (!gribModel) throw new Error("Run GRIB invalide : actualisez les GRIB.");
       const horizon = horizonMinutes(
         form.horizon,
         Date.parse(instant),
-        Date.parse(weatherModel.coveredUntil),
+        Date.parse(gribModel.coveredUntil),
         MAX_MINUTES_BY_MODE[form.mode],
       );
       if (!horizon.ok) throw new Error(horizon.error);
@@ -553,7 +572,7 @@ export function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weatherFiles: weather.files,
+          weatherFiles: gribFiles,
           polarPath: form.polar,
           position: { virtualRegatta: form.start },
           destination: { virtualRegatta: form.destination },
