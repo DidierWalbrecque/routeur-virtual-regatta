@@ -317,6 +317,16 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameArrivalKey]);
 
+  // Départ officiel du leg : tant que le bateau est en attente, il remplace le départ.
+  const gameStartKey = vrState?.legStart ? `${vrState.legStart.latitude},${vrState.legStart.longitude}` : "";
+  useEffect(() => {
+    if (!vrState?.legStart || vrState.state !== "waiting") return;
+    const text = formatVirtualRegattaPosition({ latitude: vrState.legStart.latitude, longitude: vrState.legStart.longitude });
+    setForm((previous) => (previous.start === text ? previous : { ...previous, start: text, positionSource: "manual" }));
+    console.info(`[VR] Départ du jeu : ${vrState.legStart.name || "sans nom"}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameStartKey, vrState?.state]);
+
   // --- Zones interdites (actions de l'utilisateur : la route affichée devient périmée) ---
   const startDrawing = () => {
     setFormOpen(false);

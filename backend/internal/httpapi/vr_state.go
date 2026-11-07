@@ -81,6 +81,7 @@ type vrState struct {
 	Zones             []vrStateZone       `json:"zones,omitempty"`
 	LegShape          []vrBoatHint        `json:"legShape,omitempty"`
 	Arrival           *vrStateArrival     `json:"arrival,omitempty"`
+	LegStart          *vrStateArrival     `json:"legStart,omitempty"`
 	SourceURL         string              `json:"sourceUrl,omitempty"`
 	ReceivedAt        int64               `json:"receivedAt"`
 }
@@ -177,6 +178,10 @@ func (store *vrStateStore) snapshot() (vrState, bool) {
 	if store.current.Arrival != nil {
 		arrival := *store.current.Arrival
 		state.Arrival = &arrival
+	}
+	if store.current.LegStart != nil {
+		legStart := *store.current.LegStart
+		state.LegStart = &legStart
 	}
 	return state, true
 }

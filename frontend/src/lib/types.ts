@@ -56,6 +56,8 @@ export type BoatHint = { path: string; value: string };
 export type VrState = {
   position?: Point;
   arrival?: { latitude: number; longitude: number; radius?: number | null; name?: string } | null;
+  legStart?: { latitude: number; longitude: number; name?: string } | null;
+  state?: string;
   stamina?: number | null;
   options?: string[];
   checkpoints?: Checkpoint[];

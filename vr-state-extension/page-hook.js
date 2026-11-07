@@ -15,6 +15,16 @@
   let latestCheckpoints = [];
   let latestGateGroupCounters = [];
   let latestArrival = null;
+  let latestLegStart = null;
+
+  // Départ officiel du leg : début du leg (lat, lon, nom).
+  function legStartOf(leg) {
+    const start = leg?.start;
+    const latitude = Number(start?.lat);
+    const longitude = Number(start?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return { latitude, longitude, name: text(start?.name) };
+  }
 
   // Arrivée officielle du leg : fin du leg (lat, lon, rayon, nom).
   function legEndOf(leg) {
@@ -225,6 +235,8 @@
     }
     const arrival = legEndOf(leg);
     if (arrival) latestArrival = arrival;
+    const legStart = legStartOf(leg);
+    if (legStart) latestLegStart = legStart;
     if (leg && typeof leg === "object") {
       latestZones = collectZones([["res.leg", leg]]);
       latestLegShape = legShapeOf(leg);
@@ -262,6 +274,7 @@
         legShape: latestLegShape,
         checkpoints: latestCheckpoints,
         arrival: latestArrival,
+        legStart: latestLegStart,
         gateGroupCounters: latestGateGroupCounters,
         sourceUrl: url,
       },
