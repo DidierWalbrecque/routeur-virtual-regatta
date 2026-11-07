@@ -715,6 +715,7 @@ export function App() {
         ref={mapHandle}
         endpoints={endpoints}
         raceStart={vrState?.legStart ? { latitude: vrState.legStart.latitude, longitude: vrState.legStart.longitude } : null}
+        gameArrival={vrState?.arrival ? { latitude: vrState.arrival.latitude, longitude: vrState.arrival.longitude } : null}
         frame={frame}
         vrState={vrState}
         zones={allZones}

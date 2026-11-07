@@ -72,6 +72,8 @@ type Props = {
   endpoints: Endpoints;
   /** Départ officiel de la course : marqueur fixe, distinct du bateau. */
   raceStart?: Point | null;
+  /** Arrivée officielle du jeu : marqueur fixe, distinct de la destination de routage. */
+  gameArrival?: Point | null;
   frame: RouteFrame | null;
   vrState: VrState | undefined;
   /** Zones interdites dessinées par l'utilisateur. */
@@ -91,7 +93,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, raceStart, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, rightPadding, onError },
+  { endpoints, raceStart, gameArrival, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, rightPadding, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -100,6 +102,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const departureMarker = useRef<Marker | undefined>(undefined);
   const destinationMarker = useRef<Marker | undefined>(undefined);
   const raceStartMarker = useRef<Marker | undefined>(undefined);
+  const gameArrivalMarker = useRef<Marker | undefined>(undefined);
   const boundsRef = useRef<LngLatBounds | undefined>(undefined);
   const checkpointKeyRef = useRef("");
   const renderedKey = useRef("");
@@ -455,6 +458,28 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     raceStartMarker.current.setLngLat([raceStartLon, raceStartLat]);
     map.triggerRepaint();
   }, [ready, raceStartLat, raceStartLon]);
+
+  // Arrivée officielle du jeu (fixe), indépendante de la destination de routage.
+  const gameArrivalLat = gameArrival?.latitude;
+  const gameArrivalLon = gameArrival?.longitude;
+  useEffect(() => {
+    const map = mapRef.current;
+    const api = apiRef.current;
+    if (!ready || !map || !api) return;
+    if (gameArrivalLat === undefined || gameArrivalLon === undefined) {
+      gameArrivalMarker.current?.remove();
+      gameArrivalMarker.current = undefined;
+      return;
+    }
+    if (!gameArrivalMarker.current) {
+      gameArrivalMarker.current = new api.Marker({ color: "#c2255c" })
+        .setLngLat([gameArrivalLon, gameArrivalLat])
+        .addTo(map);
+      gameArrivalMarker.current.getElement().title = "Arrivée du jeu";
+    }
+    gameArrivalMarker.current.setLngLat([gameArrivalLon, gameArrivalLat]);
+    map.triggerRepaint();
+  }, [ready, gameArrivalLat, gameArrivalLon]);
 
   // Portes Virtual Regatta.
   useEffect(() => {
