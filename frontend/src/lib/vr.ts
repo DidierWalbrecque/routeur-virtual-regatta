@@ -71,58 +71,32 @@ export type MapFeature = {
 };
 
 /**
- * Portes encore à passer, pour la carte : la ligne de la porte, son nom et son
- * numéro d'ordre de passage (1 = prochaine porte) au milieu, et ses deux
- * extrémités.
+ * Portes encore à passer, pour la carte : un point par porte, sur sa marque de
+ * départ, avec son nom, son sens de passage et son numéro d'ordre de passage
+ * (1 = prochaine porte). La seconde extrémité, souvent un point lointain qui ne
+ * sert qu'à prolonger la ligne, n'est pas dessinée.
  */
 export function checkpointFeatures(state: VrState | undefined): MapFeature[] {
   return usableCheckpoints(state).flatMap((checkpoint, index): MapFeature[] => {
-    const { start, end } = checkpoint;
-    if (![start, end].every((point) => point && Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude)))) return [];
+    const { start } = checkpoint;
+    if (!start || !Number.isFinite(Number(start.latitude)) || !Number.isFinite(Number(start.longitude))) return [];
     const group = checkpoint.group ?? index + 1;
     const id = checkpoint.id ?? index + 1;
     const name = checkpointName(checkpoint);
-    const side = checkpoint.rhumb ? "any" : String(checkpoint.side || "").toLowerCase();
-    const sideLabel = checkpointSideLabel(checkpoint);
-    const properties = {
-      checkpoint: `${group}.${id}`,
-      label: `Porte ${group}.${id} — ${name}`,
-      name,
-      side,
-      sideLabel,
-      rhumb: checkpoint.rhumb === true,
-      order: index + 1,
-    };
-    const midpoint = [
-      (Number(start.longitude) + Number(end.longitude)) / 2,
-      (Number(start.latitude) + Number(end.latitude)) / 2,
-    ];
     return [
       {
         type: "Feature",
-        properties,
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [Number(start.longitude), Number(start.latitude)],
-            [Number(end.longitude), Number(end.latitude)],
-          ],
+        properties: {
+          kind: "label",
+          checkpoint: `${group}.${id}`,
+          label: `P${group}.${id} — ${name}`,
+          name,
+          side: checkpoint.rhumb ? "any" : String(checkpoint.side || "").toLowerCase(),
+          sideLabel: checkpointSideLabel(checkpoint),
+          rhumb: checkpoint.rhumb === true,
+          order: index + 1,
         },
-      },
-      {
-        type: "Feature",
-        properties: { ...properties, kind: "label", label: `P${group}.${id} — ${name}` },
-        geometry: { type: "Point", coordinates: midpoint },
-      },
-      {
-        type: "Feature",
-        properties: { ...properties, kind: "mark", mark: "start" },
         geometry: { type: "Point", coordinates: [Number(start.longitude), Number(start.latitude)] },
-      },
-      {
-        type: "Feature",
-        properties: { ...properties, kind: "mark", mark: "end" },
-        geometry: { type: "Point", coordinates: [Number(end.longitude), Number(end.latitude)] },
       },
     ];
   });

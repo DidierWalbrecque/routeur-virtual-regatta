@@ -3,7 +3,8 @@ import type { GeoJSONSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Ma
 import "maplibre-gl/dist/maplibre-gl.css";
 import { approximateDistanceNM, circlePolygon, forwardContour, splitContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
-import { checkpointFeatures } from "./lib/vr.ts";
+import { checkpointFeatures, checkpointKey, checkpointName, usableCheckpoints } from "./lib/vr.ts";
+import { gateRingSvg, gateRounding, gateRoundingLabel } from "./lib/gate_marker.ts";
 import { draftFeatureCollection, zonesFeatureCollection, type Zone } from "./lib/zones.ts";
 import type { VrState } from "./lib/types.ts";
 
@@ -195,6 +196,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const departureMarker = useRef<Marker | undefined>(undefined);
   const destinationMarker = useRef<Marker | undefined>(undefined);
   const raceStartMarker = useRef<Marker | undefined>(undefined);
+  const gateMarkers = useRef<Marker[]>([]);
   const gameArrivalMarker = useRef<Marker | undefined>(undefined);
   const boundsRef = useRef<LngLatBounds | undefined>(undefined);
   const checkpointKeyRef = useRef("");
@@ -388,76 +390,21 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           },
         });
 
+        // Portes : un repère HTML animé sur la marque de départ (voir plus bas) ;
+        // la carte n'affiche que leur nom, à côté du repère.
         map.addSource("vr-checkpoints", { type: "geojson", data: EMPTY as never });
-        map.addLayer({
-          id: "vr-checkpoint-lines",
-          type: "line",
-          source: "vr-checkpoints",
-          filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "rhumb"], false]],
-          paint: {
-            "line-color": ["match", ["get", "side"], "stbd", "#51cf66", "port", "#ff922b", "#9775fa"],
-            "line-width": 3,
-            "line-opacity": 0.9,
-            "line-dasharray": [1, 0],
-          },
-        });
-        map.addLayer({
-          id: "vr-checkpoint-rhumb-lines",
-          type: "line",
-          source: "vr-checkpoints",
-          filter: ["all", ["==", ["geometry-type"], "LineString"], ["==", ["get", "rhumb"], true]],
-          paint: { "line-color": "#9775fa", "line-width": 3, "line-opacity": 0.9, "line-dasharray": [2, 2] },
-        });
-        map.addLayer({
-          id: "vr-checkpoint-marks",
-          type: "circle",
-          source: "vr-checkpoints",
-          filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "mark"]],
-          // Extrémités de la porte, à la couleur de son sens de passage.
-          paint: {
-            "circle-radius": 4.5,
-            "circle-color": ["match", ["get", "side"], "stbd", "#51cf66", "port", "#ff922b", "#9775fa"],
-            "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 1.5,
-          },
-        });
-        // Numéro d'ordre de passage au milieu de la porte (1 = prochaine porte).
-        map.addLayer({
-          id: "vr-checkpoint-order",
-          type: "circle",
-          source: "vr-checkpoints",
-          filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
-          paint: {
-            "circle-radius": 10,
-            "circle-color": "#1d2433",
-            "circle-stroke-color": ["match", ["get", "side"], "stbd", "#51cf66", "port", "#ff922b", "#9775fa"],
-            "circle-stroke-width": 2.5,
-          },
-        });
-        map.addLayer({
-          id: "vr-checkpoint-order-labels",
-          type: "symbol",
-          source: "vr-checkpoints",
-          filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
-          layout: {
-            "text-field": ["to-string", ["get", "order"]],
-            "text-size": 12,
-            "text-allow-overlap": true,
-          },
-          paint: { "text-color": "#ffffff" },
-        });
         map.addLayer({
           id: "vr-checkpoint-labels",
           type: "symbol",
           source: "vr-checkpoints",
           filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
-          // Les noms se placent autour du milieu de la porte, et MapLibre masque
+          // Les noms se placent à côté du repère de la porte, et MapLibre masque
           // ceux qui se chevaucheraient.
           layout: {
             "text-field": ["get", "label"],
             "text-size": 12,
-            "text-variable-anchor": ["bottom", "top", "left", "right"],
-            "text-radial-offset": 1.4,
+            "text-variable-anchor": ["left", "right", "bottom", "top"],
+            "text-radial-offset": 2,
             "text-justify": "auto",
             "text-allow-overlap": false,
             "text-padding": 4,
@@ -804,11 +751,26 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     const map = mapRef.current;
     const api = apiRef.current;
     if (!ready || !map || !api) return;
-    const features = checkpointFeatures(vrState);
+    // Noms des portes (couche de texte) et repères animés sur leur marque de départ.
+    const features = checkpointFeatures(vrState).filter((feature) => feature.properties.kind === "label");
     setData(map, "vr-checkpoints", { type: "FeatureCollection", features });
-    const coordinates = features
-      .filter((feature) => feature.geometry.type === "LineString")
-      .flatMap((feature) => feature.geometry.coordinates as number[][]);
+    gateMarkers.current.forEach((marker) => marker.remove());
+    gateMarkers.current = usableCheckpoints(vrState).flatMap((checkpoint, index) => {
+      const start = checkpoint.start;
+      if (!start || !Number.isFinite(Number(start.latitude)) || !Number.isFinite(Number(start.longitude))) return [];
+      const rounding = gateRounding(checkpoint.side, checkpoint.rhumb);
+      const element = document.createElement("div");
+      element.className = `gate-marker is-${rounding}`;
+      const name = `Porte ${index + 1} (P${checkpointKey(checkpoint, index)} — ${checkpointName(checkpoint)}) : ${gateRoundingLabel(rounding)}`;
+      element.title = name;
+      element.setAttribute("role", "img");
+      element.setAttribute("aria-label", name);
+      element.innerHTML = `<span class="gate-ring">${gateRingSvg(rounding)}</span><span class="gate-order">${index + 1}</span>`;
+      return [new api.Marker({ element }).setLngLat([Number(start.longitude), Number(start.latitude)]).addTo(map)];
+    });
+    // Cadrage sur les marques de départ : les secondes extrémités, souvent
+    // lointaines, ne sont plus dessinées.
+    const coordinates = features.map((feature) => feature.geometry.coordinates as number[]);
     const nextKey = JSON.stringify(coordinates);
     if (nextKey !== checkpointKeyRef.current && coordinates.length > 0) {
       const bounds = new api.LngLatBounds();

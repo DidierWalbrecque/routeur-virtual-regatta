@@ -1,4 +1,5 @@
 import { PINS } from "./MapView.tsx";
+import { gateRingSvg, type GateRounding } from "./lib/gate_marker.ts";
 
 type Props = {
   showSeamarks: boolean;
@@ -29,15 +30,17 @@ function Line({ color, dashed = false, width = 3 }: { color: string; dashed?: bo
   );
 }
 
-/** Numéro d'ordre d'une porte, tel qu'il apparaît au milieu de la porte. */
-function OrderBadge() {
+/**
+ * Repère de porte en miniature, identique à celui de la carte (et animé de la
+ * même façon), avec le numéro d'ordre au centre.
+ */
+function GateSymbol({ rounding }: { rounding: GateRounding }) {
   return (
-    <svg className="legend-symbol" viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="6.5" fill="#1d2433" stroke="#51cf66" strokeWidth="2" />
-      <text x="8" y="11" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
-        1
-      </text>
-    </svg>
+    <span className={`legend-gate gate-marker is-${rounding}`} aria-hidden="true">
+      {/* SVG produit par notre propre code (gate_marker.ts), sans donnée extérieure. */}
+      <span className="gate-ring" dangerouslySetInnerHTML={{ __html: gateRingSvg(rounding) }} />
+      <span className="gate-order">1</span>
+    </span>
   );
 }
 
@@ -87,17 +90,15 @@ export function MapLegend({ showSeamarks, onSeamarks, onClose }: Props) {
           <Pin pin={PINS.raceStart} /> Départ de la course
         </li>
         <li>
-          <Line color="#51cf66" /> Porte à laisser à tribord
+          <GateSymbol rounding="clockwise" /> Porte : marque à laisser à tribord, à contourner dans le sens de la flèche
         </li>
         <li>
-          <Line color="#ff922b" /> Porte à laisser à bâbord
+          <GateSymbol rounding="counterclockwise" /> Porte : marque à laisser à bâbord
         </li>
         <li>
-          <Line color="#9775fa" dashed /> Porte à passer dans les deux sens
+          <GateSymbol rounding="free" /> Porte à franchir dans les deux sens
         </li>
-        <li>
-          <OrderBadge /> Ordre de passage (1 = prochaine porte)
-        </li>
+        <li className="map-legend-note">Le numéro au centre donne l'ordre de passage (1 = prochaine porte).</li>
         <li>
           <Line color="#f59f00" width={4} /> Route calculée
         </li>

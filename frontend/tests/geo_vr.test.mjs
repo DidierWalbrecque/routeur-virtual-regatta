@@ -43,8 +43,9 @@ test("les portes passées ou à terre ne sont pas utilisables", () => {
   };
   assert.deepEqual(usableCheckpoints(state).map((checkpoint) => checkpoint.group), [2]);
   const features = checkpointFeatures(state);
-  assert.equal(features.length, 4);
-  assert.equal(features[0].geometry.type, "LineString");
+  // Une seule porte utilisable : un point, sur sa marque de départ.
+  assert.equal(features.length, 1);
+  assert.equal(features[0].geometry.type, "Point");
 });
 
 test("une porte nommée « none » par le jeu affiche son sens de passage", () => {
@@ -54,8 +55,8 @@ test("une porte nommée « none » par le jeu affiche son sens de passage", () =
   assert.equal(checkpointLabel({ group: 1, id: 1, name: "none", display: "Bouée de Marie-Galante", start: point, end: point }, 0), "P1.1 — Bouée de Marie-Galante");
   assert.equal(checkpointLabel({ group: 2, id: 1, name: "Cap Horn", rhumb: true, start: point, end: point }, 0), "P2.1 — Cap Horn");
 
-  const [line, label] = checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: "none", side: "stbd", start: point, end: point }] });
-  assert.equal(line.properties.name, "tribord");
+  const [label] = checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: "none", side: "stbd", start: point, end: point }] });
+  assert.equal(label.properties.name, "tribord");
   assert.equal(label.properties.label, "P4.4 — tribord");
 
   assert.equal(meaningfulName("none"), null);

@@ -28,16 +28,25 @@ test("checkpointFeatures numérote les portes restantes dans l'ordre de passage"
     // La première porte est déjà passée : la suivante devient la porte 1.
     gateGroupCounters: [true, false, false],
   });
-  const badges = features.filter((feature) => feature.properties.kind === "label");
   assert.deepEqual(
-    badges.map((feature) => [feature.properties.checkpoint, feature.properties.order]),
+    features.map((feature) => [feature.properties.checkpoint, feature.properties.order]),
     [
       ["2.1", 1],
       ["3.1", 2],
     ],
   );
-  // Les extrémités n'ont plus de lettre D/A, réservées aux épingles du routage.
-  const marks = features.filter((feature) => feature.properties.kind === "mark");
-  assert.equal(marks.length, 4);
-  assert.ok(marks.every((feature) => !("markLabel" in feature.properties)));
+  // Chaque porte est placée sur sa marque de départ ; la seconde extrémité n'est plus dessinée.
+  assert.deepEqual(features[0].geometry, { type: "Point", coordinates: [-61.2, 16] });
+});
+
+test("gateRounding traduit le sens de passage en sens de contournement", async () => {
+  const { gateRounding, gateRingSvg } = await import("../src/lib/gate_marker.ts");
+  assert.equal(gateRounding("stbd", false), "clockwise");
+  assert.equal(gateRounding("port", false), "counterclockwise");
+  assert.equal(gateRounding("stbd", true), "free");
+  assert.equal(gateRounding("", false), "free");
+  // Le sens antihoraire est le miroir du sens horaire ; l'anneau libre est pointillé.
+  assert.doesNotMatch(gateRingSvg("clockwise"), /scale\(-1 1\)/);
+  assert.match(gateRingSvg("counterclockwise"), /scale\(-1 1\)/);
+  assert.match(gateRingSvg("free"), /stroke-dasharray/);
 });
