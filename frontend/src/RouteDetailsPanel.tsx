@@ -303,7 +303,10 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
             aria-controls="route-details-content"
             onClick={() => setCollapsed((value) => !value)}
           >
-            <Icon name={collapsed ? "expand_less" : "expand_more"} />
+            {/* La flèche indique le sens où le panneau va s'étendre ou se replier :
+                sur ordinateur il est en haut et s'ouvre vers le bas, sur téléphone
+                il est réduit en bas de l'écran et s'ouvre vers le haut. */}
+            <Icon name={collapsed !== narrow ? "expand_more" : "expand_less"} />
           </button>
           <button
             id="close-route-details"
