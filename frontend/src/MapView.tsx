@@ -710,23 +710,32 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     map.triggerRepaint();
   }, [ready, gameArrivalLat, gameArrivalLon]);
 
-  // Quand la destination du routage est l'arrivée du jeu, une seule épingle
-  // suffit : le drapeau de l'arrivée masque le « A ».
+  // Quand la destination du routage est l'arrivée du jeu ou la marque d'une
+  // porte, une seule épingle suffit : le drapeau ou l'anneau de la porte
+  // masque le « A ».
   const destinationLat = endpoints.destination.latitude;
   const destinationLon = endpoints.destination.longitude;
   useEffect(() => {
     if (!ready) return;
     const element = destinationMarker.current?.getElement();
     if (!element) return;
+    const destination = { latitude: destinationLat, longitude: destinationLon };
     const sameAsArrival =
       gameArrivalLat !== undefined &&
       gameArrivalLon !== undefined &&
-      approximateDistanceNM(
-        { latitude: destinationLat, longitude: destinationLon },
-        { latitude: gameArrivalLat, longitude: gameArrivalLon },
-      ) < 0.1;
-    element.style.visibility = sameAsArrival ? "hidden" : "";
-  }, [ready, destinationLat, destinationLon, gameArrivalLat, gameArrivalLon]);
+      approximateDistanceNM(destination, { latitude: gameArrivalLat, longitude: gameArrivalLon }) < 0.1;
+    const onGateMark = usableCheckpoints(vrState).some(
+      (checkpoint) =>
+        checkpoint.start &&
+        Number.isFinite(Number(checkpoint.start.latitude)) &&
+        Number.isFinite(Number(checkpoint.start.longitude)) &&
+        approximateDistanceNM(destination, {
+          latitude: Number(checkpoint.start.latitude),
+          longitude: Number(checkpoint.start.longitude),
+        }) < 0.1,
+    );
+    element.style.visibility = sameAsArrival || onGateMark ? "hidden" : "";
+  }, [ready, destinationLat, destinationLon, gameArrivalLat, gameArrivalLon, vrState]);
 
   // Cercle du rayon d'arrivée, quand le jeu le fournit.
   useEffect(() => {

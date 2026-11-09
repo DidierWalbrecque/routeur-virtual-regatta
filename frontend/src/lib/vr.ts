@@ -37,9 +37,11 @@ export function checkpointKey(checkpoint: Checkpoint, index: number): string {
 }
 
 // Valeurs que le jeu envoie à la place d'un vrai nom.
-const PLACEHOLDER_NAMES = new Set(["", "none", "null", "undefined", "-", "—"]);
+// « buoy » (bouée) n'est qu'un type de marque, pas un nom : la porte est alors
+// désignée par son sens de passage, comme une porte sans nom.
+const PLACEHOLDER_NAMES = new Set(["", "none", "null", "undefined", "-", "—", "buoy", "bouée", "bouee"]);
 
-/** Nom lisible, ou null quand le jeu n'envoie qu'un nom vide ou « none ». */
+/** Nom lisible, ou null quand le jeu n'envoie qu'un nom vide, « none » ou « buoy ». */
 export function meaningfulName(value: string | null | undefined): string | null {
   const name = String(value ?? "").trim();
   return PLACEHOLDER_NAMES.has(name.toLowerCase()) ? null : name;

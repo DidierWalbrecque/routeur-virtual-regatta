@@ -99,7 +99,7 @@ Les idées retenues dans [l'analyse de SERMAR](analyse-ihm-sermar.md) :
 3. **Comparaison de routes** (idée 6, section 8 point 4) : enregistrer une route et la superposer à un nouveau calcul.
 4. Puis, dans la section 8 : **vent sur la carte**, **choix d'un point au clic sur la carte** et **historique des calculs**.
 
-**À vérifier dans les données du jeu :** le 9 novembre, la porte n° 1 affichée était P2.2, près des Bahamas, alors que le bateau était déjà à l'est des Antilles. La numérotation suit les portes que le jeu indique comme non passées ; si P2.2 est en réalité franchie, c'est l'information de passage reçue du jeu qu'il faut examiner.
+**Fausse alerte sur la porte P2.2 :** le 9 novembre, la porte n° 1 semblait être P2.2 « près des Bahamas ». C'était l'effet de l'ancien affichage, qui plaçait le numéro au milieu d'une très longue ligne partant vers Miami. Avec l'anneau sur la marque de départ (`3271a93`), P2.2 apparaît au nord-ouest de la Guadeloupe, et l'ordre de passage (P2.2, P3.1, P4.4, P4.5, puis l'arrivée) est cohérent. Le nom « buoy » envoyé par le jeu est désormais remplacé par le sens de passage, et l'épingle « A » se masque quand la destination est la marque d'une porte.
 
 **Résolu dans le moteur (`dfa1d6f`) :** sur un calcul d'essai du 9 novembre, la route faisait deux empannages en 10 minutes au départ (21:17 puis 21:27). La cause : le choix final de la route ne regardait que la progression, et la stamina dépensée s'était rechargée à l'arrivée, si bien qu'un aller-retour qui gagnait quelques mètres pouvait l'emporter. Chaque route garde désormais la stamina dépensée en manœuvres depuis le départ, déduite de sa progression au choix final (0,01 NM par point). Vérifié sur le vrai backend le 9 novembre : l'aller-retour a disparu.
 

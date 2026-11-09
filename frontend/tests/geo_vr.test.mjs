@@ -60,6 +60,8 @@ test("une porte nommée « none » par le jeu affiche son sens de passage", () =
   assert.equal(label.properties.label, "P4.4 — tribord");
 
   assert.equal(meaningfulName("none"), null);
+  assert.equal(meaningfulName("buoy"), null);
+  assert.equal(checkpointLabel({ group: 2, id: 2, name: "buoy", side: "stbd", start: point, end: point }, 0), "P2.2 — tribord");
   assert.equal(meaningfulName(undefined), null);
   assert.equal(meaningfulName(" Pointe-à-Pitre "), "Pointe-à-Pitre");
 });
