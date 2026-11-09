@@ -16,6 +16,7 @@ import { matchPolar } from "./lib/polar_match.ts";
 import { parseGpx, gpxFeatureCollection, gpxPointCount } from "./lib/gpx.ts";
 import { buildWeatherRunModel, shortRunLabel } from "./lib/weather_run.ts";
 import { friendlyRouteError } from "./lib/route_errors.ts";
+import { useLongPressTips } from "./lib/long_press_tips.ts";
 import {
   DISABLED_GAME_ZONES_KEY,
   MIN_ZONE_POINTS,
@@ -48,15 +49,22 @@ function isNarrowScreen(): boolean {
 function mapInsets(): MapInsets {
   const width = window.innerWidth;
   const height = window.innerHeight;
-  const right = RIGHT_PANEL_IDS.reduce((space, id) => {
+  let right = 0;
+  // Sur téléphone, un panneau occupe toute la largeur (en bas quand il est
+  // réduit) : il gêne en bas, pas à droite.
+  let panelBottom = 0;
+  for (const id of RIGHT_PANEL_IDS) {
     const rect = document.getElementById(id)?.getBoundingClientRect();
-    return rect && rect.width > 0 ? Math.max(space, width - rect.left) : space;
-  }, 0);
+    if (!rect || rect.width === 0) continue;
+    if (rect.left < width * 0.3) panelBottom = Math.max(panelBottom, height - rect.top);
+    else right = Math.max(right, width - rect.left);
+  }
   const corner = document.getElementById("map-corner")?.getBoundingClientRect();
   const visible = Boolean(corner && corner.height > 0);
-  const bottom = visible && corner ? height - corner.top : 0;
-  const left = visible && corner ? corner.right : 0;
-  return { right, bottom, left };
+  const cornerBottom = visible && corner ? height - corner.top : 0;
+  // Avec un panneau en bas, tout se réserve en bas (left à 0).
+  if (panelBottom > 0) return { right, bottom: Math.max(panelBottom, cornerBottom), left: 0 };
+  return { right, bottom: cornerBottom, left: visible && corner ? corner.right : 0 };
 }
 const DEFAULT_POLAR = "../data/polars/ultim_bp_11.json";
 // Le tracé affiché vient des isochrones du mode choisi ; ces paramètres ne servent
@@ -232,6 +240,8 @@ export function App() {
   const frameCounter = useRef(0);
   const gpxInput = useRef<HTMLInputElement>(null);
   const gpxCounter = useRef(0);
+  const dock = useRef<HTMLDivElement>(null);
+  useLongPressTips(dock, ".map-dock-button");
 
   const weatherModel = useMemo(
     () => (weather.run ? buildWeatherRunModel(weather.run, weather.files) : null),
@@ -910,7 +920,7 @@ export function App() {
           onToggle={() => setWeatherCollapsed((value) => !value)}
         />
       </div>
-      <div className="map-dock" role="toolbar" aria-label="Actions de la carte" aria-orientation="vertical">
+      <div ref={dock} className="map-dock" role="toolbar" aria-label="Actions de la carte" aria-orientation="vertical">
         <button
           id="calculate-route"
           className="map-dock-button map-dock-primary"

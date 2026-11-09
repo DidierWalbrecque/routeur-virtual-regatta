@@ -181,7 +181,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     const map = mapRef.current;
     if (!map || !ready) return;
     const visibility = showRoutePoints ? "visible" : "none";
-    for (const id of ["route-points", "route-point-labels"]) {
+    for (const id of ["route-points", "route-point-labels", "route-points-hit", "route-hover", "route-hover-label"]) {
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
     }
   }, [showRoutePoints, ready]);
@@ -522,13 +522,22 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           id: "route-points",
           type: "circle",
           source: "route-points",
-          // Points marquants (manœuvres, heures rondes) bien visibles, les autres discrets.
+          // Seuls les points marquants (manœuvres, heures rondes) sont dessinés ;
+          // les autres apparaissent au survol.
+          filter: ["boolean", ["get", "key"], false],
           paint: {
-            "circle-radius": ["case", ["boolean", ["get", "key"], false], 6, 3],
+            "circle-radius": 6,
             "circle-color": ["case", ["boolean", ["get", "maneuver"], false], "#ffd43b", "#f59f00"],
             "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": ["case", ["boolean", ["get", "key"], false], 2, 1],
+            "circle-stroke-width": 2,
           },
+        });
+        // Zone de survol invisible autour de chaque point de la route.
+        map.addLayer({
+          id: "route-points-hit",
+          type: "circle",
+          source: "route-points",
+          paint: { "circle-radius": 9, "circle-opacity": 0, "circle-stroke-opacity": 0 },
         });
         map.addLayer({
           id: "route-point-labels",
@@ -543,6 +552,57 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           },
           paint: { "text-color": "#a5d8ff", "text-halo-color": "#101418", "text-halo-width": 2 },
         });
+
+        // Point survolé : repère et résumé du pas (temps, cap, voile).
+        map.addSource("route-hover", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "route-hover",
+          type: "circle",
+          source: "route-hover",
+          paint: {
+            "circle-radius": 5,
+            "circle-color": ["case", ["boolean", ["get", "maneuver"], false], "#ffd43b", "#f59f00"],
+            "circle-stroke-color": "#ffffff",
+            "circle-stroke-width": 2,
+          },
+        });
+        map.addLayer({
+          id: "route-hover-label",
+          type: "symbol",
+          source: "route-hover",
+          layout: {
+            "text-field": ["get", "tip"],
+            "text-size": 12,
+            "text-offset": [0, -1.4],
+            "text-anchor": "bottom",
+            "text-allow-overlap": true,
+            "text-ignore-placement": true,
+          },
+          paint: { "text-color": "#ffffff", "text-halo-color": "#101418", "text-halo-width": 2.5 },
+        });
+        const clearHover = () => {
+          setData(map!, "route-hover", EMPTY);
+          map!.getCanvas().style.cursor = "";
+        };
+        map.on("mousemove", "route-points-hit", (event) => {
+          const feature = event.features?.[0];
+          if (!feature || draftRef.current !== null || feature.geometry.type !== "Point") return;
+          // L'objet renvoyé par la carte n'est pas un GeoJSON simple : on en
+          // recopie les valeurs, sinon MapLibre ne peut pas le transmettre.
+          const [longitude, latitude] = feature.geometry.coordinates;
+          setData(map!, "route-hover", {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: { tip: String(feature.properties?.tip ?? ""), maneuver: feature.properties?.maneuver === true },
+                geometry: { type: "Point", coordinates: [longitude, latitude] },
+              },
+            ],
+          });
+          map!.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", "route-points-hit", clearHover);
 
         // Position choisie dans le tableau des détails : au-dessus de tout le reste.
         map.addSource("route-highlight", { type: "geojson", data: EMPTY as never });
@@ -789,6 +849,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       setData(map, "route", EMPTY);
       setData(map, "isochrones", EMPTY);
       setData(map, "route-points", EMPTY);
+      setData(map, "route-hover", EMPTY);
       return;
     }
 
@@ -850,12 +911,20 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         .map((point) => {
           const minutes = elapsedMinutes(route[0]?.instant, point.instant);
           const maneuver = Boolean(point.maneuver);
+          const tip = [
+            elapsedLabel(minutes),
+            Number.isFinite(point.heading) ? `${Math.round(Number(point.heading))}°` : "",
+            point.sail || "",
+          ]
+            .filter(Boolean)
+            .join(" · ");
           return {
             type: "Feature",
             properties: {
               label: minutes > 0 && minutes % 30 === 0 ? elapsedLabel(minutes) : "",
               key: maneuver || (minutes > 0 && minutes % 60 === 0),
               maneuver,
+              tip,
             },
             geometry: { type: "Point", coordinates: [point.position.longitude, point.position.latitude] },
           };

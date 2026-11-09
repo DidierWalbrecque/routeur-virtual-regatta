@@ -13,6 +13,8 @@
   --card-shadow: 0 3px 12px #00000055;
   --card-font: 13px system-ui, sans-serif;
   --accent-green: #2e9b5f;
+  /* Vert pour du texte sur les panneaux sombres : 6,7:1 (#2e9b5f n'atteint que 4,4:1). */
+  --accent-green-text: #46c07e;
   --accent-yellow: #f5c518;
   --accent-blue: #7cc0ff;
   --accent-red: #ff8a80;
@@ -850,7 +852,7 @@ body {
   border: 0;
   border-radius: 11px;
   color: #ffffff;
-  background: linear-gradient(180deg, #34a868, #2a8d56);
+  background: linear-gradient(180deg, #27804e, #1f7043);
   box-shadow: 0 2px 8px #2e9b5f40, inset 0 1px 0 #ffffff26;
   font: inherit;
   font-size: 14px;
@@ -1049,16 +1051,6 @@ body {
     right: 16px;
   }
 
-  /* Colonnes secondaires masquées : il reste date, temps, cap, TWA, bord, vent, vitesse, voile et stamina. */
-  .route-details-table .is-secondary {
-    display: none;
-  }
-
-  .route-details-table th,
-  .route-details-table td {
-    padding: 6px 6px;
-  }
-
   .map-corner {
     bottom: 12px;
     left: 10px;
@@ -1154,7 +1146,7 @@ body {
 }
 
 .weather-run-chip-hours {
-  color: var(--accent-green);
+  color: var(--accent-green-text);
   font-weight: 600;
 }
 
@@ -1390,7 +1382,7 @@ body {
 
 .weather-run-remaining {
   font-size: 22px;
-  color: var(--accent-green);
+  color: var(--accent-green-text);
   font-variant-numeric: tabular-nums;
 }
 
@@ -1572,9 +1564,10 @@ body {
   cursor: pointer;
 }
 
+/* Vert foncé : texte blanc à 4,9:1 (le vert accent n'atteint que 3,5:1). */
 .draw-banner button.primary {
-  border-color: var(--accent-green);
-  background: var(--accent-green);
+  border-color: #27804e;
+  background: #27804e;
   color: #ffffff;
 }
 
@@ -1635,7 +1628,8 @@ body {
 .dock-badge-gpx {
   right: 1px;
   font-weight: 600;
-  background: #e64980;
+  /* Texte blanc dessus : 4,6:1. */
+  background: #d6336c;
 }
 
 /* Message d'erreur d'import GPX. */
@@ -1674,4 +1668,110 @@ body {
 .gpx-toast button:hover,
 .gpx-toast button:focus-visible {
   background: var(--card-field);
+}
+
+/* --- Détails de la route sur téléphone : une carte par étape -------------- */
+.route-cards {
+  display: grid;
+  gap: 8px;
+  min-height: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.route-card {
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  color: var(--card-text);
+  background: var(--card-field);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-card.is-maneuver {
+  border-color: #f5c51866;
+  background: #f5c5181f;
+}
+
+.route-card.is-selected {
+  border-color: var(--accent-blue);
+  background: #145cff40;
+}
+
+.route-card:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.route-card-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.route-card-elapsed {
+  color: var(--card-muted);
+}
+
+.route-card-maneuver {
+  margin-left: auto;
+  padding: 1px 8px;
+  border-radius: 999px;
+  color: #1d2433;
+  background: var(--accent-yellow);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.route-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 6px 10px;
+}
+
+.route-card-grid > span {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.route-card-grid small {
+  color: var(--card-muted);
+  font-size: 11px;
+}
+
+.route-card-grid b {
+  overflow: hidden;
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-card-grid .route-report-heading {
+  color: var(--accent-blue);
+}
+
+.route-card-grid .route-report-sail {
+  color: var(--accent-yellow);
+}
+
+/* Appui long sur écran tactile : l'infobulle s'affiche, sans menu du navigateur. */
+.map-dock-button {
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.map-dock-button.show-tip::after {
+  opacity: 1;
+  transform: translate(0, -50%);
 }

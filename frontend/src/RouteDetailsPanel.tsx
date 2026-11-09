@@ -8,6 +8,7 @@ import {
   formatInstant,
   formatNumber,
   formatPosition,
+  maneuverLabel,
   type ReportRow,
 } from "./lib/route_details.ts";
 import { exportFileName, routeRowsToTsv, routeToGpx } from "./lib/route_export.ts";
@@ -25,8 +26,6 @@ type ColumnKey = "date" | "elapsed" | "heading" | "twa" | "tack" | "position" | 
 
 type Column = {
   key: ColumnKey;
-  /** Masquée sur téléphone, où la place manque. */
-  secondary?: boolean;
   className?: string;
   render: (row: ReportRow) => ReactNode;
 };
@@ -39,12 +38,12 @@ const COLUMNS: Column[] = [
   { key: "heading", className: "route-report-heading", render: (row) => degrees(row.heading) },
   { key: "twa", render: (row) => (row.windAngle !== null ? `${formatAngle(row.windAngle)}°` : "—") },
   { key: "tack", render: (row) => row.tack },
-  { key: "position", secondary: true, render: (row) => formatPosition(row.latitude, row.longitude) },
-  { key: "twd", secondary: true, render: (row) => degrees(row.windDirection) },
+  { key: "position", render: (row) => formatPosition(row.latitude, row.longitude) },
+  { key: "twd", render: (row) => degrees(row.windDirection) },
   { key: "tws", render: (row) => formatNumber(row.windKnots, 1) },
   { key: "speed", render: (row) => formatNumber(row.speedKnots, 1) },
-  { key: "foils", secondary: true, render: (row) => (row.foilPercent !== null ? Math.round(row.foilPercent) : "—") },
-  { key: "coeff", secondary: true, render: (row) => formatNumber(row.speedCoefficient, 2) },
+  { key: "foils", render: (row) => (row.foilPercent !== null ? Math.round(row.foilPercent) : "—") },
+  { key: "coeff", render: (row) => formatNumber(row.speedCoefficient, 2) },
   { key: "sail", className: "route-report-sail", render: (row) => row.sail },
   { key: "stamina", render: (row) => (row.stamina === null ? "—" : `${formatNumber(row.stamina, 1)} %`) },
 ];
@@ -58,6 +57,74 @@ function download(content: string, type: string, name: string) {
   link.click();
   link.remove();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+const NARROW_QUERY = "(max-width: 600px)";
+
+/** Vrai sur un écran de téléphone ; suit les changements de taille. */
+function useNarrowScreen(): boolean {
+  const [narrow, setNarrow] = useState(() => {
+    try {
+      return window.matchMedia(NARROW_QUERY).matches;
+    } catch {
+      return false;
+    }
+  });
+  useEffect(() => {
+    let query: MediaQueryList;
+    try {
+      query = window.matchMedia(NARROW_QUERY);
+    } catch {
+      return;
+    }
+    const onChange = () => setNarrow(query.matches);
+    query.addEventListener("change", onChange);
+    return () => query.removeEventListener("change", onChange);
+  }, []);
+  return narrow;
+}
+
+/** Une étape de la route sous forme de carte, pour les écrans étroits. */
+function StepCard({ row, selected, onSelect }: { row: ReportRow; selected: boolean; onSelect: () => void }) {
+  const classes = ["route-card", row.maneuver ? "is-maneuver" : "", selected ? "is-selected" : ""].filter(Boolean).join(" ");
+  const twa = row.windAngle !== null ? `${formatAngle(row.windAngle)}°${row.tack === "—" ? "" : ` ${row.tack}`}` : "—";
+  return (
+    <li>
+      <button type="button" className={classes} data-index={row.index} aria-pressed={selected} onClick={onSelect}>
+        <span className="route-card-head">
+          <strong>{formatInstant(row.instant)}</strong>
+          <span className="route-card-elapsed">{formatElapsed(row.elapsedMinutes)}</span>
+          {row.maneuver && <span className="route-card-maneuver">{maneuverLabel(row.maneuver)}</span>}
+        </span>
+        <span className="route-card-grid">
+          <span>
+            <small>Cap</small>
+            <b className="route-report-heading">{degrees(row.heading)}</b>
+          </span>
+          <span>
+            <small>TWA</small>
+            <b>{twa}</b>
+          </span>
+          <span>
+            <small>Vent</small>
+            <b>{row.windKnots === null ? "—" : `${formatNumber(row.windKnots, 1)} nd · ${degrees(row.windDirection)}`}</b>
+          </span>
+          <span>
+            <small>Vitesse</small>
+            <b>{row.speedKnots === null ? "—" : `${formatNumber(row.speedKnots, 1)} nd`}</b>
+          </span>
+          <span>
+            <small>Voile</small>
+            <b className="route-report-sail">{row.sail}</b>
+          </span>
+          <span>
+            <small>Stamina</small>
+            <b>{row.stamina === null ? "—" : `${formatNumber(row.stamina, 1)} %`}</b>
+          </span>
+        </span>
+      </button>
+    </li>
+  );
 }
 
 function Icon({ name }: { name: string }) {
@@ -74,6 +141,7 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: 
   const columns = COLUMNS.filter((column) => !hidden.has(column.key as "foils" | "coeff"));
   const closeButton = useRef<HTMLButtonElement>(null);
   const [collapsed, setCollapsed] = useState(false);
+  const narrow = useNarrowScreen();
   const [copyStatus, setCopyStatus] = useState("");
 
   useEffect(() => {
@@ -89,7 +157,7 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: 
   }, [onClose]);
 
   // Une ligne choisie défile jusqu'à être visible (clic sur la carte ou au clavier).
-  const body = useRef<HTMLTableSectionElement>(null);
+  const body = useRef<HTMLElement>(null);
   useEffect(() => {
     if (selectedIndex === null) return;
     body.current?.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`)?.scrollIntoView({ block: "nearest" });
@@ -169,6 +237,24 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: 
         </p>
       )}
       <div id="route-details-content" hidden={collapsed}>
+        {narrow ? (
+          // Sur téléphone, une carte par étape : choisir une étape réduit le
+          // panneau pour laisser voir sa position sur la carte.
+          <ol className="route-cards" ref={body as React.RefObject<HTMLOListElement>}>
+            {model.rows.map((row) => (
+              <StepCard
+                key={row.index}
+                row={row}
+                selected={row.index === selectedIndex}
+                onSelect={() => {
+                  if (row.latitude === null || row.longitude === null) return;
+                  onSelect(row.index, { latitude: row.latitude, longitude: row.longitude });
+                  setCollapsed(true);
+                }}
+              />
+            ))}
+          </ol>
+        ) : (
         <div className="route-details-table-wrapper">
           <table className="route-details-table route-report-table">
             <thead>
@@ -176,14 +262,14 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: 
                 {columns.map((column) => {
                   const header = REPORT_HEADERS[COLUMNS.indexOf(column)];
                   return (
-                    <th key={column.key} title={header.title} className={[column.className, column.secondary ? "is-secondary" : ""].filter(Boolean).join(" ") || undefined}>
+                    <th key={column.key} title={header.title} className={column.className}>
                       {header.label}
                     </th>
                   );
                 })}
               </tr>
             </thead>
-            <tbody ref={body}>
+            <tbody ref={body as React.RefObject<HTMLTableSectionElement>}>
               {model.rows.map((row) => {
                 const select = () => {
                   if (row.latitude !== null && row.longitude !== null) {
@@ -212,7 +298,7 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: 
                     }}
                   >
                     {columns.map((column) => (
-                      <td key={column.key} className={[column.className, column.secondary ? "is-secondary" : ""].filter(Boolean).join(" ") || undefined}>
+                      <td key={column.key} className={column.className}>
                         {column.render(row)}
                       </td>
                     ))}
@@ -222,10 +308,12 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose }: 
             </tbody>
           </table>
         </div>
+        )}
         <p className="route-report-legend">
-          Ligne surlignée en jaune : manœuvre (virement, empannage ou changement de voile) sur ce pas. Cliquez sur une
-          ligne pour afficher sa position sur la route.
-          {hidden.size > 0 && ` Colonnes sans variation masquées : ${[...hidden].map((key) => (key === "foils" ? "Foils" : "Coeff")).join(", ")}.`}
+          {narrow
+            ? "Étape en jaune : manœuvre (virement, empannage ou changement de voile). Touchez une étape pour la voir sur la carte."
+            : "Ligne surlignée en jaune : manœuvre (virement, empannage ou changement de voile) sur ce pas. Cliquez sur une ligne pour afficher sa position sur la route."}
+          {!narrow && hidden.size > 0 && ` Colonnes sans variation masquées : ${[...hidden].map((key) => (key === "foils" ? "Foils" : "Coeff")).join(", ")}.`}
         </p>
       </div>
     </aside>
