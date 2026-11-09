@@ -101,7 +101,7 @@ Les idées retenues dans [l'analyse de SERMAR](analyse-ihm-sermar.md) :
 
 **À vérifier dans les données du jeu :** le 9 novembre, la porte n° 1 affichée était P2.2, près des Bahamas, alors que le bateau était déjà à l'est des Antilles. La numérotation suit les portes que le jeu indique comme non passées ; si P2.2 est en réalité franchie, c'est l'information de passage reçue du jeu qu'il faut examiner.
 
-**À vérifier dans le moteur :** sur un calcul d'essai du 9 novembre, la route fait deux empannages en 10 minutes au départ (21:17 puis 21:27). Les ordres affichent fidèlement la route ; c'est probablement un aller-retour inutile du moteur.
+**Résolu dans le moteur (`dfa1d6f`) :** sur un calcul d'essai du 9 novembre, la route faisait deux empannages en 10 minutes au départ (21:17 puis 21:27). La cause : le choix final de la route ne regardait que la progression, et la stamina dépensée s'était rechargée à l'arrivée, si bien qu'un aller-retour qui gagnait quelques mètres pouvait l'emporter. Chaque route garde désormais la stamina dépensée en manœuvres depuis le départ, déduite de sa progression au choix final (0,01 NM par point). Vérifié sur le vrai backend le 9 novembre : l'aller-retour a disparu.
 
 ---
 
