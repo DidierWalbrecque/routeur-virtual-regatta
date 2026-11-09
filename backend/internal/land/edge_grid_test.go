@@ -42,15 +42,15 @@ func referenceSegmentForbiddenByPolygon(
 	referenceLatitude := (localStart.latitude + localEnd.latitude) / 2
 	projectedStart := projectPoint(localStart, localReferenceLongitude, referenceLatitude)
 	projectedEnd := projectPoint(localEnd, localReferenceLongitude, referenceLatitude)
-	minimum := math.Inf(1)
+	distances := newMarginDistances()
 	for _, ring := range rings {
 		for index := 1; index < len(ring); index++ {
 			edgeStart := projectPoint(ring[index-1], localReferenceLongitude, referenceLatitude)
 			edgeEnd := projectPoint(ring[index], localReferenceLongitude, referenceLatitude)
-			minimum = math.Min(minimum, projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd))
+			distances.add(projectedStart, projectedEnd, edgeStart, edgeEnd)
 		}
 	}
-	return minimum <= margin+geometryEpsilon
+	return distances.forbidden(margin)
 }
 
 func TestIndexedSegmentMatchesExhaustiveScanOnNaturalEarth(t *testing.T) {

@@ -167,6 +167,23 @@ func TestGeoJSONConstraintAppliesCoastalMargin(t *testing.T) {
 			segment: testSegment(-0.05, 4, -0.05, 6),
 			allowed: true,
 		},
+		{
+			name:    "départ dans la marge qui s'éloigne de la côte",
+			segment: testSegment(-0.01, 5, -0.1, 5),
+			allowed: true,
+		},
+		{
+			name:    "départ dans la marge qui se rapproche de la côte",
+			segment: testSegment(-0.01, 5, -0.005, 5),
+		},
+		{
+			name:    "départ dans la marge qui longe la côte",
+			segment: testSegment(-0.01, 5, -0.01, 5.1),
+		},
+		{
+			name:    "départ dans la marge qui traverse la terre",
+			segment: testSegment(-0.01, 5, 10.5, 5),
+		},
 	}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
