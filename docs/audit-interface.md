@@ -16,6 +16,80 @@ Les captures sont dans [`docs/audit-interface/`](audit-interface/).
 
 ---
 
+## État au 9 novembre 2026
+
+**En bref :** tous les points P1, P2 et P3 sont traités, sauf un, remplacé par une autre solution (section 3). Il reste cinq nouvelles fonctions de la section 8.
+
+Le relevé d'origine est conservé tel quel sous cette section. Les constats y décrivent l'interface du 8 novembre, pas l'interface actuelle.
+
+**Légende :** ✅ fait · 🔁 fait autrement que proposé · ⬜ reste à faire
+
+### Points P1 à P3
+
+| Section | Point | État | Ce qui a été fait | Commit |
+|---|---|---|---|---|
+| 1 | Étiquettes des portes qui se chevauchent | ✅ | MapLibre place les noms autour du milieu de la porte et masque ceux qui se recouvrent | `24266d7` |
+| 1 | Légende des repères | ✅ | Bouton « Légende » dans la barre d'outils, ouverte par défaut sur ordinateur, choix mémorisé | `24266d7`, `7e7ac51` |
+| 1 | Commandes de carte en anglais | ✅ | Commandes en français, repères nommés pour les lecteurs d'écran | `24266d7` |
+| 1 | Icône d'onglet | ✅ | Icône SVG (voiles) | `24266d7` |
+| 1 | Tutoiement | ✅ | « devant vous » | `24266d7` |
+| 1 | Run affiché différent du run utilisé | ✅ | L'encart affiche aussi le run en cours de téléchargement (« Run 18Z du 07/11 en cours 121/129 ») | `24266d7` |
+| 2 | Panneau sur les boutons de zoom | ✅ | Zoom et boussole déplacés en haut à gauche | `24266d7` |
+| 2 | « Bateau détecté » qui déborde | ✅ | Placé dans la section « Bateau », dans la zone qui défile | `ffde270` |
+| 2 | Formulaire trop long | ✅ | Sections « Bateau » et « Réglages avancés » repliables, avec un résumé | `ffde270` |
+| 2 | Format brut du run | ✅ | « Run 18Z du 07/11 » | `24266d7` |
+| 2 | Mode séparé de l'horizon | ✅ | « Mode » placé juste avant « Horizon » | `ffde270` |
+| 3 | Départ près de la côte impossible | ✅ | Le moteur laisse un bateau déjà dans la marge s'éloigner de la côte. Vérifié sur le vrai backend | `2da0422` |
+| 3 | Message d'erreur technique | ✅ | Erreurs traduites en phrases qui disent quoi changer (marge, zone, départ) | `24266d7` |
+| 3 | Vérification avant le calcul (« départ à 1,2 NM, sous la marge ») | 🔁 | Pas faite : le moteur accepte maintenant ce cas, le message n'aurait presque plus d'occasion de s'afficher | — |
+| 4 | Panneau qui bloque la barre d'outils | ✅ | Les panneaux s'arrêtent avant la barre d'outils, un seul ouvert à la fois | `24266d7` |
+| 4 | 18 zones de toute la course | ✅ | Tri par distance au bateau, zones à plus de 300 NM grisées, « Tout cocher / Tout décocher » | `24266d7` |
+| 4 | Voir une zone sur la carte | ✅ | Un clic centre la carte sur la zone et la surligne en jaune | `24266d7` |
+| 4 | « 9 pts » | ✅ | Remplacé par la distance au bateau | `24266d7` |
+| 4 | Panneaux de tailles différentes | ✅ | Même position et même cadre pour les trois panneaux | `24266d7` |
+| 5 | Encart météo sur le début de la route | ✅ | Le cadrage réserve la place de l'encart et de la légende, du côté qui coûte le moins de carte | `24266d7`, `7e7ac51` |
+| 5 | Isochrones à travers les îles | ✅ | Contours coupés aux sauts anormaux | `24266d7` |
+| 5 | « Détails de la route » sur le zoom | ✅ | Le zoom est passé à gauche, le bouton se masque quand un panneau est ouvert | `24266d7` |
+| 5 | Balisage trop coloré | ✅ | Opacité réduite à 60 %, interrupteur dans la légende | `24266d7` |
+| 5 | Points de route trop nombreux | ✅ | Seuls les manœuvres et les heures rondes restent dessinés, les autres apparaissent au survol | `91f7ddc` |
+| 6 | Tableau qui déborde | ✅ | En-tête et colonne Date fixes, défilement dans le panneau | `24266d7` |
+| 6 | Pas d'export | ✅ | « Exporter en GPX » et « Copier le tableau » | `24266d7` |
+| 6 | Décimales à l'anglaise | ✅ | Virgule décimale, une décimale pour TWA, vent et vitesse | `24266d7` |
+| 6 | Colonne Foils à 0 | ✅ | Foils et Coeff masquées quand elles ne varient pas | `24266d7` |
+| 6 | Panneau qui couvre la carte | ✅ | Mode « Réduire au résumé » | `24266d7` |
+| 6 | Stamina à vérifier dans le moteur | ✅ | Pas d'erreur : −35,8 est un changement de voile (20 × 1,5 × 1,19) et −17 un empannage (10 × 1,5 × 1,19). Un test fixe ces deux valeurs | `6df07df` |
+| 7 | Encart météo sur l'attribution | ✅ | Encart réduit à une ligne sur téléphone, attribution repliée sur son bouton « i » | `24266d7` |
+| 7 | « Détails de la route » sur le zoom | ✅ | Même correction que sur ordinateur | `24266d7` |
+| 7 | Tableau inutilisable sur téléphone | ✅ | Une carte par étape ; toucher une étape réduit le panneau et montre sa position | `91f7ddc` |
+| 7 | Carte grise sous le bouton du formulaire | ✅ | Même correction que « Bateau détecté » | `ffde270` |
+| 9 | Commandes et repères annoncés en anglais | ✅ | Voir section 1 | `24266d7` |
+| 9 | Infobulles absentes au toucher | ✅ | Un appui long sur un bouton de la barre d'outils affiche son libellé sans l'activer | `91f7ddc` |
+| 9 | Contraste non mesuré | ✅ | Mesuré. Les textes gris passent (7,6:1). Quatre couleurs sous 4,5:1 ont été corrigées : heures de l'encart, boutons verts, badge GPX | `91f7ddc` |
+
+### Nouvelles fonctions (section 8)
+
+| # | Fonction | État |
+|---|---|---|
+| 1 | Vent sur la carte | ⬜ |
+| 2 | Rejouer le calcul dans le temps | ⬜ |
+| 3 | Exporter la route | ✅ GPX et tableau à coller dans un tableur (`24266d7`) |
+| 4 | Comparer deux routes | ⬜ |
+| 5 | Choisir le départ ou la destination en cliquant sur la carte | ⬜ |
+| 6 | Légende | ✅ (`24266d7`, `7e7ac51`) |
+| 7 | Messages d'erreur compréhensibles | ✅ (`24266d7`) |
+| 8 | Historique des derniers calculs | ⬜ |
+
+### Prochaines étapes
+
+Les prochaines étapes viennent de [l'analyse de SERMAR](analyse-ihm-sermar.md) :
+
+1. **Ordres à donner dans le jeu** : la route traduite en réglages à faire, aux bons moments.
+2. **Carte de résultat compacte** : arrivée, durée, distance, manœuvres et stamina finale.
+
+Le rejeu dans le temps (point 2 ci-dessus) et la comparaison de routes (point 4) correspondent à la frise temporelle et à la comparaison proposées dans cette analyse. Ils sont prévus après ces deux étapes.
+
+---
+
 ## Les 5 points à traiter en premier
 
 | # | Priorité | Problème | Écran |
