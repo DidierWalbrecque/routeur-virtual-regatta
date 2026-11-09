@@ -82,6 +82,54 @@ func TestBuildIsochroneSearchEvaluatesOptionalTransitions(t *testing.T) {
 			tackNode.Transition.NextStamina,
 		)
 	}
+	if tackNode.ManeuverStamina != 10 {
+		t.Errorf("stamina cumulée en manœuvres = %.1f, attendue 10", tackNode.ManeuverStamina)
+	}
+}
+
+// Le coût des manœuvres se cumule le long de la route : chaque nœud porte la
+// somme de celui de son parent et de sa propre manœuvre.
+func TestBuildIsochroneSearchAccumulatesManeuverStamina(t *testing.T) {
+	initialNavigation := InitialNavigationState{Heading: 120, SailID: 1}
+	evaluator := testRoutingTransitionEvaluator()
+	search, err := BuildIsochroneSearch(
+		context.Background(),
+		&staticWeatherProvider{wind: navigation.Wind{Speed: 5, Direction: 180}},
+		testPolar(),
+		IsochroneSearchInput{
+			Position:            navigation.Position{},
+			Destination:         navigation.Position{Longitude: 10},
+			Instant:             time.Date(2026, 9, 5, 7, 30, 0, 0, time.UTC),
+			StepDuration:        time.Hour,
+			LayerCount:          2,
+			HeadingSpacing:      120,
+			CellSize:            0.01,
+			InitialStamina:      simulation.StaminaState{Level: 100},
+			InitialNavigation:   &initialNavigation,
+			TransitionEvaluator: &evaluator,
+		},
+	)
+	if err != nil {
+		t.Fatalf("construction refusée: %v", err)
+	}
+	parents := search.Frontiers[0].Nodes
+	checked := 0
+	for _, node := range search.Frontiers[1].Nodes {
+		if node.ParentIndex < 0 || node.ParentIndex >= len(parents) {
+			t.Fatalf("parent %d introuvable", node.ParentIndex)
+		}
+		expected := parents[node.ParentIndex].ManeuverStamina
+		if node.Transition != nil {
+			expected += node.Transition.TotalConsumption
+		}
+		if node.ManeuverStamina != expected {
+			t.Errorf("stamina cumulée = %.1f, attendue %.1f", node.ManeuverStamina, expected)
+		}
+		checked++
+	}
+	if checked == 0 {
+		t.Fatal("aucun nœud au second pas")
+	}
 }
 
 func TestBuildIsochroneSearchKeepsLegacyBehaviorWithoutTransitionEvaluator(
