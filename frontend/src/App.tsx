@@ -174,6 +174,8 @@ export function App() {
   const [frame, setFrame] = useState<RouteFrame | null>(null);
   const [result, setResult] = useState<RouteResult | undefined>();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Juste après un calcul, le panneau s'ouvre réduit au résumé chiffré.
+  const [detailsSummaryOnly, setDetailsSummaryOnly] = useState(false);
   const [calculating, setCalculating] = useState(false);
   const [progress, setProgress] = useState<CalculationProgress | null>(null);
   const [calculationStartedAt, setCalculationStartedAt] = useState(0);
@@ -758,6 +760,10 @@ export function App() {
           setResult(complete);
           if (complete.weather?.affectsRoute) setWeatherNotice(weatherSwitchMessage(complete.weather));
           setFrame({ result: complete, showRoute: true, fit: true, key: String(frameCounter.current) });
+          if ((complete.route?.length ?? 0) > 0) {
+            setDetailsSummaryOnly(true);
+            setDetailsOpen(true);
+          }
           return;
         }
         if (eventName === "cancelled") throw new Error((data as { error?: string }).error || "Calcul annulé.");
@@ -1042,11 +1048,12 @@ export function App() {
           onClick={() => {
             setFormOpen(false);
             setZonesOpen(false);
+            setDetailsSummaryOnly(false);
             setDetailsOpen(true);
           }}
         >
           <MaterialIcon name="route" />
-          Détails de la route
+          Route et ordres
         </button>
       )}
       {detailsOpen && result && <RouteDetailsPanel
@@ -1054,6 +1061,7 @@ export function App() {
           selectedIndex={selectedRow?.index ?? null}
           onSelect={(index, point) => setSelectedRow({ index, point })}
           onClose={closeDetails}
+          initiallyCollapsed={detailsSummaryOnly}
         />}
       {draft !== null && (
         <div className="draw-banner" role="status" aria-live="polite">

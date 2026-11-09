@@ -266,8 +266,10 @@ body {
   width: min(900px, calc(100% - var(--panel-right) - 20px));
 }
 
-.route-details-panel.is-collapsed {
-  width: min(440px, calc(100% - var(--panel-right) - 20px));
+/* Résumé seul, ou liste des ordres : un panneau étroit suffit. */
+.route-details-panel.is-collapsed,
+.route-details-panel.is-orders {
+  width: min(520px, calc(100% - var(--panel-right) - 20px));
 }
 
 .route-details-header > div:first-child {
@@ -1032,6 +1034,7 @@ body {
   .route-form-panel,
   .route-details-panel,
   .route-details-panel.is-collapsed,
+  .route-details-panel.is-orders,
   .zones-panel {
     top: 10px;
     right: 10px;
@@ -1774,4 +1777,198 @@ body {
 .map-dock-button.show-tip::after {
   opacity: 1;
   transform: translate(0, -50%);
+}
+
+/* --- Résultat du calcul : chiffres clés, toujours visibles ----------------- */
+.route-summary {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1px;
+  margin: 0;
+  border-bottom: 1px solid var(--card-border);
+  background: var(--card-border);
+}
+
+.route-summary > div {
+  padding: 10px 12px;
+  background: var(--card-background-solid);
+}
+
+.route-summary dt {
+  color: var(--card-muted);
+  font-size: 11px;
+}
+
+.route-summary dd {
+  margin: 2px 0 0;
+  font-size: 15px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.route-details-panel.is-collapsed .route-summary {
+  border-bottom: 0;
+}
+
+/* --- Onglets Ordres / Pas à pas -------------------------------------------- */
+.route-tabs {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 10px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.route-tablist {
+  display: flex;
+  gap: 4px;
+}
+
+.route-tab {
+  margin-bottom: -1px;
+  padding: 8px 10px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  color: var(--card-muted);
+  background: transparent;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-tab:hover {
+  color: var(--card-text);
+}
+
+.route-tab.is-active {
+  border-bottom-color: var(--accent-yellow);
+  color: var(--card-text);
+}
+
+.route-tab:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: -2px;
+}
+
+.route-order-mode {
+  margin-bottom: 4px;
+}
+
+.route-tab-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+/* --- Ordres à donner dans le jeu ------------------------------------------- */
+.route-orders {
+  display: grid;
+  gap: 6px;
+  min-height: 0;
+  margin: 12px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.route-order {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: 100%;
+  padding: 9px 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  color: var(--card-text);
+  background: var(--card-field);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-order:hover {
+  border-color: #4a5470;
+}
+
+.route-order.is-maneuver {
+  border-color: #f5c51866;
+  background: #f5c5181f;
+}
+
+.route-order.is-selected {
+  border-color: var(--accent-blue);
+  background: #145cff40;
+}
+
+.route-order:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.route-order-time {
+  display: grid;
+  flex: none;
+  min-width: 48px;
+}
+
+.route-order-time strong {
+  font-size: 15px;
+}
+
+.route-order-time small {
+  color: var(--card-muted);
+  font-size: 11px;
+}
+
+.route-order-main {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.route-order-setting {
+  color: var(--accent-blue);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.route-order-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
+.route-order-meta .route-report-sail {
+  color: var(--accent-yellow);
+  font-weight: 600;
+}
+
+.route-order .route-card-maneuver {
+  flex: none;
+}
+
+@media (max-width: 600px) {
+  .route-summary {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .route-summary > div {
+    padding: 8px 10px;
+  }
+
+  .route-summary dd {
+    font-size: 14px;
+  }
+
+  /* Cinq chiffres sur trois colonnes : le dernier occupe la fin de la ligne. */
+  .route-summary > div:last-child {
+    grid-column: span 2;
+  }
 }
