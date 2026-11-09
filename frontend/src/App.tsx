@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type GpxOverlay, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
+import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type GpxOverlay, type MapInsets, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
 import { CalculationStatus } from "./CalculationStatus.tsx";
+import { MapLegend } from "./MapLegend.tsx";
 import { RouteDetailsPanel } from "./RouteDetailsPanel.tsx";
 import { RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
 import { WeatherRunCard } from "./WeatherRunCard.tsx";
@@ -13,7 +14,8 @@ import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.t
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
 import { matchPolar } from "./lib/polar_match.ts";
 import { parseGpx, gpxFeatureCollection, gpxPointCount } from "./lib/gpx.ts";
-import { buildWeatherRunModel } from "./lib/weather_run.ts";
+import { buildWeatherRunModel, shortRunLabel } from "./lib/weather_run.ts";
+import { friendlyRouteError } from "./lib/route_errors.ts";
 import {
   DISABLED_GAME_ZONES_KEY,
   MIN_ZONE_POINTS,
@@ -28,6 +30,31 @@ import {
 import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
+const SEAMARKS_STORAGE_KEY = "routeur.showSeamarks";
+// Panneaux posés à droite de la carte : un seul ouvert à la fois.
+const RIGHT_PANEL_IDS = ["route-form-panel", "zones-panel", "route-details-panel"];
+
+/** Écran étroit (téléphone) : l'encart météo démarre replié. */
+function isNarrowScreen(): boolean {
+  try {
+    return window.matchMedia("(max-width: 600px)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Place prise par les panneaux ouverts au-dessus de la carte. */
+function mapInsets(): MapInsets {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  const right = RIGHT_PANEL_IDS.reduce((space, id) => {
+    const rect = document.getElementById(id)?.getBoundingClientRect();
+    return rect && rect.width > 0 ? Math.max(space, width - rect.left) : space;
+  }, 0);
+  const corner = document.getElementById("map-corner")?.getBoundingClientRect();
+  const bottom = corner && corner.height > 0 ? height - corner.top : 0;
+  return { right, bottom };
+}
 const DEFAULT_POLAR = "../data/polars/ultim_bp_11.json";
 // Le tracé affiché vient des isochrones du mode choisi ; ces paramètres ne servent
 // qu'à l'évaluation des caps pratiques, que l'interface n'affiche pas.
@@ -167,6 +194,16 @@ export function App() {
   });
   const [zonesOpen, setZonesOpen] = useState(false);
   const [showRoutePoints, setShowRoutePoints] = useState(true);
+  const [showSeamarks, setShowSeamarks] = useState(() => {
+    try {
+      return window.localStorage.getItem(SEAMARKS_STORAGE_KEY) !== "false";
+    } catch {
+      return true;
+    }
+  });
+  const [legendOpen, setLegendOpen] = useState(false);
+  const [weatherCollapsed, setWeatherCollapsed] = useState(isNarrowScreen);
+  const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Point[] | null>(null);
   const [gpx, setGpx] = useState<{ name: string; count: number; overlay: GpxOverlay } | null>(null);
   const [gpxError, setGpxError] = useState("");
@@ -188,11 +225,16 @@ export function App() {
     [weather],
   );
 
-  const gribProgressText = useMemo(() => {
-    if (!gribTarget || gribTarget.complete || gribTarget.downloaded === 0) return "";
-    const label = `${gribTarget.run.slice(0, 8)} ${gribTarget.run.slice(8)}Z`;
-    return `Run ${label} en cours de publication : ${gribTarget.downloaded}/${gribTarget.expected} échéances`;
-  }, [gribTarget]);
+  const nextRun = useMemo(
+    () =>
+      gribTarget && !gribTarget.complete && gribTarget.downloaded > 0
+        ? { label: shortRunLabel(gribTarget.run), downloaded: gribTarget.downloaded, expected: gribTarget.expected }
+        : null,
+    [gribTarget],
+  );
+  const gribProgressText = nextRun
+    ? `Run ${nextRun.label} en cours de publication : ${nextRun.downloaded}/${nextRun.expected} échéances`
+    : "";
 
   // Le bouton tourne pendant un clic « Actualiser » et pendant le téléchargement du run suivant en arrière-plan.
   const gribDownloading =
@@ -263,6 +305,14 @@ export function App() {
       // Stockage indisponible : les zones restent valables pour la session.
     }
   }, [zones]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(SEAMARKS_STORAGE_KEY, String(showSeamarks));
+    } catch {
+      // Stockage indisponible : le choix reste valable pour la session.
+    }
+  }, [showSeamarks]);
 
   useEffect(() => {
     try {
@@ -691,7 +741,12 @@ export function App() {
         setFormError("Routage annulé. Les isochrones déjà calculées restent affichées.");
         console.info("[ROUTE] Calcul annulé à la demande");
       } else if (!(controller.signal.aborted && activeController.current !== controller)) {
-        setFormError((error as Error).message || "Le calcul a échoué.");
+        setFormError(
+          friendlyRouteError((error as Error).message || "", {
+            coastalMarginNM: Number(form.coastalMarginNM) || 0,
+            enabledZoneCount,
+          }),
+        );
         console.error("[ROUTE] Échec du calcul", error);
       }
     } finally {
@@ -737,6 +792,29 @@ export function App() {
   }, []);
 
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  const toggleGameZones = (targets: Zone[], enabled: boolean) => {
+    setDisabledGameZones((previous) => {
+      const next = new Set(previous);
+      for (const zone of targets) {
+        if (enabled) next.delete(zone.id);
+        else next.add(zone.id);
+      }
+      return next;
+    });
+    resetRoute();
+  };
+  const focusZone = (zone: Zone) => {
+    setFocusedZoneId((current) => (current === zone.id ? null : zone.id));
+    if (focusedZoneId !== zone.id) mapHandle.current?.focusPoints(zone.points);
+  };
+  useEffect(() => {
+    if (!zonesOpen) setFocusedZoneId(null);
+  }, [zonesOpen]);
+  const openForm = () => {
+    setZonesOpen(false);
+    setDetailsOpen(false);
+    setFormOpen(true);
+  };
   const [selectedRow, setSelectedRow] = useState<{ index: number; point: Point } | null>(null);
   useEffect(() => setSelectedRow(null), [result]);
   const hasRoute = Boolean(result && result.route.length > 0);
@@ -756,12 +834,9 @@ export function App() {
         gpx={gpx?.overlay ?? null}
         onDraftClick={onDraftClick}
         showRoutePoints={showRoutePoints}
-        rightPadding={() =>
-          ["route-form-panel", "route-details-panel"].reduce(
-            (width, id) => Math.max(width, document.getElementById(id)?.getBoundingClientRect().width || 0),
-            0,
-          )
-        }
+        showSeamarks={showSeamarks}
+        focusedZoneId={focusedZoneId}
+        insets={mapInsets}
         onError={() => setMapError(true)}
       />
       {calculating && (
@@ -804,7 +879,16 @@ export function App() {
           </button>
         </div>
       )}
-      <WeatherRunCard model={weatherModel} warning={horizonNote.warning} />
+      <div id="map-corner" className="map-corner">
+        {legendOpen && <MapLegend showSeamarks={showSeamarks} onSeamarks={setShowSeamarks} onClose={() => setLegendOpen(false)} />}
+        <WeatherRunCard
+          model={weatherModel}
+          warning={horizonNote.warning}
+          nextRun={nextRun}
+          collapsed={weatherCollapsed}
+          onToggle={() => setWeatherCollapsed((value) => !value)}
+        />
+      </div>
       <div className="map-dock" role="toolbar" aria-label="Actions de la carte" aria-orientation="vertical">
         <button
           id="calculate-route"
@@ -812,10 +896,7 @@ export function App() {
           type="button"
           aria-label="Calculer une route"
           data-tooltip="Calculer une route"
-          onClick={() => {
-            setZonesOpen(false);
-            setFormOpen(true);
-          }}
+          onClick={openForm}
         >
           <MaterialIcon name="alt_route" />
         </button>
@@ -841,6 +922,7 @@ export function App() {
           data-tooltip={`Zones interdites${enabledZoneCount > 0 ? ` (${enabledZoneCount} active(s))` : ""}`}
           onClick={() => {
             setFormOpen(false);
+            setDetailsOpen(false);
             setZonesOpen((open) => !open);
           }}
         >
@@ -896,6 +978,19 @@ export function App() {
         </button>
         <hr />
         <button
+          id="toggle-legend"
+          className={legendOpen ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Légende de la carte"
+          aria-pressed={legendOpen}
+          aria-controls="map-legend"
+          data-tooltip="Légende et balisage"
+          onClick={() => setLegendOpen((open) => !open)}
+        >
+          <MaterialIcon name="info" />
+        </button>
+        <hr />
+        <button
           id="recenter-map"
           className="map-dock-button"
           type="button"
@@ -906,8 +1001,19 @@ export function App() {
           <MaterialIcon name="my_location" />
         </button>
       </div>
-      {hasRoute && (
-        <button id="show-route-details" className="route-details-button" type="button" aria-controls="route-details-panel" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>
+      {hasRoute && !detailsOpen && !formOpen && !zonesOpen && (
+        <button
+          id="show-route-details"
+          className="route-details-button"
+          type="button"
+          aria-controls="route-details-panel"
+          aria-expanded={detailsOpen}
+          onClick={() => {
+            setFormOpen(false);
+            setZonesOpen(false);
+            setDetailsOpen(true);
+          }}
+        >
           <MaterialIcon name="route" />
           Détails de la route
         </button>
@@ -940,16 +1046,14 @@ export function App() {
         <ZonesPanel
           zones={allZones}
           game={{ stateKnown: vrState !== undefined, count: gameZones.length, legShape: vrState?.legShape || [] }}
+          boat={endpoints.position}
+          focusedId={focusedZoneId}
           onDraw={startDrawing}
+          onFocus={focusZone}
+          onToggleAll={toggleGameZones}
           onToggle={(zone, enabled) => {
             if (zone.source === "game") {
-              setDisabledGameZones((previous) => {
-                const next = new Set(previous);
-                if (enabled) next.delete(zone.id);
-                else next.add(zone.id);
-                return next;
-              });
-              resetRoute();
+              toggleGameZones([zone], enabled);
             } else {
               updateZones((previous) => previous.map((item) => (item.id === zone.id ? { ...item, enabled } : item)));
             }

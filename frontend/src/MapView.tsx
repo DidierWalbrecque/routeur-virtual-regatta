@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { GeoJSONSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { forwardContour } from "./lib/geo.ts";
+import { forwardContour, splitContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
 import { checkpointFeatures } from "./lib/vr.ts";
 import { draftFeatureCollection, zonesFeatureCollection, type Zone } from "./lib/zones.ts";
@@ -55,7 +55,27 @@ export type RouteFrame = {
   key: string;
 };
 
-export type MapViewHandle = { recenter: () => void };
+export type MapViewHandle = {
+  recenter: () => void;
+  /** Cadre la carte sur ces points (une zone choisie dans la liste, par exemple). */
+  focusPoints: (points: Point[]) => void;
+};
+
+/** Place occupée par les panneaux au-dessus de la carte, en pixels depuis chaque bord. */
+export type MapInsets = { right: number; bottom: number };
+
+// Commandes MapLibre en français (infobulles et lecteurs d'écran).
+const MAP_LOCALE = {
+  "AttributionControl.ToggleAttribution": "Afficher les sources",
+  "AttributionControl.MapFeedback": "Signaler une erreur de carte",
+  "NavigationControl.ResetBearing": "Remettre le nord en haut (glisser pour tourner)",
+  "NavigationControl.ZoomIn": "Zoomer",
+  "NavigationControl.ZoomOut": "Dézoomer",
+  "Map.Title": "Carte",
+  "Marker.Title": "Repère",
+};
+
+const MAP_MARGIN = 60;
 
 /** Trace GPX importée à afficher en référence sur la carte. */
 export type GpxOverlay = {
@@ -85,6 +105,21 @@ function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
   (map.getSource(id) as GeoJSONSource | undefined)?.setData(data as never);
 }
 
+/** « +30 min », « +2 h », « +2 h 30 ». */
+function elapsedLabel(minutes: number): string {
+  if (minutes < 60) return `+${minutes} min`;
+  const hours = Math.floor(minutes / 60);
+  const rest = minutes % 60;
+  return rest ? `+${hours} h ${String(rest).padStart(2, "0")}` : `+${hours} h`;
+}
+
+/** Nom d'un repère pour l'infobulle et les lecteurs d'écran (MapLibre annonce « Map marker »). */
+function nameMarker(marker: Marker, name: string) {
+  const element = marker.getElement();
+  element.title = name;
+  element.setAttribute("aria-label", name);
+}
+
 function elapsedMinutes(startedAt: string | undefined, instant: string | undefined): number {
   if (!startedAt || !instant) return 0;
   return Math.round((Date.parse(instant) - Date.parse(startedAt)) / 60000);
@@ -109,13 +144,17 @@ type Props = {
   onDraftClick: (point: Point, closing: boolean) => void;
   /** Afficher les points d'étape de la route. */
   showRoutePoints: boolean;
-  /** Largeur à réserver à droite pour le formulaire ouvert, 0 sinon. */
-  rightPadding: () => number;
+  /** Afficher le balisage OpenSeaMap (phares, bouées). */
+  showSeamarks: boolean;
+  /** Zone mise en évidence depuis la liste des zones, ou null. */
+  focusedZoneId: string | null;
+  /** Place prise par les panneaux ouverts, à laisser libre lors des cadrages. */
+  insets: () => MapInsets;
   onError: () => void;
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, raceStart, gameArrival, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, rightPadding, onError },
+  { endpoints, raceStart, gameArrival, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, showSeamarks, focusedZoneId, insets, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -142,12 +181,27 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
     }
   }, [showRoutePoints, ready]);
-  const rightPaddingRef = useRef(rightPadding);
-  rightPaddingRef.current = rightPadding;
 
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !map.getLayer("seamarks")) return;
+    map.setLayoutProperty("seamarks", "visibility", showSeamarks ? "visible" : "none");
+  }, [showSeamarks, ready]);
+
+  const insetsRef = useRef(insets);
+  insetsRef.current = insets;
+
+  // Marges de cadrage : la route ne doit passer ni sous un panneau à droite, ni
+  // sous l'encart météo en bas à gauche. Sur un écran trop petit pour cela, on
+  // garde une marge fixe plutôt qu'un cadre minuscule.
   const padding = () => {
-    const right = rightPaddingRef.current();
-    return right > 0 ? { top: 80, bottom: 80, left: 80, right: right + 40 } : 80;
+    const map = mapRef.current;
+    const { right, bottom } = insetsRef.current();
+    const width = map?.getContainer().clientWidth ?? window.innerWidth;
+    const height = map?.getContainer().clientHeight ?? window.innerHeight;
+    const padRight = right > 0 && width - right > 240 ? right + 20 : MAP_MARGIN;
+    const padBottom = bottom > 0 && height - bottom > 240 ? bottom + 20 : MAP_MARGIN;
+    return { top: MAP_MARGIN, left: MAP_MARGIN, right: padRight, bottom: padBottom };
   };
 
   useImperativeHandle(handle, () => ({
@@ -156,6 +210,14 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       if (map && boundsRef.current) {
         map.fitBounds(boundsRef.current, { padding: padding(), maxZoom: 12, duration: 500 });
       }
+    },
+    focusPoints(points: Point[]) {
+      const map = mapRef.current;
+      const api = apiRef.current;
+      if (!map || !api || points.length === 0) return;
+      const bounds = new api.LngLatBounds();
+      points.forEach((point) => bounds.extend([point.longitude, point.latitude]));
+      map.fitBounds(bounds, { padding: padding(), maxZoom: 11, duration: 600 });
     },
   }));
 
@@ -230,25 +292,30 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
                 "line-dasharray": [4, 3],
               },
             },
-            { id: "seamarks", type: "raster", source: "seamarks", minzoom: 9 },
+            // Atténué pour ne pas rivaliser avec la route ; masquable depuis la légende.
+            { id: "seamarks", type: "raster", source: "seamarks", minzoom: 9, paint: { "raster-opacity": 0.6 } },
           ],
         },
         center: [DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude],
         zoom: 10,
         minZoom: 5,
         attributionControl: {},
+        locale: MAP_LOCALE,
       });
       mapRef.current = map;
-      map.addControl(new maplibregl.NavigationControl(), "top-right");
+      // À gauche : les panneaux et le bouton des détails occupent la droite.
+      map.addControl(new maplibregl.NavigationControl(), "top-left");
 
       map.on("load", () => {
         if (!map) return;
         departureMarker.current = new maplibregl.Marker({ color: "#1971c2" })
           .setLngLat([DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude])
           .addTo(map);
+        nameMarker(departureMarker.current, "Départ du routage");
         destinationMarker.current = new maplibregl.Marker({ color: "#6741d9" })
           .setLngLat([DEFAULT_DESTINATION.longitude, DEFAULT_DESTINATION.latitude])
           .addTo(map);
+        nameMarker(destinationMarker.current, "Destination du routage");
 
         map.addSource("points", {
           type: "geojson",
@@ -311,12 +378,16 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "symbol",
           source: "vr-checkpoints",
           filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
+          // Les noms se placent autour du milieu de la porte, et MapLibre masque
+          // ceux qui se chevaucheraient.
           layout: {
             "text-field": ["get", "label"],
             "text-size": 12,
-            "text-offset": [0, -1.2],
-            "text-anchor": "bottom",
-            "text-allow-overlap": true,
+            "text-variable-anchor": ["bottom", "top", "left", "right"],
+            "text-radial-offset": 0.9,
+            "text-justify": "auto",
+            "text-allow-overlap": false,
+            "text-padding": 4,
           },
           paint: { "text-color": "#d0bfff", "text-halo-color": "#101418", "text-halo-width": 2 },
         });
@@ -337,8 +408,15 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "line",
           source: "zones",
           paint: {
-            "line-color": ["case", ["boolean", ["get", "enabled"], true], "#ff6b6b", "#868e96"],
-            "line-width": 2,
+            "line-color": [
+              "case",
+              ["boolean", ["get", "focused"], false],
+              "#ffd43b",
+              ["boolean", ["get", "enabled"], true],
+              "#ff6b6b",
+              "#868e96",
+            ],
+            "line-width": ["case", ["boolean", ["get", "focused"], false], 4, 2],
           },
         });
         map.addSource("zone-draft", { type: "geojson", data: EMPTY as never });
@@ -430,11 +508,12 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           id: "route-points",
           type: "circle",
           source: "route-points",
+          // Points marquants (manœuvres, heures rondes) bien visibles, les autres discrets.
           paint: {
-            "circle-radius": 7,
-            "circle-color": "#f59f00",
+            "circle-radius": ["case", ["boolean", ["get", "key"], false], 6, 3],
+            "circle-color": ["case", ["boolean", ["get", "maneuver"], false], "#ffd43b", "#f59f00"],
             "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
+            "circle-stroke-width": ["case", ["boolean", ["get", "key"], false], 2, 1],
           },
         });
         map.addLayer({
@@ -446,6 +525,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "text-size": 12,
             "text-offset": [0, -1.5],
             "text-anchor": "bottom",
+            "text-allow-overlap": false,
           },
           paint: { "text-color": "#a5d8ff", "text-halo-color": "#101418", "text-halo-width": 2 },
         });
@@ -469,6 +549,10 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "circle-stroke-width": 3,
           },
         });
+
+        // Sur petit écran, MapLibre ouvre l'attribution compacte au chargement :
+        // elle passerait sous l'encart météo. Elle reste accessible par son bouton « i ».
+        container.current?.querySelector(".maplibregl-compact-show")?.classList.remove("maplibregl-compact-show");
 
         const bounds = new maplibregl.LngLatBounds();
         bounds.extend([DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude]);
@@ -520,7 +604,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       raceStartMarker.current = new api.Marker({ color: "#f59f00" })
         .setLngLat([raceStartLon, raceStartLat])
         .addTo(map);
-      raceStartMarker.current.getElement().title = "Départ de la course";
+      nameMarker(raceStartMarker.current, "Départ de la course");
     }
     raceStartMarker.current.setLngLat([raceStartLon, raceStartLat]);
     map.triggerRepaint();
@@ -542,7 +626,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       gameArrivalMarker.current = new api.Marker({ color: "#c2255c" })
         .setLngLat([gameArrivalLon, gameArrivalLat])
         .addTo(map);
-      gameArrivalMarker.current.getElement().title = "Arrivée du jeu";
+      nameMarker(gameArrivalMarker.current, "Arrivée du jeu");
     }
     gameArrivalMarker.current.setLngLat([gameArrivalLon, gameArrivalLat]);
     map.triggerRepaint();
@@ -573,8 +657,12 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    setData(map, "zones", zonesFeatureCollection(zones));
-  }, [ready, zones]);
+    const collection = zonesFeatureCollection(zones);
+    collection.features.forEach((feature) => {
+      feature.properties.focused = feature.properties.id === focusedZoneId;
+    });
+    setData(map, "zones", collection);
+  }, [ready, zones, focusedZoneId]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -633,13 +721,14 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       type: "FeatureCollection",
       features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: center } }],
     });
-    const right = rightPaddingRef.current();
+    const { right, bottom } = insetsRef.current();
     const visible = map.getBounds();
     const size = map.getContainer();
     const point = map.project(center);
-    const hidden = point.x > size.clientWidth - right - 40 || !visible.contains(center);
+    const hidden =
+      point.x > size.clientWidth - right - 40 || point.y > size.clientHeight - bottom - 40 || !visible.contains(center);
     if (hidden) {
-      map.easeTo({ center, padding: { top: 0, bottom: 0, left: 0, right }, duration: 400 });
+      map.easeTo({ center, padding: { top: 0, left: 0, right, bottom }, duration: 400 });
     }
   }, [ready, highlight]);
 
@@ -714,14 +803,18 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       const minutes = Number.isFinite(startedAtMilliseconds)
         ? Math.round((Date.parse(isochrone.instant) - startedAtMilliseconds) / 60000)
         : 0;
-      const coordinates = visibleContour.map((point) => [point.longitude, point.latitude]);
+      // Le contour est coupé là où le front contourne une île ou une zone,
+      // pour ne pas tracer de trait à travers la terre.
+      const coordinates = splitContour(visibleContour).map((part) =>
+        part.map((point) => [point.longitude, point.latitude]),
+      );
       const total = isochrone.totalLayers || isochrones.length || 1;
       const color = isochroneTimeColor((index + 1) / total);
-      if (coordinates.length > 1) {
+      if (coordinates.length > 0) {
         renderedFeatures.current.push({
           type: "Feature",
           properties: { major: (index + 1) % 6 === 0, color },
-          geometry: { type: "LineString", coordinates },
+          geometry: { type: "MultiLineString", coordinates },
         });
       }
     }
@@ -743,9 +836,14 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         .filter((point, index) => index > 0 && !point.terminal)
         .map((point) => {
           const minutes = elapsedMinutes(route[0]?.instant, point.instant);
+          const maneuver = Boolean(point.maneuver);
           return {
             type: "Feature",
-            properties: { label: minutes > 0 && minutes % 30 === 0 ? `+${minutes} min` : "" },
+            properties: {
+              label: minutes > 0 && minutes % 30 === 0 ? elapsedLabel(minutes) : "",
+              key: maneuver || (minutes > 0 && minutes % 60 === 0),
+              maneuver,
+            },
             geometry: { type: "Point", coordinates: [point.position.longitude, point.position.latitude] },
           };
         }),

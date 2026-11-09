@@ -46,3 +46,9 @@ export function buildWeatherRunModel(
     fileCount: hours.length,
   };
 }
+
+/** « 2026110718 » → « 18Z du 07/11 », la forme courte utilisée dans l'interface. */
+export function shortRunLabel(run: string): string {
+  const parsed = parseRun(run);
+  return parsed ? `${parsed.hour}Z du ${parsed.day}/${parsed.month}` : run;
+}

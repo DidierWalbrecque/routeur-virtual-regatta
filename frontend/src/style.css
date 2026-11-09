@@ -1,4 +1,7 @@
 :root {
+  /* Les panneaux de droite s'arrêtent avant la barre d'outils (24 px du bord + 52 px de large). */
+  --panel-right: 88px;
+  --panel-top: 20px;
   /* Apparence commune de toutes les fenêtres flottantes (cartes sombres). */
   --card-background: #1d2433e6;
   --card-background-solid: #1d2433;
@@ -233,27 +236,63 @@ body {
   }
 }
 
+/* Panneaux de droite : même position et même cadre, sans jamais couvrir la
+   barre d'outils ni les commandes de la carte (placées à gauche). */
 .route-form-panel,
-.route-details-panel {
+.route-details-panel,
+.zones-panel {
   position: fixed;
-  top: 50%;
-  right: 20px;
+  top: var(--panel-top);
+  right: var(--panel-right);
   left: auto;
-  max-height: calc(100% - 40px);
-  overflow-y: auto;
-  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  max-height: calc(100% - 2 * var(--panel-top));
+  overflow: hidden;
+  padding: 0;
+  border: 1px solid var(--card-border);
   background: var(--card-background-solid);
-  transform: translateY(-50%);
 }
 
 .route-form-panel {
   z-index: 4;
-  width: min(440px, calc(100% - 40px));
+  width: min(440px, calc(100% - var(--panel-right) - 20px));
 }
 
 .route-details-panel {
-  z-index: 6;
-  width: min(900px, calc(100% - 40px));
+  z-index: 4;
+  width: min(900px, calc(100% - var(--panel-right) - 20px));
+}
+
+.route-details-panel.is-collapsed {
+  width: min(440px, calc(100% - var(--panel-right) - 20px));
+}
+
+.route-details-header > div:first-child {
+  min-width: 0;
+}
+
+.route-details-actions {
+  display: flex;
+  flex: none;
+  gap: 2px;
+}
+
+#route-details-content {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  padding: 0 20px 14px;
+}
+
+#route-details-content[hidden] {
+  display: none;
+}
+
+.route-details-copy {
+  margin: 8px 20px 0;
+  color: #5fd38d;
+  font-size: 12px;
 }
 
 .route-details-button {
@@ -289,7 +328,8 @@ body {
 
 .route-details-status,
 .route-details-summary {
-  margin: 8px 0;
+  margin: 4px 0 0;
+  font-size: 12px;
 }
 
 .route-details-status {
@@ -308,39 +348,53 @@ body {
   color: var(--card-muted);
 }
 
+/* Le tableau défile dans les deux sens ; l'en-tête et la colonne Date restent visibles. */
 .route-details-table-wrapper {
-  overflow-x: auto;
+  min-height: 0;
+  margin-top: 12px;
+  overflow: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
 }
 
 .route-details-table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .route-details-table th,
 .route-details-table td {
-  padding: 8px 8px;
+  padding: 7px 8px;
   border-bottom: 1px solid var(--card-border);
+  background: var(--card-background-solid);
   text-align: left;
 }
 
 .route-details-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   color: var(--card-muted);
   background: var(--card-field);
   font-weight: 700;
 }
 
-/* --- Formulaire « Calculer une route » ------------------------------------
-   En-tête et pied fixes, corps qui défile : rien ne déborde du panneau. */
-.route-form-panel {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  padding: 0;
-  border: 1px solid var(--card-border);
+.route-details-table .route-report-date {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  box-shadow: 1px 0 0 var(--card-border);
 }
 
+.route-details-table th.route-report-date {
+  z-index: 2;
+}
+
+/* --- Formulaire « Calculer une route » ------------------------------------
+   En-tête et pied fixes, corps qui défile : rien ne déborde du panneau. */
 .route-form-panel form {
   display: flex;
   flex: 1;
@@ -861,7 +915,7 @@ body {
   position: fixed;
   right: 24px;
   bottom: 44px;
-  z-index: 3;
+  z-index: 5;
   display: flex;
   flex-direction: column;
   padding: 4px;
@@ -972,13 +1026,22 @@ body {
     bottom: 40px;
   }
 
-  .route-form-panel {
-    top: 50%;
+  /* Sur téléphone, un panneau ouvert occupe l'écran : on le ferme pour revenir à la carte. */
+  .route-form-panel,
+  .route-details-panel,
+  .route-details-panel.is-collapsed,
+  .zones-panel {
+    top: 10px;
     right: 10px;
     left: 10px;
-    width: calc(100% - 20px);
+    z-index: 6;
+    width: auto;
     max-height: calc(100% - 20px);
-    transform: translateY(-50%);
+  }
+
+  .route-details-panel.is-collapsed {
+    top: auto;
+    bottom: 10px;
   }
 
   .route-details-button {
@@ -986,11 +1049,19 @@ body {
     right: 16px;
   }
 
-  .route-details-panel {
-    right: 10px;
+  /* Colonnes secondaires masquées : il reste date, temps, cap, TWA, bord, vent, vitesse, voile et stamina. */
+  .route-details-table .is-secondary {
+    display: none;
+  }
+
+  .route-details-table th,
+  .route-details-table td {
+    padding: 6px 6px;
+  }
+
+  .map-corner {
+    bottom: 12px;
     left: 10px;
-    width: calc(100% - 20px);
-    max-height: calc(100% - 20px);
   }
 }
 
@@ -1032,13 +1103,154 @@ body {
   font-size: 12px;
 }
 
-.weather-run-card {
+/* Coin bas gauche : légende au-dessus de l'encart météo. */
+.map-corner {
   position: fixed;
   bottom: 24px;
   left: 16px;
   z-index: 3;
-  width: min(300px, calc(100% - 32px));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  width: min(300px, calc(100% - 100px));
+  pointer-events: none;
+}
+
+.map-corner > * {
+  pointer-events: auto;
+}
+
+.weather-run-card {
+  width: 100%;
   padding: 10px 14px;
+}
+
+/* Encart replié : une ligne qui s'ouvre au clic. */
+.weather-run-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  width: auto;
+  padding: 7px 12px;
+  border: 0;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-run-chip .material-symbols-outlined {
+  color: var(--accent-blue);
+  font-size: 18px;
+}
+
+.weather-run-chip:hover {
+  background: var(--card-background-solid);
+}
+
+.weather-run-chip:focus-visible,
+.weather-run-collapse:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.weather-run-chip-hours {
+  color: var(--accent-green);
+  font-weight: 600;
+}
+
+.weather-run-chip-hours.is-warning {
+  color: var(--accent-yellow);
+}
+
+.weather-run-chip-next {
+  color: var(--card-muted);
+}
+
+.weather-run-collapse {
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  margin: -4px -6px -4px 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  color: var(--card-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.weather-run-collapse:hover {
+  color: var(--card-text);
+  background: var(--card-field);
+}
+
+.weather-run-collapse .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.weather-run-next {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 5px !important;
+  color: var(--accent-blue);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.weather-run-next .material-symbols-outlined {
+  font-size: 15px;
+}
+
+/* Légende des repères. */
+.map-legend {
+  width: 100%;
+  max-height: calc(100vh - 260px);
+  overflow-y: auto;
+  padding: 10px 14px 12px;
+}
+
+.map-legend-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.map-legend h2 {
+  margin: 0;
+  color: var(--card-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.map-legend ul {
+  display: grid;
+  gap: 6px;
+  margin: 6px 0 10px;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.map-legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.legend-symbol {
+  flex: none;
+  width: 18px;
+  height: 14px;
+}
+
+.map-legend-switch {
+  padding-top: 8px;
+  border-top: 1px solid var(--card-border);
+  font-size: 12px;
 }
 
 .weather-run-card[hidden] {
@@ -1051,9 +1263,13 @@ body {
 
 .weather-run-head {
   display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
+}
+
+.weather-run-head .weather-run-title {
+  flex: 1;
+  min-width: 0;
 }
 
 .weather-run-title {
@@ -1214,27 +1430,58 @@ body {
 }
 
 .zones-panel {
-  position: fixed;
-  top: 50%;
-  right: 20px;
   z-index: 4;
-  width: min(360px, calc(100% - 40px));
-  max-height: calc(100% - 40px);
-  overflow-y: auto;
-  padding: 14px 16px;
+  width: min(440px, calc(100% - var(--panel-right) - 20px));
   color: var(--card-text);
-  background: var(--card-background-solid);
   border-radius: var(--card-radius);
   box-shadow: var(--card-shadow);
   font: var(--card-font);
-  transform: translateY(-50%);
   color-scheme: dark;
 }
 
-.zones-help,
+.zones-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 4px 20px 12px;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.zones-help {
+  margin: 0;
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
 .zones-empty {
   margin: 0 0 10px;
   color: var(--card-muted);
+}
+
+.zones-group-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+}
+
+.zones-link {
+  padding: 2px 4px;
+  border: 0;
+  border-radius: 4px;
+  color: var(--accent-blue);
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.zones-link:hover {
+  text-decoration: underline;
+}
+
+.zones-link:focus-visible {
+  outline: 2px solid var(--accent-yellow);
 }
 
 .zones-list {
@@ -1277,9 +1524,21 @@ body {
   background: var(--card-field);
 }
 
-.zone-points {
+.zone-distance {
+  flex: none;
   color: var(--card-muted);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Zone loin du bateau : sans effet sur un calcul court. */
+.zone-row.far .zone-label,
+.zone-row.far .zone-distance {
+  opacity: 0.55;
+}
+
+.zone-focus.is-active {
+  color: var(--accent-yellow);
 }
 
 .draw-banner {
@@ -1337,9 +1596,24 @@ body {
   flex: 1;
   min-width: 0;
   overflow: hidden;
-  padding: 0 8px;
+  padding: 4px 8px;
+  border: 0;
+  border-radius: 6px;
+  color: var(--card-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
   text-overflow: ellipsis;
   white-space: nowrap;
+  cursor: pointer;
+}
+
+.zone-label:hover {
+  background: var(--card-field);
+}
+
+.zone-label:focus-visible {
+  outline: 2px solid var(--accent-yellow);
 }
 
 .zone-row.off .zone-label {

@@ -165,14 +165,33 @@ export function formatInstant(instant: string): string {
   return `${day}/${month} ${hours}:${minutes}`;
 }
 
+/** Nombre à la française : virgule décimale, « — » quand la valeur manque. */
 export function formatNumber(value: number | null, digits: number): string {
-  return value !== null && Number.isFinite(value) ? value.toFixed(digits) : "—";
+  return value !== null && Number.isFinite(value) ? value.toFixed(digits).replace(".", ",") : "—";
 }
 
-// Les angles entiers s'affichent sans décimale, comme dans le jeu.
+// Les angles entiers s'affichent sans décimale, comme dans le jeu, les autres avec une seule.
 export function formatAngle(value: number | null): string {
   if (value === null || !Number.isFinite(value)) return "—";
-  return Math.abs(value - Math.round(value)) < 0.005 ? String(Math.round(value)) : value.toFixed(2);
+  return Math.abs(value - Math.round(value)) < 0.05 ? String(Math.round(value)) : formatNumber(value, 1);
+}
+
+/** Nom lisible d'une manœuvre envoyée par le moteur. */
+export function maneuverLabel(maneuver: string): string {
+  if (maneuver === "tack") return "Virement";
+  if (maneuver === "gybe") return "Empannage";
+  if (maneuver === "sail") return "Changement de voile";
+  return maneuver;
+}
+
+/** Colonnes dont la valeur ne varie pas sur toute la route (masquées dans le tableau). */
+export function constantColumns(rows: ReportRow[]): Set<"foils" | "coeff"> {
+  const constant = new Set<"foils" | "coeff">();
+  const sameEverywhere = (pick: (row: ReportRow) => number | null) =>
+    new Set(rows.map(pick).filter((value) => value !== null).map((value) => Math.round(Number(value) * 100))).size <= 1;
+  if (sameEverywhere((row) => row.foilPercent)) constant.add("foils");
+  if (sameEverywhere((row) => row.speedCoefficient)) constant.add("coeff");
+  return constant;
 }
 
 export const REPORT_HEADERS: { label: string; title?: string }[] = [

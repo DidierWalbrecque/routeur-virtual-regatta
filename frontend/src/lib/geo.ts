@@ -66,6 +66,37 @@ export function parseLocalDate(value: string): string {
   return date.toISOString();
 }
 
+/** Distance approchée entre deux points, en milles nautiques (suffisante à l'échelle d'un pas). */
+export function approximateDistanceNM(a: Point, b: Point): number {
+  const latitude = ((a.latitude + b.latitude) / 2) * (Math.PI / 180);
+  let deltaLongitude = b.longitude - a.longitude;
+  if (deltaLongitude > 180) deltaLongitude -= 360;
+  if (deltaLongitude < -180) deltaLongitude += 360;
+  return 60 * Math.hypot(b.latitude - a.latitude, deltaLongitude * Math.cos(latitude));
+}
+
+/**
+ * Coupe un contour d'isochrone là où deux points voisins sont anormalement
+ * éloignés : ce saut correspond à une île ou une zone que le front contourne,
+ * et le relier tracerait une ligne à travers la terre. Les points d'un front
+ * sont espacés irrégulièrement : un saut n'est coupé que s'il est à la fois
+ * très long devant l'espacement habituel et une part notable du contour.
+ */
+export function splitContour(points: Point[], factor = 6, shareOfContour = 0.2): Point[][] {
+  if (points.length < 2) return points.length ? [points] : [];
+  const lengths = points.slice(1).map((point, index) => approximateDistanceNM(points[index], point));
+  const sorted = [...lengths].sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const total = lengths.reduce((sum, length) => sum + length, 0);
+  const limit = Math.max(median * factor, total * shareOfContour);
+  const parts: Point[][] = [[points[0]]];
+  lengths.forEach((length, index) => {
+    if (median > 0 && length > limit) parts.push([]);
+    parts[parts.length - 1].push(points[index + 1]);
+  });
+  return parts.filter((part) => part.length > 1);
+}
+
 // Garde l'arc de l'isochrone tourné vers la destination.
 export function forwardContour(ring: Point[], direction: { x: number; y: number }): Point[] {
   const vertices =
