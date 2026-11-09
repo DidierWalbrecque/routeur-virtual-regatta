@@ -28,7 +28,7 @@ Le relevé d'origine est conservé tel quel sous cette section. Les constats y d
 
 | Section | Point | État | Ce qui a été fait | Commit |
 |---|---|---|---|---|
-| 1 | Étiquettes des portes qui se chevauchent | ✅ | MapLibre place les noms autour du milieu de la porte et masque ceux qui se recouvrent | `24266d7` |
+| 1 | Étiquettes des portes qui se chevauchent | ✅ | MapLibre masque les noms qui se recouvrent. Depuis `3271a93`, le nom se place à côté du repère de la porte | `24266d7`, `3271a93` |
 | 1 | Légende des repères | ✅ | Bouton « Légende » dans la barre d'outils, ouverte par défaut sur ordinateur, choix mémorisé | `24266d7`, `7e7ac51` |
 | 1 | Commandes de carte en anglais | ✅ | Commandes en français, repères nommés pour les lecteurs d'écran | `24266d7` |
 | 1 | Icône d'onglet | ✅ | Icône SVG (voiles) | `24266d7` |
@@ -88,7 +88,7 @@ Les idées retenues dans [l'analyse de SERMAR](analyse-ihm-sermar.md) :
 | 1 | Ordres à donner dans le jeu | ✅ | Premier onglet du panneau de route. Un ordre par manœuvre, changement de voile ou de bord, ou écart de TWA (ou de cap) d'au moins 5° tenu au moins 30 min. Choix TWA ou cap mémorisé, copie en texte, clic pour voir où donner l'ordre | `fbf02ff` |
 | 2 | Carte de résultat compacte | ✅ | À la fin d'un calcul, le panneau s'ouvre réduit à l'arrivée, la durée, la distance, les manœuvres et la stamina finale | `fbf02ff` |
 | 3 | Frise temporelle | ⬜ | Même fonction que le rejeu dans le temps (section 8, point 2) | — |
-| 4 | Repères plus lisibles | ✅ | Épingles « D » (départ du routage) et « A » (destination), drapeau pour l'arrivée du jeu, icône pour le départ de la course ; le « A » se masque quand il coïncide avec l'arrivée du jeu. Cercle pointillé du rayon d'arrivée fourni par le jeu. Numéro d'ordre de passage au milieu de chaque porte restante. Légende mise à jour | `24266d7`, `d555a6f` |
+| 4 | Repères plus lisibles | ✅ | Épingles « D » (départ du routage) et « A » (destination), drapeau pour l'arrivée du jeu, icône pour le départ de la course ; le « A » se masque quand il coïncide avec l'arrivée du jeu. Cercle pointillé du rayon d'arrivée fourni par le jeu. Chaque porte est un anneau fléché sur sa marque de départ, qui tourne dans le sens horaire (marque à laisser à tribord) ou antihoraire (à bâbord), immobile et pointillé pour une porte à double sens, avec le numéro d'ordre de passage au centre. Le trait de la porte et sa seconde extrémité ne sont plus dessinés (le moteur vérifie toujours le franchissement sur la ligne complète). Légende mise à jour | `24266d7`, `d555a6f`, `3271a93` |
 | 5 | Contraste terre/mer | ⬜ | Les îles se distinguent mal de la mer sur le fond de nuit | — |
 | 6 | Enregistrer et comparer des routes | ⬜ | Même fonction que la comparaison de routes (section 8, point 4) | — |
 
