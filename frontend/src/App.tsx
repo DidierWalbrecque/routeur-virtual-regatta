@@ -31,6 +31,7 @@ import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usabl
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const SEAMARKS_STORAGE_KEY = "routeur.showSeamarks";
+const LEGEND_STORAGE_KEY = "routeur.legendOpen";
 // Panneaux posés à droite de la carte : un seul ouvert à la fois.
 const RIGHT_PANEL_IDS = ["route-form-panel", "zones-panel", "route-details-panel"];
 
@@ -52,8 +53,10 @@ function mapInsets(): MapInsets {
     return rect && rect.width > 0 ? Math.max(space, width - rect.left) : space;
   }, 0);
   const corner = document.getElementById("map-corner")?.getBoundingClientRect();
-  const bottom = corner && corner.height > 0 ? height - corner.top : 0;
-  return { right, bottom };
+  const visible = Boolean(corner && corner.height > 0);
+  const bottom = visible && corner ? height - corner.top : 0;
+  const left = visible && corner ? corner.right : 0;
+  return { right, bottom, left };
 }
 const DEFAULT_POLAR = "../data/polars/ultim_bp_11.json";
 // Le tracé affiché vient des isochrones du mode choisi ; ces paramètres ne servent
@@ -201,7 +204,17 @@ export function App() {
       return true;
     }
   });
-  const [legendOpen, setLegendOpen] = useState(false);
+  // Légende ouverte par défaut sur ordinateur, fermée sur téléphone ; le
+  // dernier choix de l'utilisateur est ensuite conservé.
+  const [legendOpen, setLegendOpen] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(LEGEND_STORAGE_KEY);
+      if (saved !== null) return saved === "true";
+    } catch {
+      // Stockage indisponible : valeur par défaut selon l'écran.
+    }
+    return !isNarrowScreen();
+  });
   const [weatherCollapsed, setWeatherCollapsed] = useState(isNarrowScreen);
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Point[] | null>(null);
@@ -313,6 +326,14 @@ export function App() {
       // Stockage indisponible : le choix reste valable pour la session.
     }
   }, [showSeamarks]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LEGEND_STORAGE_KEY, String(legendOpen));
+    } catch {
+      // Stockage indisponible : le choix reste valable pour la session.
+    }
+  }, [legendOpen]);
 
   useEffect(() => {
     try {

@@ -61,8 +61,12 @@ export type MapViewHandle = {
   focusPoints: (points: Point[]) => void;
 };
 
-/** Place occupée par les panneaux au-dessus de la carte, en pixels depuis chaque bord. */
-export type MapInsets = { right: number; bottom: number };
+/**
+ * Place occupée par les panneaux au-dessus de la carte, en pixels depuis chaque
+ * bord : à droite les panneaux, en bas à gauche la colonne légende + météo
+ * (sa hauteur depuis le bas et sa largeur depuis la gauche).
+ */
+export type MapInsets = { right: number; bottom: number; left: number };
 
 // Commandes MapLibre en français (infobulles et lecteurs d'écran).
 const MAP_LOCALE = {
@@ -191,17 +195,27 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const insetsRef = useRef(insets);
   insetsRef.current = insets;
 
-  // Marges de cadrage : la route ne doit passer ni sous un panneau à droite, ni
-  // sous l'encart météo en bas à gauche. Sur un écran trop petit pour cela, on
-  // garde une marge fixe plutôt qu'un cadre minuscule.
-  const padding = () => {
+  // Place à laisser libre : les panneaux à droite, et la colonne du coin bas
+  // gauche réservée soit en bas soit à gauche, du côté qui coûte le moins de
+  // carte (à gauche quand la légende la rend haute sur un écran large).
+  const reservedSpace = () => {
     const map = mapRef.current;
-    const { right, bottom } = insetsRef.current();
+    const { right, bottom, left } = insetsRef.current();
     const width = map?.getContainer().clientWidth ?? window.innerWidth;
     const height = map?.getContainer().clientHeight ?? window.innerHeight;
-    const padRight = right > 0 && width - right > 240 ? right + 20 : MAP_MARGIN;
+    const usableWidth = Math.max(1, width - right);
+    const onLeft = left > 0 && left / usableWidth < bottom / height;
+    return { width, height, right, bottom: onLeft ? 0 : bottom, left: onLeft ? left : 0 };
+  };
+
+  // Marges de cadrage. Sur un écran trop petit pour réserver toute cette place,
+  // on garde une marge fixe plutôt qu'un cadre minuscule.
+  const padding = () => {
+    const { width, height, right, bottom, left } = reservedSpace();
+    const padRight = right > 0 && width - right - left > 240 ? right + 20 : MAP_MARGIN;
+    const padLeft = left > 0 && width - right - left > 240 ? left + 20 : MAP_MARGIN;
     const padBottom = bottom > 0 && height - bottom > 240 ? bottom + 20 : MAP_MARGIN;
-    return { top: MAP_MARGIN, left: MAP_MARGIN, right: padRight, bottom: padBottom };
+    return { top: MAP_MARGIN, left: padLeft, right: padRight, bottom: padBottom };
   };
 
   useImperativeHandle(handle, () => ({
@@ -721,14 +735,13 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       type: "FeatureCollection",
       features: [{ type: "Feature", properties: {}, geometry: { type: "Point", coordinates: center } }],
     });
-    const { right, bottom } = insetsRef.current();
+    const { width, height, right, bottom, left } = reservedSpace();
     const visible = map.getBounds();
-    const size = map.getContainer();
     const point = map.project(center);
     const hidden =
-      point.x > size.clientWidth - right - 40 || point.y > size.clientHeight - bottom - 40 || !visible.contains(center);
+      point.x > width - right - 40 || point.x < left + 40 || point.y > height - bottom - 40 || !visible.contains(center);
     if (hidden) {
-      map.easeTo({ center, padding: { top: 0, left: 0, right, bottom }, duration: 400 });
+      map.easeTo({ center, padding: { top: 0, left, right, bottom }, duration: 400 });
     }
   }, [ready, highlight]);
 
