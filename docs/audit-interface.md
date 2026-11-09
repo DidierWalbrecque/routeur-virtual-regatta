@@ -88,15 +88,18 @@ Les idées retenues dans [l'analyse de SERMAR](analyse-ihm-sermar.md) :
 | 1 | Ordres à donner dans le jeu | ✅ | Premier onglet du panneau de route. Un ordre par manœuvre, changement de voile ou de bord, ou écart de TWA (ou de cap) d'au moins 5° tenu au moins 30 min. Choix TWA ou cap mémorisé, copie en texte, clic pour voir où donner l'ordre | `fbf02ff` |
 | 2 | Carte de résultat compacte | ✅ | À la fin d'un calcul, le panneau s'ouvre réduit à l'arrivée, la durée, la distance, les manœuvres et la stamina finale | `fbf02ff` |
 | 3 | Frise temporelle | ⬜ | Même fonction que le rejeu dans le temps (section 8, point 2) | — |
-| 4 | Repères plus lisibles | 🔁 en partie | La légende explique les repères. Restent le cercle du rayon d'arrivée, les portes numérotées dans l'ordre de passage, et des repères S et A | `24266d7` |
+| 4 | Repères plus lisibles | ✅ | Épingles « D » (départ du routage) et « A » (destination), drapeau pour l'arrivée du jeu, icône pour le départ de la course ; le « A » se masque quand il coïncide avec l'arrivée du jeu. Cercle pointillé du rayon d'arrivée fourni par le jeu. Numéro d'ordre de passage au milieu de chaque porte restante. Légende mise à jour | `24266d7`, `d555a6f` |
 | 5 | Contraste terre/mer | ⬜ | Les îles se distinguent mal de la mer sur le fond de nuit | — |
 | 6 | Enregistrer et comparer des routes | ⬜ | Même fonction que la comparaison de routes (section 8, point 4) | — |
 
 ### Prochaines étapes
 
-1. **Repères restants (idée 4)** : cercle du rayon d'arrivée, portes numérotées, repères S et A. Effort faible.
-2. **Contraste terre/mer (idée 5)** : essayer d'abord un réglage du fond de carte, avant une couche de terre dédiée.
-3. **Rejeu dans le temps** puis **comparaison de routes** : les deux plus grosses fonctions restantes.
+1. **Contraste terre/mer (idée 5)** : essayer d'abord un réglage du fond de carte, avant une couche de terre dédiée. Effort faible à moyen.
+2. **Rejeu dans le temps** (idée 3, section 8 point 2) : frise qui fait avancer le bateau et les isochrones.
+3. **Comparaison de routes** (idée 6, section 8 point 4) : enregistrer une route et la superposer à un nouveau calcul.
+4. Puis, dans la section 8 : **vent sur la carte**, **choix d'un point au clic sur la carte** et **historique des calculs**.
+
+**À vérifier dans les données du jeu :** le 9 novembre, la porte n° 1 affichée était P2.2, près des Bahamas, alors que le bateau était déjà à l'est des Antilles. La numérotation suit les portes que le jeu indique comme non passées ; si P2.2 est en réalité franchie, c'est l'information de passage reçue du jeu qu'il faut examiner.
 
 **À vérifier dans le moteur :** sur un calcul d'essai du 9 novembre, la route fait deux empannages en 10 minutes au départ (21:17 puis 21:27). Les ordres affichent fidèlement la route ; c'est probablement un aller-retour inutile du moteur.
 
