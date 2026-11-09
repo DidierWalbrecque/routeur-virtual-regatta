@@ -1972,3 +1972,62 @@ body {
     grid-column: span 2;
   }
 }
+
+/* --- Épingles de la carte : lettre ou icône au centre ---------------------- */
+/* Pas de « position » ici : MapLibre place le repère en position absolue, et
+   la remplacer décale les épingles les unes sous les autres. */
+.map-pin {
+  width: 28px;
+  height: 40px;
+  cursor: default;
+  filter: drop-shadow(0 2px 2px #00000066);
+}
+
+.map-pin svg {
+  display: block;
+}
+
+.map-pin-content {
+  position: absolute;
+  top: 5px;
+  left: 5px;
+  display: grid;
+  width: 18px;
+  height: 18px;
+  place-items: center;
+  font: 800 12px/1 system-ui, sans-serif;
+}
+
+/* La police des icônes doit l'emporter sur celle des lettres, sinon le nom
+   de l'icône s'affiche en clair (« fla » au lieu du drapeau). */
+.map-pin-content.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-size: 15px;
+  font-weight: 600;
+}
+
+/* Épingle miniature de la légende. */
+.legend-pin {
+  position: relative;
+  display: grid;
+  flex: none;
+  width: 18px;
+  place-items: center;
+}
+
+.legend-pin-content {
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  display: grid;
+  width: 9px;
+  height: 9px;
+  place-items: center;
+  font: 800 7px/1 system-ui, sans-serif;
+  transform: translateX(-50%);
+}
+
+.legend-pin-content.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-size: 8px;
+}

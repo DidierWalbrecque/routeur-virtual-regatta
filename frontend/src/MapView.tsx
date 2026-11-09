@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { GeoJSONSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { forwardContour, splitContour } from "./lib/geo.ts";
+import { approximateDistanceNM, circlePolygon, forwardContour, splitContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
 import { checkpointFeatures } from "./lib/vr.ts";
 import { draftFeatureCollection, zonesFeatureCollection, type Zone } from "./lib/zones.ts";
@@ -117,11 +117,37 @@ function elapsedLabel(minutes: number): string {
   return rest ? `+${hours} h ${String(rest).padStart(2, "0")}` : `+${hours} h`;
 }
 
-/** Nom d'un repère pour l'infobulle et les lecteurs d'écran (MapLibre annonce « Map marker »). */
-function nameMarker(marker: Marker, name: string) {
-  const element = marker.getElement();
-  element.title = name;
-  element.setAttribute("aria-label", name);
+/** Couleurs et contenus des épingles, repris par la légende. */
+export const PINS = {
+  departure: { color: "#1971c2", letter: "D", name: "Départ du routage" },
+  destination: { color: "#6741d9", letter: "A", name: "Destination du routage" },
+  gameArrival: { color: "#c2255c", icon: "flag", name: "Arrivée du jeu" },
+  raceStart: { color: "#e8590c", icon: "sports_score", name: "Départ de la course" },
+} as const;
+
+type PinStyle = { color: string; name: string; letter?: string; icon?: string };
+
+/**
+ * Épingle avec une lettre (D, A) ou une icône au centre, à la place de
+ * l'épingle anonyme de MapLibre. Elle porte aussi son nom pour l'infobulle et
+ * les lecteurs d'écran.
+ */
+function pinElement(style: PinStyle): HTMLElement {
+  const element = document.createElement("div");
+  element.className = "map-pin";
+  element.title = style.name;
+  element.setAttribute("role", "img");
+  element.setAttribute("aria-label", style.name);
+  element.innerHTML = `<svg viewBox="0 0 28 40" width="28" height="40" aria-hidden="true">
+    <path d="M14 0C6.3 0 0 6.2 0 13.9 0 24.3 14 40 14 40s14-15.7 14-26.1C28 6.2 21.7 0 14 0z" fill="${style.color}" stroke="#ffffff" stroke-width="1.5"/>
+    <circle cx="14" cy="14" r="9" fill="#ffffff"/>
+  </svg>`;
+  const content = document.createElement("span");
+  content.className = style.icon ? "map-pin-content material-symbols-outlined" : "map-pin-content";
+  content.style.color = style.color;
+  content.textContent = style.icon ?? style.letter ?? "";
+  element.append(content);
+  return element;
 }
 
 function elapsedMinutes(startedAt: string | undefined, instant: string | undefined): number {
@@ -135,6 +161,8 @@ type Props = {
   raceStart?: Point | null;
   /** Arrivée officielle du jeu : marqueur fixe, distinct de la destination de routage. */
   gameArrival?: Point | null;
+  /** Rayon d'arrivée du jeu, en milles nautiques, dessiné autour de l'arrivée. */
+  arrivalRadiusNM?: number | null;
   frame: RouteFrame | null;
   vrState: VrState | undefined;
   /** Zones interdites dessinées par l'utilisateur. */
@@ -158,7 +186,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, raceStart, gameArrival, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, showSeamarks, focusedZoneId, insets, onError },
+  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, showSeamarks, focusedZoneId, insets, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -322,14 +350,27 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
 
       map.on("load", () => {
         if (!map) return;
-        departureMarker.current = new maplibregl.Marker({ color: "#1971c2" })
+        departureMarker.current = new maplibregl.Marker({ element: pinElement(PINS.departure), anchor: "bottom" })
           .setLngLat([DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude])
           .addTo(map);
-        nameMarker(departureMarker.current, "Départ du routage");
-        destinationMarker.current = new maplibregl.Marker({ color: "#6741d9" })
+        destinationMarker.current = new maplibregl.Marker({ element: pinElement(PINS.destination), anchor: "bottom" })
           .setLngLat([DEFAULT_DESTINATION.longitude, DEFAULT_DESTINATION.latitude])
           .addTo(map);
-        nameMarker(destinationMarker.current, "Destination du routage");
+
+        // Rayon d'arrivée du jeu : la course est finie dès qu'on entre dans ce cercle.
+        map.addSource("arrival-radius", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "arrival-radius-fill",
+          type: "fill",
+          source: "arrival-radius",
+          paint: { "fill-color": "#c2255c", "fill-opacity": 0.1 },
+        });
+        map.addLayer({
+          id: "arrival-radius-line",
+          type: "line",
+          source: "arrival-radius",
+          paint: { "line-color": "#f06595", "line-width": 2, "line-dasharray": [3, 2] },
+        });
 
         map.addSource("points", {
           type: "geojson",
@@ -372,20 +413,38 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           type: "circle",
           source: "vr-checkpoints",
           filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "mark"]],
+          // Extrémités de la porte, à la couleur de son sens de passage.
           paint: {
-            "circle-radius": 7,
-            "circle-color": ["match", ["get", "mark"], "start", "#51cf66", "end", "#ff6b6b", "#9775fa"],
+            "circle-radius": 4.5,
+            "circle-color": ["match", ["get", "side"], "stbd", "#51cf66", "port", "#ff922b", "#9775fa"],
             "circle-stroke-color": "#ffffff",
-            "circle-stroke-width": 2,
+            "circle-stroke-width": 1.5,
+          },
+        });
+        // Numéro d'ordre de passage au milieu de la porte (1 = prochaine porte).
+        map.addLayer({
+          id: "vr-checkpoint-order",
+          type: "circle",
+          source: "vr-checkpoints",
+          filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
+          paint: {
+            "circle-radius": 10,
+            "circle-color": "#1d2433",
+            "circle-stroke-color": ["match", ["get", "side"], "stbd", "#51cf66", "port", "#ff922b", "#9775fa"],
+            "circle-stroke-width": 2.5,
           },
         });
         map.addLayer({
-          id: "vr-checkpoint-mark-labels",
+          id: "vr-checkpoint-order-labels",
           type: "symbol",
           source: "vr-checkpoints",
-          filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "mark"]],
-          layout: { "text-field": ["get", "markLabel"], "text-size": 10, "text-allow-overlap": true },
-          paint: { "text-color": "#ffffff", "text-halo-color": "#212529", "text-halo-width": 1 },
+          filter: ["all", ["==", ["geometry-type"], "Point"], ["==", ["get", "kind"], "label"]],
+          layout: {
+            "text-field": ["to-string", ["get", "order"]],
+            "text-size": 12,
+            "text-allow-overlap": true,
+          },
+          paint: { "text-color": "#ffffff" },
         });
         map.addLayer({
           id: "vr-checkpoint-labels",
@@ -398,7 +457,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
             "text-field": ["get", "label"],
             "text-size": 12,
             "text-variable-anchor": ["bottom", "top", "left", "right"],
-            "text-radial-offset": 0.9,
+            "text-radial-offset": 1.4,
             "text-justify": "auto",
             "text-allow-overlap": false,
             "text-padding": 4,
@@ -675,10 +734,9 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       return;
     }
     if (!raceStartMarker.current) {
-      raceStartMarker.current = new api.Marker({ color: "#f59f00" })
+      raceStartMarker.current = new api.Marker({ element: pinElement(PINS.raceStart), anchor: "bottom" })
         .setLngLat([raceStartLon, raceStartLat])
         .addTo(map);
-      nameMarker(raceStartMarker.current, "Départ de la course");
     }
     raceStartMarker.current.setLngLat([raceStartLon, raceStartLat]);
     map.triggerRepaint();
@@ -697,14 +755,49 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       return;
     }
     if (!gameArrivalMarker.current) {
-      gameArrivalMarker.current = new api.Marker({ color: "#c2255c" })
+      gameArrivalMarker.current = new api.Marker({ element: pinElement(PINS.gameArrival), anchor: "bottom" })
         .setLngLat([gameArrivalLon, gameArrivalLat])
         .addTo(map);
-      nameMarker(gameArrivalMarker.current, "Arrivée du jeu");
     }
     gameArrivalMarker.current.setLngLat([gameArrivalLon, gameArrivalLat]);
     map.triggerRepaint();
   }, [ready, gameArrivalLat, gameArrivalLon]);
+
+  // Quand la destination du routage est l'arrivée du jeu, une seule épingle
+  // suffit : le drapeau de l'arrivée masque le « A ».
+  const destinationLat = endpoints.destination.latitude;
+  const destinationLon = endpoints.destination.longitude;
+  useEffect(() => {
+    if (!ready) return;
+    const element = destinationMarker.current?.getElement();
+    if (!element) return;
+    const sameAsArrival =
+      gameArrivalLat !== undefined &&
+      gameArrivalLon !== undefined &&
+      approximateDistanceNM(
+        { latitude: destinationLat, longitude: destinationLon },
+        { latitude: gameArrivalLat, longitude: gameArrivalLon },
+      ) < 0.1;
+    element.style.visibility = sameAsArrival ? "hidden" : "";
+  }, [ready, destinationLat, destinationLon, gameArrivalLat, gameArrivalLon]);
+
+  // Cercle du rayon d'arrivée, quand le jeu le fournit.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    if (gameArrivalLat === undefined || gameArrivalLon === undefined || !arrivalRadiusNM || arrivalRadiusNM <= 0) {
+      setData(map, "arrival-radius", EMPTY);
+      return;
+    }
+    const ring = circlePolygon({ latitude: gameArrivalLat, longitude: gameArrivalLon }, arrivalRadiusNM).map((point) => [
+      point.longitude,
+      point.latitude,
+    ]);
+    setData(map, "arrival-radius", {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: { type: "Polygon", coordinates: [ring] } }],
+    });
+  }, [ready, gameArrivalLat, gameArrivalLon, arrivalRadiusNM]);
 
   // Portes Virtual Regatta.
   useEffect(() => {

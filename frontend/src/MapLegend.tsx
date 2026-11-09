@@ -1,15 +1,23 @@
+import { PINS } from "./MapView.tsx";
+
 type Props = {
   showSeamarks: boolean;
   onSeamarks: (visible: boolean) => void;
   onClose: () => void;
 };
 
-function Pin({ color }: { color: string }) {
+/** Épingle de la carte en miniature, avec sa lettre ou son icône. */
+function Pin({ pin }: { pin: { color: string; letter?: string; icon?: string } }) {
   return (
-    <svg className="legend-symbol" viewBox="0 0 16 22" aria-hidden="true">
-      <path d="M8 0C3.6 0 0 3.6 0 8c0 6 8 14 8 14s8-8 8-14c0-4.4-3.6-8-8-8z" fill={color} />
-      <circle cx="8" cy="8" r="3" fill="#ffffff" />
-    </svg>
+    <span className="legend-pin" aria-hidden="true">
+      <svg viewBox="0 0 28 40" width="14" height="20">
+        <path d="M14 0C6.3 0 0 6.2 0 13.9 0 24.3 14 40 14 40s14-15.7 14-26.1C28 6.2 21.7 0 14 0z" fill={pin.color} />
+        <circle cx="14" cy="14" r="9" fill="#ffffff" />
+      </svg>
+      <span className={pin.icon ? "legend-pin-content material-symbols-outlined" : "legend-pin-content"} style={{ color: pin.color }}>
+        {pin.icon ?? pin.letter}
+      </span>
+    </span>
   );
 }
 
@@ -21,13 +29,23 @@ function Line({ color, dashed = false, width = 3 }: { color: string; dashed?: bo
   );
 }
 
-function Mark({ color, letter }: { color: string; letter: string }) {
+/** Numéro d'ordre d'une porte, tel qu'il apparaît au milieu de la porte. */
+function OrderBadge() {
   return (
     <svg className="legend-symbol" viewBox="0 0 16 16" aria-hidden="true">
-      <circle cx="8" cy="8" r="6.5" fill={color} stroke="#ffffff" strokeWidth="1.5" />
-      <text x="8" y="11" textAnchor="middle" fontSize="8" fill="#ffffff" fontFamily="system-ui, sans-serif">
-        {letter}
+      <circle cx="8" cy="8" r="6.5" fill="#1d2433" stroke="#51cf66" strokeWidth="2" />
+      <text x="8" y="11" textAnchor="middle" fontSize="8.5" fontWeight="700" fill="#ffffff" fontFamily="system-ui, sans-serif">
+        1
       </text>
+    </svg>
+  );
+}
+
+/** Cercle pointillé du rayon d'arrivée. */
+function RadiusCircle() {
+  return (
+    <svg className="legend-symbol" viewBox="0 0 16 16" aria-hidden="true">
+      <circle cx="8" cy="8" r="6.5" fill="#c2255c" fillOpacity="0.15" stroke="#f06595" strokeWidth="1.5" strokeDasharray="2.5 2" />
     </svg>
   );
 }
@@ -54,16 +72,19 @@ export function MapLegend({ showSeamarks, onSeamarks, onClose }: Props) {
       </div>
       <ul>
         <li>
-          <Pin color="#1971c2" /> Départ du routage (bateau)
+          <Pin pin={PINS.departure} /> Départ du routage (bateau)
         </li>
         <li>
-          <Pin color="#6741d9" /> Destination du routage
+          <Pin pin={PINS.destination} /> Destination du routage
         </li>
         <li>
-          <Pin color="#c2255c" /> Arrivée du jeu
+          <Pin pin={PINS.gameArrival} /> Arrivée du jeu
         </li>
         <li>
-          <Pin color="#f59f00" /> Départ de la course
+          <RadiusCircle /> Rayon d'arrivée du jeu
+        </li>
+        <li>
+          <Pin pin={PINS.raceStart} /> Départ de la course
         </li>
         <li>
           <Line color="#51cf66" /> Porte à laisser à tribord
@@ -75,7 +96,7 @@ export function MapLegend({ showSeamarks, onSeamarks, onClose }: Props) {
           <Line color="#9775fa" dashed /> Porte à passer dans les deux sens
         </li>
         <li>
-          <Mark color="#51cf66" letter="D" /> <Mark color="#ff6b6b" letter="A" /> Extrémités d'une porte
+          <OrderBadge /> Ordre de passage (1 = prochaine porte)
         </li>
         <li>
           <Line color="#f59f00" width={4} /> Route calculée

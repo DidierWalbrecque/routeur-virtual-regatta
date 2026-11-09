@@ -70,6 +70,11 @@ export type MapFeature = {
   geometry: { type: "LineString"; coordinates: number[][] } | { type: "Point"; coordinates: number[] };
 };
 
+/**
+ * Portes encore à passer, pour la carte : la ligne de la porte, son nom et son
+ * numéro d'ordre de passage (1 = prochaine porte) au milieu, et ses deux
+ * extrémités.
+ */
 export function checkpointFeatures(state: VrState | undefined): MapFeature[] {
   return usableCheckpoints(state).flatMap((checkpoint, index): MapFeature[] => {
     const { start, end } = checkpoint;
@@ -86,6 +91,7 @@ export function checkpointFeatures(state: VrState | undefined): MapFeature[] {
       side,
       sideLabel,
       rhumb: checkpoint.rhumb === true,
+      order: index + 1,
     };
     const midpoint = [
       (Number(start.longitude) + Number(end.longitude)) / 2,
@@ -110,12 +116,12 @@ export function checkpointFeatures(state: VrState | undefined): MapFeature[] {
       },
       {
         type: "Feature",
-        properties: { ...properties, kind: "mark", mark: "start", markLabel: "D" },
+        properties: { ...properties, kind: "mark", mark: "start" },
         geometry: { type: "Point", coordinates: [Number(start.longitude), Number(start.latitude)] },
       },
       {
         type: "Feature",
-        properties: { ...properties, kind: "mark", mark: "end", markLabel: "A" },
+        properties: { ...properties, kind: "mark", mark: "end" },
         geometry: { type: "Point", coordinates: [Number(end.longitude), Number(end.latitude)] },
       },
     ];

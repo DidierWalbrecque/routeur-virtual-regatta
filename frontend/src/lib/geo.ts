@@ -122,3 +122,19 @@ export function forwardContour(ring: Point[], direction: { x: number; y: number 
   }
   return arc;
 }
+
+/** Cercle de rayon donné (en milles nautiques) autour d'un point, fermé, pour le dessiner sur la carte. */
+export function circlePolygon(center: Point, radiusNM: number, steps = 64): Point[] {
+  const latitudeRadians = center.latitude * (Math.PI / 180);
+  const degreesLatitude = radiusNM / 60;
+  const degreesLongitude = radiusNM / (60 * Math.max(0.01, Math.cos(latitudeRadians)));
+  const points: Point[] = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const angle = (step / steps) * 2 * Math.PI;
+    points.push({
+      latitude: center.latitude + degreesLatitude * Math.cos(angle),
+      longitude: center.longitude + degreesLongitude * Math.sin(angle),
+    });
+  }
+  return points;
+}
