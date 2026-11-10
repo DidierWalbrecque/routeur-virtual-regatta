@@ -66,6 +66,19 @@ func loadCachedWeatherProvider(paths ...string) (weather.WeatherProvider, cacheL
 
 	grids := make([]weather.GRIB2WindGrid, 0, len(paths))
 	stats := cacheLoadStats{}
+	requested := make(map[string]struct{}, len(paths))
+	for _, path := range paths {
+		requested[filepath.Clean(path)] = struct{}{}
+	}
+	// Les échéances hors de ce calcul (anciens runs, autre fenêtre) quittent le
+	// cache avant tout chargement : la mémoire reste bornée par le calcul en
+	// cours au lieu de croître à chaque run GFS. Un calcul déjà lancé garde ses
+	// propres références aux grilles.
+	for key := range routeDataCache.grids {
+		if _, keep := requested[key]; !keep {
+			delete(routeDataCache.grids, key)
+		}
+	}
 	for _, path := range paths {
 		key, signature, err := cachedFileSignature(path)
 		if err != nil {

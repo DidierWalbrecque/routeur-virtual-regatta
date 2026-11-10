@@ -377,6 +377,14 @@ func runPracticalHeadings(
 	// complet précédent prend le relais au-delà de ses échéances disponibles.
 	weatherStatus := gribWatcher.Status()
 	weatherFiles, weatherSwitch := blendLatestGRIB(payload.WeatherFiles, weatherStatus)
+	// Seules les échéances couvrant le calcul sont chargées : un run GFS complet
+	// (129 échéances) ne tient pas dans la mémoire d'un petit serveur. Le pas
+	// demandé s'ajoute à la fenêtre : la dernière couche peut le dépasser.
+	weatherWindow := requestedDuration
+	if requestedStep := time.Duration(payload.StepMinutes * float64(time.Minute)); requestedStep > 0 {
+		weatherWindow += requestedStep
+	}
+	weatherFiles = gribFilesForWindow(weatherFiles, instant, weatherWindow)
 	weatherStarted := time.Now()
 	weatherProvider, weatherStats, err := loadWeatherProviderForRequest(weatherFiles...)
 	weatherMilliseconds := elapsedMilliseconds(weatherStarted)
