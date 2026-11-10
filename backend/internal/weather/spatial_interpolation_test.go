@@ -73,10 +73,10 @@ func TestGRIB2WindGridComponentsAtConvertsWestLongitudeToNOAA(t *testing.T) {
 		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
 		Width:      2,
 		Height:     1,
-		Latitudes:  []float64{13, 13},
+		Latitudes:  []float64{13},
 		Longitudes: []float64{230, 240},
-		U:          []float64{10, 20},
-		V:          []float64{-10, -20},
+		U:          []float32{10, 20},
+		V:          []float32{-10, -20},
 	}
 
 	u, v, err := grid.ComponentsAt(navigation.Position{
@@ -96,10 +96,10 @@ func TestGRIB2WindGridComponentsAtUnwrapsLongitudeDiscontinuity(t *testing.T) {
 		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
 		Width:      4,
 		Height:     1,
-		Latitudes:  []float64{0, 0, 0, 0},
+		Latitudes:  []float64{0},
 		Longitudes: []float64{0, 90, -180, -90},
-		U:          []float64{0, 1, 2, 3},
-		V:          []float64{10, 11, 12, 13},
+		U:          []float32{0, 1, 2, 3},
+		V:          []float32{10, 11, 12, 13},
 	}
 
 	u, v, err := grid.ComponentsAt(navigation.Position{
@@ -119,10 +119,10 @@ func TestGRIB2WindGridComponentsAtWrapsGlobalLongitude(t *testing.T) {
 		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
 		Width:      4,
 		Height:     1,
-		Latitudes:  []float64{0, 0, 0, 0},
+		Latitudes:  []float64{0},
 		Longitudes: []float64{0, 90, 180, 270},
-		U:          []float64{0, 0, 0, 4},
-		V:          []float64{2, 2, 2, 6},
+		U:          []float32{0, 0, 0, 4},
+		V:          []float32{2, 2, 2, 6},
 	}
 
 	u, v, err := grid.ComponentsAt(navigation.Position{
@@ -142,10 +142,10 @@ func TestGRIB2WindGridWindAtPosition(t *testing.T) {
 		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
 		Width:      2,
 		Height:     2,
-		Latitudes:  []float64{10, 10, 0, 0},
-		Longitudes: []float64{120, 130, 120, 130},
-		U:          []float64{-3, -3, -3, -3},
-		V:          []float64{-4, -4, -4, -4},
+		Latitudes:  []float64{10, 0},
+		Longitudes: []float64{120, 130},
+		U:          []float32{-3, -3, -3, -3},
+		V:          []float32{-4, -4, -4, -4},
 	}
 
 	wind, err := grid.WindAtPosition(navigation.Position{
@@ -211,8 +211,7 @@ func TestGRIB2WindGridComponentsAtRejectsInvalidInputs(t *testing.T) {
 			name: "latitudes non décroissantes",
 			grid: func() GRIB2WindGrid {
 				grid := spatialTestGrid()
-				grid.Latitudes[2] = 20
-				grid.Latitudes[3] = 20
+				grid.Latitudes[1] = 20
 				return grid
 			}(),
 			position: navigation.Position{
@@ -226,7 +225,6 @@ func TestGRIB2WindGridComponentsAtRejectsInvalidInputs(t *testing.T) {
 			grid: func() GRIB2WindGrid {
 				grid := spatialTestGrid()
 				grid.Longitudes[1] = 110
-				grid.Longitudes[3] = 110
 				return grid
 			}(),
 			position: navigation.Position{
@@ -255,10 +253,10 @@ func spatialTestGrid() GRIB2WindGrid {
 		ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
 		Width:      2,
 		Height:     2,
-		Latitudes:  []float64{10, 10, 0, 0},
-		Longitudes: []float64{120, 130, 120, 130},
-		U:          []float64{0, 10, 20, 30},
-		V:          []float64{100, 110, 120, 130},
+		Latitudes:  []float64{10, 0},
+		Longitudes: []float64{120, 130},
+		U:          []float32{0, 10, 20, 30},
+		V:          []float32{100, 110, 120, 130},
 	}
 }
 

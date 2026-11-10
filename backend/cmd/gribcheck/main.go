@@ -233,10 +233,11 @@ func parseOptions(args []string) (options, error) {
 	return result, nil
 }
 
-func minMax(values []float64) (float64, float64) {
+func minMax(values []float32) (float64, float64) {
 	minimum := math.Inf(1)
 	maximum := math.Inf(-1)
-	for _, value := range values {
+	for _, stored := range values {
+		value := float64(stored)
 		if value < minimum {
 			minimum = value
 		}

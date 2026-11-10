@@ -90,12 +90,12 @@ func TestGRIB2WeatherProviderCombinesSpatialAndTemporalInterpolation(
 	second := first.Add(3 * time.Hour)
 
 	before := temporalTestGrid(first, 0, 10)
-	before.U = []float64{0, 10, 20, 30}
-	before.V = []float64{10, 20, 30, 40}
+	before.U = []float32{0, 10, 20, 30}
+	before.V = []float32{10, 20, 30, 40}
 
 	after := temporalTestGrid(second, 40, 50)
-	after.U = []float64{40, 50, 60, 70}
-	after.V = []float64{50, 60, 70, 80}
+	after.U = []float32{40, 50, 60, 70}
+	after.V = []float32{50, 60, 70, 80}
 
 	provider, err := NewGRIB2WeatherProvider(before, after)
 	if err != nil {
@@ -279,16 +279,16 @@ func TestLoadGRIB2WeatherProviderRequiresFiles(t *testing.T) {
 func temporalTestGrid(
 	at time.Time,
 	u,
-	v float64,
+	v float32,
 ) GRIB2WindGrid {
 	return GRIB2WindGrid{
 		ValidAt:    at,
 		Width:      2,
 		Height:     2,
-		Latitudes:  []float64{10, 10, 0, 0},
-		Longitudes: []float64{120, 130, 120, 130},
-		U:          []float64{u, u, u, u},
-		V:          []float64{v, v, v, v},
+		Latitudes:  []float64{10, 0},
+		Longitudes: []float64{120, 130},
+		U:          []float32{u, u, u, u},
+		V:          []float32{v, v, v, v},
 	}
 }
 

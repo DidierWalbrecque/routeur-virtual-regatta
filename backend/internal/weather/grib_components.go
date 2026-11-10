@@ -31,16 +31,22 @@ const (
 // GRIB2WindGrid contient les composantes U et V à 10 mètres d'une échéance
 // NOAA, alignées sur une même grille régulière.
 //
-// Les composantes sont exprimées en mètres par seconde. Les tableaux sont
-// rangés ligne par ligne, du nord-ouest vers le sud-est.
+// Les composantes sont exprimées en mètres par seconde. U et V sont rangés
+// ligne par ligne, du nord-ouest vers le sud-est. La grille étant régulière,
+// seuls ses axes sont conservés : Latitudes contient une valeur par ligne
+// (Height valeurs) et Longitudes une valeur par colonne (Width valeurs), ce qui
+// évite de garder deux coordonnées par point en mémoire. U et V sont stockés
+// en float32 : leur précision (environ 7 chiffres significatifs) dépasse
+// largement celle des valeurs GFS, codées au dixième de m/s près, et divise
+// par deux la mémoire occupée par chaque échéance.
 type GRIB2WindGrid struct {
 	ValidAt    time.Time
 	Width      int
 	Height     int
 	Latitudes  []float64
 	Longitudes []float64
-	U          []float64
-	V          []float64
+	U          []float32
+	V          []float32
 }
 
 // Validate vérifie que les coordonnées et les composantes décrivent toutes la
@@ -62,12 +68,24 @@ func (grid GRIB2WindGrid) Validate() error {
 	}
 
 	expected := grid.Width * grid.Height
+	if len(grid.Latitudes) != grid.Height {
+		return fmt.Errorf(
+			"weather: axe des latitudes de longueur %d, attendu %d (une par ligne)",
+			len(grid.Latitudes),
+			grid.Height,
+		)
+	}
+	if len(grid.Longitudes) != grid.Width {
+		return fmt.Errorf(
+			"weather: axe des longitudes de longueur %d, attendu %d (une par colonne)",
+			len(grid.Longitudes),
+			grid.Width,
+		)
+	}
 	lengths := []struct {
 		name   string
 		length int
 	}{
-		{name: "latitudes", length: len(grid.Latitudes)},
-		{name: "longitudes", length: len(grid.Longitudes)},
 		{name: "composante U", length: len(grid.U)},
 		{name: "composante V", length: len(grid.V)},
 	}
@@ -84,33 +102,34 @@ func (grid GRIB2WindGrid) Validate() error {
 		}
 	}
 
+	for row, latitude := range grid.Latitudes {
+		if !finite(latitude) || latitude < -90 || latitude > 90 {
+			return fmt.Errorf(
+				"weather: latitude invalide à la ligne %d: %v",
+				row,
+				latitude,
+			)
+		}
+	}
+	for column, longitude := range grid.Longitudes {
+		if !finite(longitude) || longitude < -180 || longitude >= 360 {
+			return fmt.Errorf(
+				"weather: longitude invalide à la colonne %d: %v",
+				column,
+				longitude,
+			)
+		}
+	}
+
 	for index := range expected {
-		if !finite(grid.Latitudes[index]) ||
-			grid.Latitudes[index] < -90 ||
-			grid.Latitudes[index] > 90 {
-			return fmt.Errorf(
-				"weather: latitude invalide au point %d: %v",
-				index,
-				grid.Latitudes[index],
-			)
-		}
-		if !finite(grid.Longitudes[index]) ||
-			grid.Longitudes[index] < -180 ||
-			grid.Longitudes[index] >= 360 {
-			return fmt.Errorf(
-				"weather: longitude invalide au point %d: %v",
-				index,
-				grid.Longitudes[index],
-			)
-		}
-		if !finite(grid.U[index]) {
+		if !finite(float64(grid.U[index])) {
 			return fmt.Errorf(
 				"weather: composante U invalide au point %d: %v",
 				index,
 				grid.U[index],
 			)
 		}
-		if !finite(grid.V[index]) {
+		if !finite(float64(grid.V[index])) {
 			return fmt.Errorf(
 				"weather: composante V invalide au point %d: %v",
 				index,
@@ -213,8 +232,21 @@ func LoadGRIB2WindGrid(path string) (GRIB2WindGrid, error) {
 			}
 			grid.Width = gridDefinition.XVals()
 			grid.Height = gridDefinition.YVals()
-			grid.Latitudes = points.Lats
-			grid.Longitudes = points.Lngs
+			latitudes, longitudes, err := regularGridAxes(
+				points.Lats,
+				points.Lngs,
+				grid.Width,
+				grid.Height,
+			)
+			if err != nil {
+				return GRIB2WindGrid{}, fmt.Errorf(
+					"weather: grille du message GRIB2 %d non régulière: %w",
+					indexed.MessageNumber,
+					err,
+				)
+			}
+			grid.Latitudes = latitudes
+			grid.Longitudes = longitudes
 		} else {
 			if !header.Start.Equal(grid.ValidAt) {
 				return GRIB2WindGrid{}, fmt.Errorf(
@@ -255,12 +287,21 @@ func LoadGRIB2WindGrid(path string) (GRIB2WindGrid, error) {
 			)
 		}
 
+		compact, err := windComponentToFloat32(values)
+		if err != nil {
+			return GRIB2WindGrid{}, fmt.Errorf(
+				"weather: valeurs du message GRIB2 %d invalides: %w",
+				indexed.MessageNumber,
+				err,
+			)
+		}
+
 		switch component {
 		case windComponentU:
-			grid.U = values
+			grid.U = compact
 			foundU = true
 		case windComponentV:
-			grid.V = values
+			grid.V = compact
 			foundV = true
 		}
 	}
@@ -280,6 +321,91 @@ func LoadGRIB2WindGrid(path string) (GRIB2WindGrid, error) {
 	}
 
 	return grid, nil
+}
+
+// windComponentToFloat32 convertit une composante de vent décodée en float64
+// vers le stockage compact en float32. Une valeur non finie ou trop grande
+// pour un float32 est refusée plutôt que transformée en infini.
+func windComponentToFloat32(values []float64) ([]float32, error) {
+	compact := make([]float32, len(values))
+	for index, value := range values {
+		if !finite(value) || math.Abs(value) > math.MaxFloat32 {
+			return nil, fmt.Errorf(
+				"composante non représentable au point %d: %v",
+				index,
+				value,
+			)
+		}
+		compact[index] = float32(value)
+	}
+	return compact, nil
+}
+
+// regularGridAxesTolerance borne l'écart admis, en degrés, entre la
+// coordonnée d'un point et celle de l'axe de sa ligne ou de sa colonne.
+const regularGridAxesTolerance = 1e-6
+
+// regularGridAxes réduit les coordonnées point par point d'une grille régulière
+// à ses deux axes : la latitude de chaque ligne et la longitude de chaque
+// colonne. Elle échoue si un point s'écarte de l'axe de sa ligne ou de sa
+// colonne, car l'interpolation suppose une grille régulière.
+func regularGridAxes[T float32 | float64](
+	pointLatitudes, pointLongitudes []T,
+	width, height int,
+) ([]float64, []float64, error) {
+	if width <= 0 || height <= 0 {
+		return nil, nil, fmt.Errorf("dimensions invalides: %dx%d", width, height)
+	}
+	maxInt := int(^uint(0) >> 1)
+	if width > maxInt/height {
+		return nil, nil, fmt.Errorf("dimensions trop grandes")
+	}
+	expected := width * height
+	if len(pointLatitudes) != expected || len(pointLongitudes) != expected {
+		return nil, nil, fmt.Errorf(
+			"%d latitudes et %d longitudes, attendu %d pour une grille %dx%d",
+			len(pointLatitudes),
+			len(pointLongitudes),
+			expected,
+			width,
+			height,
+		)
+	}
+
+	latitudes := make([]float64, height)
+	for row := range height {
+		latitudes[row] = float64(pointLatitudes[row*width])
+	}
+	longitudes := make([]float64, width)
+	for column := range width {
+		longitudes[column] = float64(pointLongitudes[column])
+	}
+
+	for row := range height {
+		for column := range width {
+			index := row*width + column
+			if math.Abs(float64(pointLatitudes[index])-latitudes[row]) > regularGridAxesTolerance {
+				return nil, nil, fmt.Errorf(
+					"latitude %v au point %d, attendu %v pour la ligne %d",
+					pointLatitudes[index],
+					index,
+					latitudes[row],
+					row,
+				)
+			}
+			if math.Abs(float64(pointLongitudes[index])-longitudes[column]) > regularGridAxesTolerance {
+				return nil, nil, fmt.Errorf(
+					"longitude %v au point %d, attendu %v pour la colonne %d",
+					pointLongitudes[index],
+					index,
+					longitudes[column],
+					column,
+				)
+			}
+		}
+	}
+
+	return latitudes, longitudes, nil
 }
 
 func classifyTenMeterWind(
