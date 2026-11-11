@@ -1,34 +1,9 @@
 import { PINS } from "./MapView.tsx";
 import { gateRingSvg, type GateRounding } from "./lib/gate_marker.ts";
-import { BEAUFORT } from "./lib/beaufort.ts";
-
-// Curseur d'heure du vent : jusqu'à 10 jours, au-delà la prévision GFS n'est qu'indicative.
-const WIND_MAX_HOURS = 240;
 
 type Props = {
-  showSeamarks: boolean;
-  onSeamarks: (visible: boolean) => void;
-  /** Vent coloré : affiché ou non, heure d'origine (ms) et décalage en heures. */
-  wind: { visible: boolean; base: number; hours: number };
-  onWindVisible: (visible: boolean) => void;
-  onWindHours: (hours: number) => void;
   onClose: () => void;
 };
-
-const WIND_TIME_FORMAT = new Intl.DateTimeFormat("fr-FR", {
-  weekday: "short",
-  day: "2-digit",
-  month: "2-digit",
-  hour: "2-digit",
-  minute: "2-digit",
-});
-
-/** Bornes en nœuds d'une force, pour l'infobulle de l'échelle. */
-function beaufortRange(force: number): string {
-  const from = force === 0 ? 0 : BEAUFORT[force - 1].below;
-  const to = BEAUFORT[force].below;
-  return Number.isFinite(to) ? `${from} à ${to - 1} nœuds` : `${from} nœuds et plus`;
-}
 
 /** Épingle de la carte en miniature, avec sa lettre ou son icône. */
 function Pin({ pin }: { pin: { color: string; letter?: string; icon?: string } }) {
@@ -85,7 +60,7 @@ function Swatch({ color }: { color: string }) {
 }
 
 /** Légende des repères et des couleurs de la carte. */
-export function MapLegend({ showSeamarks, onSeamarks, wind, onWindVisible, onWindHours, onClose }: Props) {
+export function MapLegend({ onClose }: Props) {
   return (
     <aside id="map-legend" className="map-legend floating-card" aria-labelledby="map-legend-title">
       <div className="map-legend-head">
@@ -146,42 +121,6 @@ export function MapLegend({ showSeamarks, onSeamarks, wind, onWindVisible, onWin
           <Line color="#f783ac" /> Trace GPX importée
         </li>
       </ul>
-      <label className="switch map-legend-switch">
-        <input type="checkbox" checked={showSeamarks} onChange={(event) => onSeamarks(event.target.checked)} />
-        <span className="switch-track" aria-hidden="true" />
-        Balisage OpenSeaMap (à partir du zoom 9)
-      </label>
-      <label className="switch map-legend-switch">
-        <input type="checkbox" checked={wind.visible} onChange={(event) => onWindVisible(event.target.checked)} />
-        <span className="switch-track" aria-hidden="true" />
-        Vent (échelle de Beaufort)
-      </label>
-      {wind.visible && (
-        <div className="wind-legend">
-          <label className="wind-time">
-            <span>
-              {WIND_TIME_FORMAT.format(new Date(wind.base + wind.hours * 3_600_000))}
-              <span className="wind-time-offset">{wind.hours === 0 ? "maintenant" : `+${wind.hours} h`}</span>
-            </span>
-            <input
-              type="range"
-              min={0}
-              max={WIND_MAX_HOURS}
-              step={1}
-              value={wind.hours}
-              aria-label="Heure du vent affiché"
-              onChange={(event) => onWindHours(Number(event.target.value))}
-            />
-          </label>
-          <ol className="beaufort-scale" aria-label="Échelle de Beaufort">
-            {BEAUFORT.map((level) => (
-              <li key={level.force} style={{ background: level.color }} title={`Force ${level.force} · ${level.label} · ${beaufortRange(level.force)}`}>
-                {level.force}
-              </li>
-            ))}
-          </ol>
-        </div>
-      )}
     </aside>
   );
 }

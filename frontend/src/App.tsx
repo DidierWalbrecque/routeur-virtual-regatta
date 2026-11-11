@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type GpxOverlay, type MapInsets, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
 import { CalculationStatus } from "./CalculationStatus.tsx";
+import { WindCard } from "./WindCard.tsx";
 import { MapLegend } from "./MapLegend.tsx";
 import { RouteDetailsPanel } from "./RouteDetailsPanel.tsx";
 import { RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
@@ -31,7 +32,6 @@ import {
 import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
-const SEAMARKS_STORAGE_KEY = "routeur.showSeamarks";
 const WIND_STORAGE_KEY = "routeur.showWind";
 
 /** Début de l'heure en cours : origine du curseur d'heure du vent. */
@@ -44,7 +44,7 @@ const LEGEND_STORAGE_KEY = "routeur.legendOpen";
 // Panneaux posés à droite de la carte : un seul ouvert à la fois.
 const RIGHT_PANEL_IDS = ["route-form-panel", "zones-panel", "route-details-panel"];
 
-/** Écran étroit (téléphone) : l'encart météo démarre replié. */
+/** Écran étroit (téléphone) : la légende démarre fermée. */
 function isNarrowScreen(): boolean {
   try {
     return window.matchMedia("(max-width: 600px)").matches;
@@ -225,13 +225,6 @@ export function App() {
   const [windBase, setWindBase] = useState(currentHour);
   const [windHours, setWindHours] = useState(0);
   const [showRoutePoints, setShowRoutePoints] = useState(true);
-  const [showSeamarks, setShowSeamarks] = useState(() => {
-    try {
-      return window.localStorage.getItem(SEAMARKS_STORAGE_KEY) !== "false";
-    } catch {
-      return true;
-    }
-  });
   // Légende ouverte par défaut sur ordinateur, fermée sur téléphone ; le
   // dernier choix de l'utilisateur est ensuite conservé.
   const [legendOpen, setLegendOpen] = useState(() => {
@@ -243,7 +236,8 @@ export function App() {
     }
     return !isNarrowScreen();
   });
-  const [weatherCollapsed, setWeatherCollapsed] = useState(isNarrowScreen);
+  // L'encart météo démarre replié en pastille ; un clic l'ouvre en entier.
+  const [weatherCollapsed, setWeatherCollapsed] = useState(true);
   const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Point[] | null>(null);
   const [gpx, setGpx] = useState<{ name: string; count: number; overlay: GpxOverlay } | null>(null);
@@ -348,14 +342,6 @@ export function App() {
       // Stockage indisponible : les zones restent valables pour la session.
     }
   }, [zones]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem(SEAMARKS_STORAGE_KEY, String(showSeamarks));
-    } catch {
-      // Stockage indisponible : le choix reste valable pour la session.
-    }
-  }, [showSeamarks]);
 
   useEffect(() => {
     try {
@@ -900,7 +886,6 @@ export function App() {
         gpx={gpx?.overlay ?? null}
         onDraftClick={onDraftClick}
         showRoutePoints={showRoutePoints}
-        showSeamarks={showSeamarks}
         windTime={showWind ? new Date(windBase + windHours * 3_600_000).toISOString() : null}
         focusedZoneId={focusedZoneId}
         insets={mapInsets}
@@ -947,13 +932,9 @@ export function App() {
         </div>
       )}
       <div id="map-corner" className="map-corner">
+        {showWind && <WindCard base={windBase} hours={windHours} onHours={setWindHours} onClose={() => setShowWind(false)} />}
         {legendOpen && (
           <MapLegend
-            showSeamarks={showSeamarks}
-            onSeamarks={setShowSeamarks}
-            wind={{ visible: showWind, base: windBase, hours: windHours }}
-            onWindVisible={setShowWind}
-            onWindHours={setWindHours}
             onClose={() => setLegendOpen(false)}
           />
         )}
@@ -987,6 +968,19 @@ export function App() {
           onClick={() => setShowRoutePoints((value) => !value)}
         >
           <MaterialIcon name="scatter_plot" />
+        </button>
+        <button
+          id="toggle-wind"
+          className={showWind ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Afficher le vent"
+          aria-pressed={showWind}
+          data-tooltip="Vent (échelle de Beaufort)"
+          onClick={() => {
+            setShowWind((value) => !value);
+          }}
+        >
+          <MaterialIcon name="air" />
         </button>
         <hr />
         <button

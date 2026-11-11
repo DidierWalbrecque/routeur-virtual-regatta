@@ -232,8 +232,6 @@ type Props = {
   onDraftClick: (point: Point, closing: boolean) => void;
   /** Afficher les points d'étape de la route. */
   showRoutePoints: boolean;
-  /** Afficher le balisage OpenSeaMap (phares, bouées). */
-  showSeamarks: boolean;
   /** Instant (ISO) du vent à colorer selon l'échelle de Beaufort, ou null pour masquer. */
   windTime: string | null;
   /** Zone mise en évidence depuis la liste des zones, ou null. */
@@ -244,7 +242,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, showSeamarks, windTime, focusedZoneId, insets, onError },
+  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, windTime, focusedZoneId, insets, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -296,12 +294,6 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", visibility);
     }
   }, [showRoutePoints, ready]);
-
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !ready || !map.getLayer("seamarks")) return;
-    map.setLayoutProperty("seamarks", "visibility", showSeamarks ? "visible" : "none");
-  }, [showSeamarks, ready]);
 
   // Fond coloré selon la force du vent (Beaufort), recalculé pour la zone
   // affichée à chaque déplacement de la carte.
@@ -488,7 +480,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
                 "line-dasharray": [4, 3],
               },
             },
-            // Atténué pour ne pas rivaliser avec la route ; masquable depuis la légende.
+            // Atténué pour ne pas rivaliser avec la route.
             { id: "seamarks", type: "raster", source: "seamarks", minzoom: 9, paint: { "raster-opacity": 0.6 } },
           ],
         },
