@@ -183,6 +183,9 @@ type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
 	Positions []positionRequest `json:"positions"`
 	Contour   []positionRequest `json:"contour"`
+	// ContourBreaks : indices i des côtés contour[i] -> contour[i+1] qui
+	// traversent une terre ou une zone interdite.
+	ContourBreaks []int `json:"contourBreaks"`
 }
 type routePointResponse struct {
 	Position positionRequest `json:"position"`
@@ -609,7 +612,7 @@ func runPracticalHeadings(
 		frontierResponses := make(map[int]isochroneFrontierResponse, layerCount)
 		if stream != nil {
 			progressReporter = func(progress routing.IsochroneProgress) {
-				frontier, frontierErr := isochroneFrontierResponseFor(position, progress.Frontier)
+				frontier, frontierErr := isochroneFrontierResponseFor(calculationContext, position, progress.Frontier, arrivalConstraints)
 				if frontierErr != nil {
 					streamCallbackError = frontierErr
 					cancelCalculation()
@@ -620,6 +623,7 @@ func runPracticalHeadings(
 					Instant:            frontier.Instant.Format(time.RFC3339Nano),
 					Positions:          frontier.Positions,
 					Contour:            frontier.Contour,
+					ContourBreaks:      frontier.ContourBreaks,
 					CompletedLayers:    progress.CompletedLayers,
 					TotalLayers:        progress.TotalLayers,
 					Progress:           float64(progress.CompletedLayers) / float64(progress.TotalLayers),
@@ -664,7 +668,7 @@ func runPracticalHeadings(
 		for _, frontier := range search.Frontiers {
 			layer, exists := frontierResponses[frontier.Index]
 			if !exists {
-				layer, err = isochroneFrontierResponseFor(position, frontier)
+				layer, err = isochroneFrontierResponseFor(calculationContext, position, frontier, arrivalConstraints)
 				if err != nil {
 					if stream != nil {
 						stream.fail(response, "contour d’isochrone impossible: "+err.Error(), err)
@@ -759,9 +763,16 @@ func runPracticalHeadings(
 	writeJSON(response, http.StatusOK, result)
 }
 
+// isochroneFrontierResponseFor décrit un front pour l'affichage. Le contour est
+// une enveloppe convexe : ContourBreaks liste les côtés qui traversent une terre
+// ou une zone interdite, pour que l'interface ne trace pas de trait à travers.
+// Les autres côtés, même longs, sont de vrais bords du front : au près, le
+// bateau les atteint en louvoyant.
 func isochroneFrontierResponseFor(
+	ctx context.Context,
 	origin navigation.Position,
 	frontier routing.IsochroneFrontier,
+	constraints []routing.Constraint,
 ) (isochroneFrontierResponse, error) {
 	layer := isochroneFrontierResponse{
 		Instant:   frontier.Instant,
@@ -783,6 +794,28 @@ func isochroneFrontierResponseFor(
 			Latitude:  float64(contourPosition.Latitude),
 			Longitude: float64(contourPosition.Longitude),
 		})
+	}
+	layer.ContourBreaks = make([]int, 0)
+	for index := 0; index+1 < len(contour); index++ {
+		if contour[index] == contour[index+1] {
+			continue
+		}
+		edge := routing.RouteSegment{
+			From:       contour[index],
+			To:         contour[index+1],
+			StartedAt:  frontier.Instant,
+			FinishedAt: frontier.Instant.Add(time.Minute),
+		}
+		for _, constraint := range constraints {
+			allowed, err := constraint.Allows(ctx, edge)
+			if err != nil {
+				return isochroneFrontierResponse{}, fmt.Errorf("côté %d du contour impossible à vérifier: %w", index+1, err)
+			}
+			if !allowed {
+				layer.ContourBreaks = append(layer.ContourBreaks, index)
+				break
+			}
+		}
 	}
 	return layer, nil
 }

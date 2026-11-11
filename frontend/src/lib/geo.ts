@@ -97,8 +97,34 @@ export function splitContour(points: Point[], factor = 6, shareOfContour = 0.2):
   return parts.filter((part) => part.length > 1);
 }
 
-// Garde l'arc de l'isochrone tourné vers la destination.
-export function forwardContour(ring: Point[], direction: { x: number; y: number }): Point[] {
+/**
+ * Coupe un arc du contour aux côtés que le backend signale comme traversant
+ * une terre ou une zone interdite (`breaks` : indices dans `ring`). Les autres
+ * côtés, même longs, sont de vrais bords du front et restent tracés.
+ */
+export function cutContourAtBreaks(arc: Point[], ring: Point[], breaks: number[]): Point[][] {
+  const key = (a: Point, b: Point) => `${a.latitude},${a.longitude}|${b.latitude},${b.longitude}`;
+  const blocked = new Set<string>();
+  for (const index of breaks) {
+    if (index < 0 || index + 1 >= ring.length) continue;
+    blocked.add(key(ring[index], ring[index + 1]));
+    blocked.add(key(ring[index + 1], ring[index]));
+  }
+  if (arc.length < 2) return [];
+  const parts: Point[][] = [[arc[0]]];
+  for (let index = 1; index < arc.length; index += 1) {
+    if (blocked.has(key(arc[index - 1], arc[index]))) parts.push([]);
+    parts[parts.length - 1].push(arc[index]);
+  }
+  return parts.filter((part) => part.length > 1);
+}
+
+// Garde l'arc de l'isochrone tourné vers la destination : les côtés dont la
+// normale extérieure fait au plus `maxAngle` degrés avec la direction. À 90°,
+// les flancs de l'enveloppe disparaissent et le front paraît troué.
+export function forwardContour(ring: Point[], direction: { x: number; y: number }, maxAngle = 90): Point[] {
+  const threshold = Math.cos((maxAngle * Math.PI) / 180);
+  const directionLength = Math.hypot(direction.x, direction.y);
   const vertices =
     ring.length > 1 &&
     ring[0].latitude === ring[ring.length - 1].latitude &&
@@ -112,7 +138,13 @@ export function forwardContour(ring: Point[], direction: { x: number; y: number 
   }, 0);
   const visible = vertices.map((point, index) => {
     const next = vertices[(index + 1) % vertices.length];
-    return Math.sign(area) * ((next.latitude - point.latitude) * direction.x - (next.longitude - point.longitude) * direction.y) > 0;
+    const edgeLength = Math.hypot(next.latitude - point.latitude, next.longitude - point.longitude);
+    if (edgeLength === 0) return false;
+    // Cosinus de l'angle entre la normale extérieure du côté et la direction.
+    const facing =
+      (Math.sign(area) * ((next.latitude - point.latitude) * direction.x - (next.longitude - point.longitude) * direction.y)) /
+      (edgeLength * directionLength);
+    return facing > threshold;
   });
   const start = visible.findIndex((value, index) => value && !visible[(index + visible.length - 1) % visible.length]);
   if (start < 0) return [];

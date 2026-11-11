@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { forwardContour, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "../src/lib/geo.ts";
+import { cutContourAtBreaks, forwardContour, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "../src/lib/geo.ts";
 import { checkpointFeatures, checkpointLabel, equipmentFromVrOptions, meaningfulName, usableCheckpoints } from "../src/lib/vr.ts";
 
 test("parseVirtualRegattaPosition et formatVirtualRegattaPosition sont réciproques", () => {
@@ -75,6 +75,39 @@ test("forwardContour garde l'arc tourné vers la destination", () => {
   ];
   assert.deepEqual(forwardContour(ring, { x: 0, y: 0 }), []);
   assert.ok(forwardContour(ring, { x: 1, y: 0 }).length >= 2);
+});
+
+test("cutContourAtBreaks ne coupe que les côtés signalés, même longs", () => {
+  const ring = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 0.01 },
+    // Côté de 30 milles : au près, c'est un vrai bord du front.
+    { latitude: 0, longitude: 0.51 },
+    { latitude: 0, longitude: 0.52 },
+    { latitude: 0, longitude: 0.53 },
+  ];
+  assert.deepEqual(cutContourAtBreaks(ring, ring, []).map((part) => part.length), [5]);
+  // Le côté 2 -> 3 traverse une île : il est coupé, dans un sens comme dans l'autre.
+  assert.deepEqual(cutContourAtBreaks(ring, ring, [2]).map((part) => part.length), [3, 2]);
+  assert.deepEqual(cutContourAtBreaks([...ring].reverse(), ring, [2]).map((part) => part.length), [2, 3]);
+});
+
+test("forwardContour garde les flancs de l'enveloppe quand l'angle s'élargit", () => {
+  // Carré orienté nord-sud ; la destination est plein sud.
+  const square = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 1 },
+    { latitude: 1, longitude: 1 },
+    { latitude: 1, longitude: 0 },
+    { latitude: 0, longitude: 0 },
+  ];
+  const south = { x: 0, y: -1 };
+  // À 90°, seul le côté sud reste : les flancs est et ouest disparaissent.
+  assert.equal(forwardContour(square, south).length, 2);
+  // À 110°, les flancs, perpendiculaires à la direction, sont gardés.
+  assert.equal(forwardContour(square, south, 110).length, 4);
+  // Le côté nord, tourné à l'opposé, n'est jamais tracé.
+  assert.ok(forwardContour(square, south, 179).length < 5);
 });
 
 import { EQUIPMENT, EQUIPMENT_LABELS } from "../src/lib/vr.ts";

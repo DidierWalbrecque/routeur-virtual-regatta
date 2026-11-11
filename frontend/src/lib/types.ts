@@ -23,6 +23,8 @@ export type Isochrone = {
   instant: string;
   positions?: Point[];
   contour: Point[];
+  /** Indices i des côtés contour[i] -> contour[i+1] qui traversent une terre ou une zone interdite. */
+  contourBreaks?: number[];
   completedLayers?: number;
   totalLayers?: number;
 };

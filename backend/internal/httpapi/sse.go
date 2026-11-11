@@ -24,6 +24,7 @@ type practicalHeadingsFrontierEvent struct {
 	Instant            string            `json:"instant"`
 	Positions          []positionRequest `json:"positions"`
 	Contour            []positionRequest `json:"contour"`
+	ContourBreaks      []int             `json:"contourBreaks"`
 	CompletedLayers    int               `json:"completedLayers"`
 	TotalLayers        int               `json:"totalLayers"`
 	Progress           float64           `json:"progress"`

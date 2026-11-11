@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { GeoJSONSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { approximateDistanceNM, circlePolygon, forwardContour, splitContour } from "./lib/geo.ts";
+import { approximateDistanceNM, circlePolygon, cutContourAtBreaks, forwardContour, splitContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
 import { checkpointFeatures, checkpointKey, checkpointName, usableCheckpoints } from "./lib/vr.ts";
 import { gateRingSvg, gateRounding, gateRoundingLabel } from "./lib/gate_marker.ts";
@@ -10,6 +10,8 @@ import type { VrState } from "./lib/types.ts";
 
 export const DEFAULT_DEPARTURE: Point = { latitude: 13.121111, longitude: 121.586667 };
 export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.336667 };
+
+const ISOCHRONE_FACING_ANGLE = 110;
 
 // Couleur d'une isochrone selon l'avancement temporel : bleu (tôt) -> vert -> ambre (tard).
 // Teintes claires, pour rester lisibles sur la carte marine sombre.
@@ -936,16 +938,20 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     const startedAtMilliseconds = startedAt ? Date.parse(startedAt) : Number.NaN;
     for (let index = renderedCount.current; index < isochrones.length; index += 1) {
       const isochrone = isochrones[index];
-      const contour = forwardContour(isochrone.contour || [], direction);
+      // 110° plutôt que 90° : les flancs de l'enveloppe restent tracés, sinon
+      // le front paraît troué entre l'arc de face et ses côtés.
+      const contour = forwardContour(isochrone.contour || [], direction, ISOCHRONE_FACING_ANGLE);
       const visibleContour = contour.length > 1 ? contour : isochrone.contour || [];
       const minutes = Number.isFinite(startedAtMilliseconds)
         ? Math.round((Date.parse(isochrone.instant) - startedAtMilliseconds) / 60000)
         : 0;
-      // Le contour est coupé là où le front contourne une île ou une zone,
-      // pour ne pas tracer de trait à travers la terre.
-      const coordinates = splitContour(visibleContour).map((part) =>
-        part.map((point) => [point.longitude, point.latitude]),
-      );
+      // Le contour est coupé là où il traverserait une terre ou une zone
+      // interdite. Le backend signale ces côtés ; un backend plus ancien ne
+      // le fait pas, et on retombe alors sur la coupe des sauts anormaux.
+      const parts = isochrone.contourBreaks
+        ? cutContourAtBreaks(visibleContour, isochrone.contour || [], isochrone.contourBreaks)
+        : splitContour(visibleContour);
+      const coordinates = parts.map((part) => part.map((point) => [point.longitude, point.latitude]));
       const total = isochrone.totalLayers || isochrones.length || 1;
       const color = isochroneTimeColor((index + 1) / total);
       if (coordinates.length > 0) {
