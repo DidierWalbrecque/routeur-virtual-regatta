@@ -13,6 +13,15 @@ export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.
 
 const ISOCHRONE_FACING_ANGLE = 110;
 
+// Fond de carte marine assombri (carte de nuit), et sa version détaillée.
+const BASEMAP_PAINT = { "raster-brightness-max": 0.32, "raster-saturation": -0.25, "raster-contrast": 0.15 };
+// Côtes vectorielles, au-delà du zoom 10 : terre nettement plus claire que la
+// mer pour distinguer les îles sur le fond de nuit.
+const COASTLINE_SOURCE = "coastline";
+const LAND_COLOR = "#4a4f57";
+const WATER_COLOR = "#1f2a38";
+const COASTLINE_FADE = ["interpolate", ["linear"], ["zoom"], 9.5, 0, 10.5, 1] as never;
+
 // Couleur d'une isochrone selon l'avancement temporel : bleu (tôt) -> vert -> ambre (tard).
 // Teintes claires, pour rester lisibles sur la carte marine sombre.
 function lerpHex(a: string, b: string, t: number): string {
@@ -300,6 +309,14 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
               maxzoom: 10,
               attribution: "Tuiles © Esri — GEBCO, NOAA, Garmin, HERE, © OpenStreetMap contributors",
             },
+            // Terre et mer d'OpenStreetMap en vectoriel (OpenFreeMap, sans clé) :
+            // nettes à tous les zooms et partout dans le monde, elles prennent le
+            // relais du relief Esri, qui n'est publié en entier que jusqu'au zoom 10.
+            [COASTLINE_SOURCE]: {
+              type: "vector",
+              url: "https://tiles.openfreemap.org/planet",
+              attribution: "Côtes © OpenFreeMap, © OpenStreetMap contributors",
+            },
             "basemap-labels": {
               type: "raster",
               tiles: [
@@ -324,7 +341,23 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
               id: "basemap",
               type: "raster",
               source: "basemap",
-              paint: { "raster-brightness-max": 0.32, "raster-saturation": -0.25, "raster-contrast": 0.15 },
+              paint: BASEMAP_PAINT,
+            },
+            // Au-delà du zoom 10, la terre puis l'eau sont peintes en aplats
+            // par-dessus le relief agrandi, avec un fondu entre 9,5 et 10,5.
+            {
+              id: "coast-land",
+              type: "background",
+              minzoom: 9.5,
+              paint: { "background-color": LAND_COLOR, "background-opacity": COASTLINE_FADE },
+            },
+            {
+              id: "coast-water",
+              type: "fill",
+              source: COASTLINE_SOURCE,
+              "source-layer": "water",
+              minzoom: 9.5,
+              paint: { "fill-color": WATER_COLOR, "fill-opacity": COASTLINE_FADE, "fill-antialias": true },
             },
             { id: "basemap-labels", type: "raster", source: "basemap-labels", paint: { "raster-opacity": 0.85 } },
             {
