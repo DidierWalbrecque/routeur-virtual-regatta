@@ -68,8 +68,10 @@ function tackLetter(tack: string | undefined): string {
 function reportRow(route: RoutePoint[], index: number, startedAt: string): ReportRow {
   const point = route[index];
   const next = route[index + 1];
-  const departing =
-    next && next.terminal !== true && Number.isFinite(Number(next.heading)) ? next : null;
+  // Le point d'arrivée décrit le dernier bord quand le backend le simule (il
+  // porte alors l'allure) ; un backend plus ancien le laisse nu, cap à 0.
+  const describesLeg = next && (next.terminal !== true || optionalNumber(next.twa) !== null);
+  const departing = next && describesLeg && Number.isFinite(Number(next.heading)) ? next : null;
   return {
     index,
     instant: point.instant || "",

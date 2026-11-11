@@ -15,6 +15,7 @@ import (
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
 type practicalHeadingsRequest struct {
@@ -750,7 +751,13 @@ func runPracticalHeadings(
 				if len(routeSteps) > 0 {
 					terminalStamina = routeSteps[len(routeSteps)-1].Node.State.Stamina.Level
 				}
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Stamina: float64(terminalStamina), Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
+				currentSail := polar.SailID(0)
+				if len(routeSteps) > 0 {
+					currentSail = routeSteps[len(routeSteps)-1].Node.State.SailID
+				}
+				terminal := finalLegPoint(calculationContext, weatherProvider, boatPolar, owned, lastPosition, destination, lastInstant, profile.IsochroneStep, currentSail)
+				terminal.Stamina = float64(terminalStamina)
+				result.Route = append(result.Route, terminal)
 			}
 		}
 		result.Performance.IsochroneMilliseconds = elapsedMilliseconds(isochroneStarted)
@@ -761,6 +768,56 @@ func runPracticalHeadings(
 		return
 	}
 	writeJSON(response, http.StatusOK, result)
+}
+
+// finalLegPoint construit le point d'arrivée et décrit le dernier bord, du
+// dernier point calculé jusqu'à la destination : cap direct, vent, allure,
+// voile et vitesse au départ de ce bord. Sans ces informations, l'avant-dernière
+// ligne du tableau (qui affiche le bord qui en part) restait vide. Si le bord
+// ne peut pas être simulé (météo absente, cap nul), le point reste nu.
+func finalLegPoint(
+	ctx context.Context,
+	weatherProvider weather.WeatherProvider,
+	boatPolar *polar.Polar,
+	owned equipment.EquipmentSet,
+	from navigation.Position,
+	destination navigation.Position,
+	instant time.Time,
+	stepDuration time.Duration,
+	currentSail polar.SailID,
+) routePointResponse {
+	point := routePointResponse{
+		Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)},
+		Instant:  instant.Add(stepDuration),
+		Terminal: true,
+	}
+	if from == destination || weatherProvider == nil || boatPolar == nil {
+		return point
+	}
+	heading, err := navigation.InitialHeading(from, destination)
+	if err != nil {
+		return point
+	}
+	step, err := simulation.EvaluateStep(ctx, weatherProvider, boatPolar, simulation.StepInput{
+		Position:            from,
+		Instant:             instant,
+		Heading:             heading,
+		Duration:            stepDuration,
+		Owned:               owned,
+		CurrentSailID:       currentSail,
+		SailChangeTolerance: boatPolar.AutoSailChangeTolerance,
+	})
+	if err != nil {
+		log.Printf("[ROUTE] dernier bord non simulé : %v", err)
+		return point
+	}
+	described := routePointFromNode(routing.IsochroneNode{
+		Candidate: routing.HeadingCandidate{Heading: heading, Step: step},
+	}, boatPolar, owned)
+	described.Position = point.Position
+	described.Instant = point.Instant
+	described.Terminal = true
+	return described
 }
 
 // isochroneFrontierResponseFor décrit un front pour l'affichage. Le contour est
