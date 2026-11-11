@@ -84,6 +84,48 @@ func TestGFSWatcherSwitchesOnlyWhenTargetRunIsComplete(t *testing.T) {
 	}
 }
 
+// Trois heures après le cycle, le run est visé même si NOAA n'a encore rien
+// publié : le passage n'échoue pas et le run précédent reste actif.
+func TestGFSWatcherTargetsRunThreeHoursAfterCycle(t *testing.T) {
+	directory := t.TempDir()
+	hours := []int{0, 3, 6}
+	downloader := &progressiveDownloader{published: map[int]int{6: 6}}
+	now := time.Date(2026, 11, 7, 14, 55, 0, 0, time.UTC)
+	watcher := NewGFSWatcher(downloader, directory, hours, func() time.Time { return now })
+
+	status, _, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Target.Run.Cycle != 6 || status.Active.Run.Cycle != 6 {
+		t.Fatalf("à 14:55 UTC, 06Z attendu en cible et actif, obtenu %+v", status)
+	}
+
+	// 15:05 UTC : 12Z est visé, mais f000 n'est pas encore publié.
+	now = time.Date(2026, 11, 7, 15, 5, 0, 0, time.UTC)
+	status, removed, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Target.Run.Cycle != 12 || status.Target.Downloaded != 0 || status.Waiting == "" {
+		t.Fatalf("cible 12Z en attente attendue, obtenu %+v, attente=%q", status.Target, status.Waiting)
+	}
+	if status.Active.Run.Cycle != 6 || len(removed) != 0 {
+		t.Fatalf("le run 06Z doit rester actif et intact, actif=%+v supprimés=%v", status.Active, removed)
+	}
+
+	// Les premières échéances paraissent : le téléchargement commence.
+	downloader.published[12] = 3
+	now = time.Date(2026, 11, 7, 15, 25, 0, 0, time.UTC)
+	status, _, err = watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Target.Run.Cycle != 12 || status.Target.Downloaded != 2 || status.Active.Run.Cycle != 6 {
+		t.Fatalf("12Z en cours (2 échéances) et 06Z actif attendus, obtenu %+v", status)
+	}
+}
+
 func TestCompleteGFSRunSkipsPartialNewestRun(t *testing.T) {
 	directory := t.TempDir()
 	hours := []int{0, 3, 6}

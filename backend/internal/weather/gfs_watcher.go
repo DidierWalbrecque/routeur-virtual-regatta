@@ -16,8 +16,11 @@ import (
 const (
 	gfsForecastStepHours = 3
 	gfsMaxForecastHour   = 384
-	// gfsPublicationLag : délai après le cycle avant que NOAA publie ses premières échéances.
-	gfsPublicationLag = 4 * time.Hour
+	// gfsPublicationLag : délai après le cycle avant de viser ce run. NOAA publie
+	// les premières échéances vers 3 h 20 - 3 h 30 : à 3 h, le watcher essaie un
+	// peu tôt, trouve f000 absent, s'arrête sans erreur et réessaie au passage
+	// suivant, le run précédent restant actif.
+	gfsPublicationLag = 3 * time.Hour
 )
 
 // DefaultGFSForecastHours retourne la cadence native du GFS 0,25° : f000 à f384 toutes les 3 heures.
