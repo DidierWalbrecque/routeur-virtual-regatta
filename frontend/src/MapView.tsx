@@ -1,7 +1,7 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { GeoJSONSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { approximateDistanceNM, circlePolygon, cutContourAtBreaks, forwardContour, splitContour } from "./lib/geo.ts";
+import { approximateDistanceNM, circlePolygon, cutContourAtBreaks, forwardContour, isochroneDisplayInterval, isochroneIntervals, medianAdvanceNM, splitContour, trimStalledContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
 import { checkpointFeatures, checkpointKey, checkpointName, usableCheckpoints } from "./lib/vr.ts";
 import { gateRingSvg, gateRounding, gateRoundingLabel } from "./lib/gate_marker.ts";
@@ -12,6 +12,9 @@ export const DEFAULT_DEPARTURE: Point = { latitude: 13.121111, longitude: 121.58
 export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.336667 };
 
 const ISOCHRONE_FACING_ANGLE = 110;
+// Part de l'avancée médiane en dessous de laquelle un bout de tracé est jugé
+// collé au tracé affiché précédent, et retiré.
+const ISOCHRONE_MIN_ADVANCE_SHARE = 0.35;
 
 // Fond de carte marine assombri (carte de nuit), et sa version détaillée.
 const BASEMAP_PAINT = { "raster-brightness-max": 0.32, "raster-saturation": -0.25, "raster-contrast": 0.15 };
@@ -215,6 +218,30 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
   const renderedCount = useRef(0);
   const renderedFeatures = useRef<unknown[]>([]);
   const renderedGpxKey = useRef("");
+  // Densité d'affichage des isochrones : avancée du front (milles par minute)
+  // de chaque isochrone, pas de calcul et origine des temps (minutes epoch).
+  const isochroneRates = useRef<number[]>([]);
+  const isochroneStep = useRef(0);
+  const isochroneOrigin = useRef(0);
+
+  // N'affiche que les tracés d'un intervalle (10 min, 1 h, 3 h...) choisi pour
+  // qu'au zoom courant deux tracés restent espacés d'une douzaine de pixels ;
+  // un tracé sur six est renforcé. Au pas de 10 min, tout tracer donne une
+  // bande pleine. Chaque intervalle a ses propres tracés (voir plus bas).
+  function applyIsochroneDensity(map: MapLibreMap) {
+    if (!map.getLayer("isochrones")) return;
+    const step = isochroneStep.current;
+    const rates = isochroneRates.current.filter((rate) => rate > 0).sort((a, b) => a - b);
+    const rate = rates.length ? rates[Math.floor(rates.length / 2)] : 0;
+    const latitude = map.getCenter().lat;
+    const pixelsPerNM = (512 * 2 ** map.getZoom()) / (21600 * Math.max(0.05, Math.cos((latitude * Math.PI) / 180)));
+    const interval = step > 0 ? isochroneDisplayInterval(step, rate, pixelsPerNM) : 1;
+    const elapsed = ["-", ["get", "t"], isochroneOrigin.current];
+    map.setFilter("isochrones", ["==", ["get", "interval"], interval] as never);
+    const major = ["==", ["%", elapsed, interval * 6], 0];
+    map.setPaintProperty("isochrones", "line-width", ["case", major, 2.2, 1.2] as never);
+    map.setPaintProperty("isochrones", "line-opacity", ["case", major, 0.95, 0.7] as never);
+  }
   const [ready, setReady] = useState(false);
 
   // Afficher / masquer les points d'étape de la route sans recalculer.
@@ -644,6 +671,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           map!.getCanvas().style.cursor = "pointer";
         });
         map.on("mouseleave", "route-points-hit", clearHover);
+        map.on("zoomend", () => applyIsochroneDensity(map!));
 
         // Position choisie dans le tableau des détails : au-dessus de tout le reste.
         map.addSource("route-highlight", { type: "geojson", data: EMPTY as never });
@@ -956,46 +984,63 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     const route = frame.showRoute ? result.route || [] : [];
     const position = result.position || DEFAULT_DEPARTURE;
     const destination = result.destination || DEFAULT_DESTINATION;
-    const startedAt = result.route?.[0]?.instant;
 
     if (frame.key !== renderedKey.current || (result.isochrones?.length || 0) < renderedCount.current) {
       renderedKey.current = frame.key;
       renderedCount.current = 0;
       renderedFeatures.current = [];
+      isochroneRates.current = [];
     }
     const direction = {
       x: destination.longitude - position.longitude,
       y: destination.latitude - position.latitude,
     };
     const isochrones: Isochrone[] = result.isochrones || [];
-    const startedAtMilliseconds = startedAt ? Date.parse(startedAt) : Number.NaN;
-    for (let index = renderedCount.current; index < isochrones.length; index += 1) {
+    const instantMinutes = (isochrone: Isochrone) => Math.round(Date.parse(isochrone.instant) / 60000);
+    // Pas de calcul déduit des deux premiers fronts ; l'origine des temps est
+    // le départ, un pas avant le premier front.
+    const step = isochrones.length > 1 ? instantMinutes(isochrones[1]) - instantMinutes(isochrones[0]) : 0;
+    isochroneStep.current = step > 0 ? step : 0;
+    isochroneOrigin.current = isochrones.length ? instantMinutes(isochrones[0]) - isochroneStep.current : 0;
+    const intervals = isochroneIntervals(isochroneStep.current);
+    // Le pas n'est connu qu'au deuxième front : on attend pour tracer.
+    const available = isochroneStep.current > 0 ? isochrones.length : 0;
+    for (let index = renderedCount.current; index < available; index += 1) {
       const isochrone = isochrones[index];
       // 110° plutôt que 90° : les flancs de l'enveloppe restent tracés, sinon
       // le front paraît troué entre l'arc de face et ses côtés.
       const contour = forwardContour(isochrone.contour || [], direction, ISOCHRONE_FACING_ANGLE);
       const visibleContour = contour.length > 1 ? contour : isochrone.contour || [];
-      const minutes = Number.isFinite(startedAtMilliseconds)
-        ? Math.round((Date.parse(isochrone.instant) - startedAtMilliseconds) / 60000)
-        : 0;
       // Le contour est coupé là où il traverserait une terre ou une zone
       // interdite. Le backend signale ces côtés ; un backend plus ancien ne
       // le fait pas, et on retombe alors sur la coupe des sauts anormaux.
-      const parts = isochrone.contourBreaks
+      const cutParts = isochrone.contourBreaks
         ? cutContourAtBreaks(visibleContour, isochrone.contour || [], isochrone.contourBreaks)
         : splitContour(visibleContour);
-      const coordinates = parts.map((part) => part.map((point) => [point.longitude, point.latitude]));
+      const previousRing = index > 0 ? isochrones[index - 1].contour || [] : [position];
+      isochroneRates.current[index] = medianAdvanceNM(visibleContour, previousRing) / isochroneStep.current;
       const total = isochrone.totalLayers || isochrones.length || 1;
       const color = isochroneTimeColor((index + 1) / total);
-      if (coordinates.length > 0) {
+      const t = instantMinutes(isochrone);
+      // Un tracé par intervalle d'affichage dont ce front fait partie. Les
+      // flancs avancent bien moins vite que la face du front : comparés au
+      // tracé affiché précédent, ceux qui n'ont presque pas bougé sont retirés,
+      // sinon ils s'empilent en bande pleine sur les bords.
+      for (const interval of intervals) {
+        if ((t - isochroneOrigin.current) % interval !== 0) continue;
+        const previousIndex = index - interval / isochroneStep.current;
+        const previousShown = previousIndex >= 0 ? isochrones[previousIndex].contour || [] : [position];
+        const parts = trimStalledContour(cutParts, previousShown, ISOCHRONE_MIN_ADVANCE_SHARE);
+        const coordinates = parts.map((part) => part.map((point) => [point.longitude, point.latitude]));
+        if (coordinates.length === 0) continue;
         renderedFeatures.current.push({
           type: "Feature",
-          properties: { major: (index + 1) % 6 === 0, color },
+          properties: { t, color, interval },
           geometry: { type: "MultiLineString", coordinates },
         });
       }
     }
-    renderedCount.current = isochrones.length;
+    renderedCount.current = available;
 
     const routeCoordinates = route.map((point) => [point.position.longitude, point.position.latitude]);
     setData(map, "points", endpointCollection({ position, destination }));
@@ -1007,6 +1052,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           : [],
     });
     setData(map, "isochrones", { type: "FeatureCollection", features: renderedFeatures.current });
+    applyIsochroneDensity(map);
     setData(map, "route-points", {
       type: "FeatureCollection",
       features: route

@@ -119,6 +119,117 @@ export function cutContourAtBreaks(arc: Point[], ring: Point[], breaks: number[]
   return parts.filter((part) => part.length > 1);
 }
 
+// Distance en milles d'un point au segment [a, b], dans un repère local
+// équirectangulaire centré sur le point (suffisant à l'échelle d'un front).
+function distanceToSegmentNM(point: Point, a: Point, b: Point): number {
+  const scale = Math.cos(point.latitude * (Math.PI / 180));
+  const wrap = (delta: number) => (delta > 180 ? delta - 360 : delta < -180 ? delta + 360 : delta);
+  const ax = wrap(a.longitude - point.longitude) * scale;
+  const ay = a.latitude - point.latitude;
+  const bx = wrap(b.longitude - point.longitude) * scale;
+  const by = b.latitude - point.latitude;
+  const dx = bx - ax;
+  const dy = by - ay;
+  const lengthSquared = dx * dx + dy * dy;
+  const t = lengthSquared > 0 ? Math.max(0, Math.min(1, -(ax * dx + ay * dy) / lengthSquared)) : 0;
+  return 60 * Math.hypot(ax + t * dx, ay + t * dy);
+}
+
+function distanceToRingNM(point: Point, ring: Point[]): number {
+  if (ring.length === 1) return approximateDistanceNM(point, ring[0]);
+  let best = Number.POSITIVE_INFINITY;
+  for (let index = 0; index + 1 < ring.length; index += 1) {
+    best = Math.min(best, distanceToSegmentNM(point, ring[index], ring[index + 1]));
+  }
+  return best;
+}
+
+/** Avancée médiane (milles) des points d'un arc depuis le front précédent. */
+export function medianAdvanceNM(points: Point[], previousRing: Point[]): number {
+  if (points.length === 0 || previousRing.length === 0) return 0;
+  const sorted = points.map((point) => distanceToRingNM(point, previousRing)).sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+/** Intervalles d'affichage possibles (minutes), multiples du pas de calcul, croissants. */
+export function isochroneIntervals(stepMinutes: number): number[] {
+  if (!(stepMinutes > 0)) return [];
+  const intervals = [10, 20, 30, 60, 120, 180, 360, 720, 1440].map((minutes) =>
+    Math.max(stepMinutes, Math.ceil(minutes / stepMinutes) * stepMinutes),
+  );
+  return [...new Set(intervals)];
+}
+
+/**
+ * Plus petit intervalle d'affichage des isochrones (minutes, multiple du pas
+ * de calcul) qui laisse au moins `minSpacingPx` pixels entre deux tracés,
+ * pour une vitesse d'avancée du front donnée et une échelle de carte donnée.
+ */
+export function isochroneDisplayInterval(
+  stepMinutes: number,
+  advanceNMPerMinute: number,
+  pixelsPerNM: number,
+  minSpacingPx = 12,
+): number {
+  if (!(stepMinutes > 0)) return 1;
+  if (!(advanceNMPerMinute > 0) || !(pixelsPerNM > 0)) return stepMinutes;
+  const candidates = isochroneIntervals(stepMinutes);
+  for (const interval of candidates) {
+    if (advanceNMPerMinute * interval * pixelsPerNM >= minSpacingPx) return interval;
+  }
+  return candidates[candidates.length - 1];
+}
+
+/**
+ * Retire des morceaux d'isochrone les côtés où le front n'a pas avancé depuis
+ * l'isochrone précédente : le long d'une côte, d'une zone interdite ou d'un
+ * flanc bloqué, les enveloppes successives se superposent et forment une bande
+ * pleine. Un côté est gardé dès qu'une de ses extrémités s'est écartée du front
+ * précédent d'au moins `share` fois l'avancée médiane de l'arc.
+ */
+export function trimStalledContour(parts: Point[][], previousRing: Point[], share = 0.25): Point[][] {
+  if (previousRing.length === 0) return parts;
+  const advances = parts.map((part) => part.map((point) => distanceToRingNM(point, previousRing)));
+  const sorted = advances.flat().sort((a, b) => a - b);
+  if (sorted.length === 0) return parts;
+  const median = sorted[Math.floor(sorted.length / 2)];
+  if (!(median > 0)) return parts;
+  const limit = median * share;
+  // Les côtés de l'enveloppe peuvent être très longs : une extrémité avance
+  // alors que le reste longe le front précédent. On les redécoupe en morceaux
+  // de la taille du seuil pour juger chaque portion.
+  const dense = parts.map((part) => {
+    const points: Point[] = part.length ? [part[0]] : [];
+    for (let index = 1; index < part.length; index += 1) {
+      const a = part[index - 1];
+      const b = part[index];
+      const pieces = Math.min(200, Math.ceil(approximateDistanceNM(a, b) / limit));
+      for (let piece = 1; piece < pieces; piece += 1) {
+        const f = piece / pieces;
+        points.push({ latitude: a.latitude + (b.latitude - a.latitude) * f, longitude: a.longitude + (b.longitude - a.longitude) * f });
+      }
+      points.push(b);
+    }
+    return points;
+  });
+  const trimmed: Point[][] = [];
+  dense.forEach((part) => {
+    const advance = part.map((point) => distanceToRingNM(point, previousRing));
+    let current: Point[] = [];
+    for (let index = 1; index < part.length; index += 1) {
+      if (Math.max(advance[index - 1], advance[index]) >= limit) {
+        if (current.length === 0) current.push(part[index - 1]);
+        current.push(part[index]);
+      } else if (current.length > 0) {
+        trimmed.push(current);
+        current = [];
+      }
+    }
+    if (current.length > 1) trimmed.push(current);
+  });
+  return trimmed;
+}
+
 // Garde l'arc de l'isochrone tourné vers la destination : les côtés dont la
 // normale extérieure fait au plus `maxAngle` degrés avec la direction. À 90°,
 // les flancs de l'enveloppe disparaissent et le front paraît troué.
