@@ -16,9 +16,9 @@ Les captures sont dans [`docs/audit-interface/`](audit-interface/).
 
 ---
 
-## État au 9 novembre 2026
+## État au 12 novembre 2026
 
-**En bref :** tous les points P1, P2 et P3 sont traités, sauf un, remplacé par une autre solution (section 3). Il reste cinq nouvelles fonctions de la section 8.
+**En bref :** tous les points P1, P2 et P3 sont traités, sauf un, remplacé par une autre solution (section 3). Le vent est maintenant affiché sur la carte. Il reste quatre nouvelles fonctions de la section 8.
 
 Le relevé d'origine est conservé tel quel sous cette section. Les constats y décrivent l'interface du 8 novembre, pas l'interface actuelle.
 
@@ -48,9 +48,10 @@ Le relevé d'origine est conservé tel quel sous cette section. Les constats y d
 | 4 | « 9 pts » | ✅ | Remplacé par la distance au bateau | `24266d7` |
 | 4 | Panneaux de tailles différentes | ✅ | Même position et même cadre pour les trois panneaux | `24266d7` |
 | 5 | Encart météo sur le début de la route | ✅ | Le cadrage réserve la place de l'encart et de la légende, du côté qui coûte le moins de carte | `24266d7`, `7e7ac51` |
-| 5 | Isochrones à travers les îles | ✅ | Contours coupés aux sauts anormaux | `24266d7` |
+| 5 | Isochrones à travers les îles | ✅ | Le backend signale les côtés du contour qui traversent une terre ou une zone, et seuls ceux-là sont coupés. Reste un trou derrière les îles : le contour est une enveloppe convexe (voir « Prochaines étapes ») | `24266d7`, `51a2abe` |
+| 5 | Isochrones empilées en bande pleine | ✅ | Au pas de 10 min, la carte traçait tous les fronts, à 1 ou 2 px d'écart. Elle n'en trace plus qu'un par intervalle (10 min, 1 h, 3 h…), choisi selon le zoom pour garder une douzaine de pixels entre deux traits. Les flancs qui ont à peine avancé depuis le trait précédent sont retirés | `8394be1` |
 | 5 | « Détails de la route » sur le zoom | ✅ | Le zoom est passé à gauche, le bouton se masque quand un panneau est ouvert | `24266d7` |
-| 5 | Balisage trop coloré | ✅ | Opacité réduite à 60 %, interrupteur dans la légende | `24266d7` |
+| 5 | Balisage trop coloré | ✅ | Opacité réduite à 60 %. L'interrupteur de la légende a été retiré : le balisage s'affiche toujours à partir du zoom 9 | `24266d7`, `1e15a12` |
 | 5 | Points de route trop nombreux | ✅ | Seuls les manœuvres et les heures rondes restent dessinés, les autres apparaissent au survol | `91f7ddc` |
 | 6 | Tableau qui déborde | ✅ | En-tête et colonne Date fixes, défilement dans le panneau | `24266d7` |
 | 6 | Pas d'export | ✅ | « Exporter en GPX » et « Copier le tableau » | `24266d7` |
@@ -58,7 +59,7 @@ Le relevé d'origine est conservé tel quel sous cette section. Les constats y d
 | 6 | Colonne Foils à 0 | ✅ | Foils et Coeff masquées quand elles ne varient pas | `24266d7` |
 | 6 | Panneau qui couvre la carte | ✅ | Mode « Réduire au résumé » | `24266d7` |
 | 6 | Stamina à vérifier dans le moteur | ✅ | Pas d'erreur : −35,8 est un changement de voile (20 × 1,5 × 1,19) et −17 un empannage (10 × 1,5 × 1,19). Un test fixe ces deux valeurs | `6df07df` |
-| 7 | Encart météo sur l'attribution | ✅ | Encart réduit à une ligne sur téléphone, attribution repliée sur son bouton « i » | `24266d7` |
+| 7 | Encart météo sur l'attribution | ✅ | Encart réduit à une pastille, désormais sur tous les écrans ; un clic l'affiche en entier. Attribution repliée sur son bouton « i » | `24266d7`, `1e15a12` |
 | 7 | « Détails de la route » sur le zoom | ✅ | Même correction que sur ordinateur | `24266d7` |
 | 7 | Tableau inutilisable sur téléphone | ✅ | Une carte par étape ; toucher une étape réduit le panneau et montre sa position | `91f7ddc` |
 | 7 | Carte grise sous le bouton du formulaire | ✅ | Même correction que « Bateau détecté » | `ffde270` |
@@ -70,7 +71,7 @@ Le relevé d'origine est conservé tel quel sous cette section. Les constats y d
 
 | # | Fonction | État |
 |---|---|---|
-| 1 | Vent sur la carte | ⬜ |
+| 1 | Vent sur la carte | ✅ Fond coloré selon l'échelle de Beaufort, bouton « Vent » dans la barre d'outils, carte à part avec le curseur d'heure (jusqu'à +240 h) et l'échelle. Service `GET /api/weather/wind`. Pas encore de flèches de direction (`f0e772f`, `1e15a12`) |
 | 2 | Rejouer le calcul dans le temps | ⬜ |
 | 3 | Exporter la route | ✅ GPX et tableau à coller dans un tableur (`24266d7`) |
 | 4 | Comparer deux routes | ⬜ |
@@ -95,9 +96,12 @@ Les idées retenues dans [l'analyse de SERMAR](analyse-ihm-sermar.md) :
 ### Prochaines étapes
 
 1. **Contraste terre/mer (idée 5)** : essayer d'abord un réglage du fond de carte, avant une couche de terre dédiée. Effort faible à moyen.
-2. **Rejeu dans le temps** (idée 3, section 8 point 2) : frise qui fait avancer le bateau et les isochrones.
-3. **Comparaison de routes** (idée 6, section 8 point 4) : enregistrer une route et la superposer à un nouveau calcul.
-4. Puis, dans la section 8 : **vent sur la carte**, **choix d'un point au clic sur la carte** et **historique des calculs**.
+2. **Contour des isochrones autour des îles** : le backend dessine chaque front comme une enveloppe convexe (`IsochroneFrontier.Contour`). Près d'Antigua, elle relie des points distants de plus de 150 NM ; la carte retire ces côtés parce qu'ils traversent l'île, ce qui laisse un trou. Un contour qui suit les creux du front (par secteurs) corrigerait l'affichage.
+3. **Rejeu dans le temps** (idée 3, section 8 point 2) : frise qui fait avancer le bateau et les isochrones. Le curseur d'heure du vent pourrait la suivre.
+4. **Comparaison de routes** (idée 6, section 8 point 4) : enregistrer une route et la superposer à un nouveau calcul.
+5. Puis, dans la section 8 : **choix d'un point au clic sur la carte**, **historique des calculs**, et des **flèches de direction** sur le fond de vent.
+
+Pour la qualité du calcul lui-même (élagage, classement, grille de caps), voir [améliorations urgentes](../améliorations_urgentes.md) et le retour du 12 novembre en fin de fichier.
 
 **Fausse alerte sur la porte P2.2 :** le 9 novembre, la porte n° 1 semblait être P2.2 « près des Bahamas ». C'était l'effet de l'ancien affichage, qui plaçait le numéro au milieu d'une très longue ligne partant vers Miami. Avec l'anneau sur la marque de départ (`3271a93`), P2.2 apparaît au nord-ouest de la Guadeloupe, et l'ordre de passage (P2.2, P3.1, P4.4, P4.5, puis l'arrivée) est cohérent. Le nom « buoy » envoyé par le jeu est désormais remplacé par le sens de passage, et l'épingle « A » se masque quand la destination est la marque d'une porte.
 

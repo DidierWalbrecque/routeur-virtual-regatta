@@ -47,3 +47,37 @@ Le calcul simule chaque pas avec le vent au départ du segment, puis avance le b
 1. Améliorer l’élagage et le classement.
 2. Tester une grille de caps adaptative.
 3. Mesurer les coûts sur des scénarios réalistes, puis optimiser les parties les plus coûteuses.
+
+---
+
+## Retour après lecture du code (12 novembre 2026)
+
+Relu dans `backend/internal/routing` et `backend/internal/httpapi`. Une partie du constat ci-dessus ne correspond plus au code.
+
+### Ce qui est déjà en place
+
+- **Point 1, élagage :** il ne fusionne pas deux positions proches. `pruneIsochroneNodesUnsorted` regroupe par cellule (0,5 NM en mode précis, 1 NM en mode rapide), cap, voile, amure, pénalité active et prochaine porte. Dans chaque groupe, il garde tous les nœuds **non dominés** sur deux critères : progression vers la cible et stamina. Un nœud moins avancé mais plus reposé survit donc déjà. La diversité en stamina demandée existe.
+- **Point 3, grille de caps :** elle n'est pas uniforme partout. `heading_refinement.go` ajoute des caps entiers autour des meilleurs caps de la grille (jusqu'à trois maxima par parent, en général le meilleur sur chaque amure). C'est actif pour les deux modes (`RefineHeadings: true`), sur une grille de 6° en mode précis et de 30° en mode rapide.
+- **Point 5, appels météo :** ils ne sont pas répétés par cap. Tous les caps d'un même parent partent de la même position au même instant, et `headingWeatherCache` ne demande le vent qu'une fois par parent. Le coût par cap vient surtout de la polaire, des pénalités et des contraintes de trajet.
+- **Mesure sur routes réelles :** `TestVRFrontierPruningRoutes` (commit `ae1c0ea`) existe déjà. Il donne, sur de vraies courses, les milles restants après 48 h, la taille des fronts et la durée du calcul. C'est l'outil pour valider toute modification de l'élagage ou du classement.
+
+### Ce qui reste juste
+
+- **Limite dure du point 1 :** quand il reste plus de `MaxCandidates` nœuds (2 400 en précis, 1 200 en rapide), `retainAngularSectors` garde **un seul nœud par secteur de cap vu depuis le départ**, choisi par `nodeBetter`. À ce stade, voile, amure, stamina et porte suivante ne protègent plus rien : c'est là que des états non comparables se coupent, pas dans le regroupement par cellule.
+- **Point 2, classement :** il est confirmé. `nodeBetter` compare la porte franchie, puis la progression vers la cible, puis la distance, puis la stamina. Il n'y a aucune estimation du temps restant. Le coût des manœuvres n'entre qu'au choix final (`finalNodeBetter`, commit `dfa1d6f`).
+- **Point 4, caps inutiles :** il est confirmé. Les contraintes (terre, zones, portes) sont vérifiées après la simulation de chaque cap. Aucun cap n'est écarté avant.
+- **Modèle :** il est confirmé aussi. `simulation.EvaluateStep` prend le vent au point et à l'instant de départ du segment et le garde tout le pas (10 min en précis, 15 min en rapide).
+
+### Ce que j'ajoute
+
+1. **Les secteurs sont centrés sur le point de départ.** Plus la route s'éloigne du départ ou contourne une île ou une porte, moins un secteur vu du départ correspond à une direction du front. Derrière un obstacle, des nœuds en retard mais utiles partagent un secteur avec des nœuds mieux avancés et disparaissent. Centrer les secteurs sur le départ **du pas précédent**, ou sur la cible suivante, est une piste plus simple qu'une heuristique de temps restant.
+2. **Une estimation du temps restant est risquée près des côtes.** Une estimation à vol d'oiseau pénalise les routes qui contournent une île, alors que ce sont souvent les seules possibles. Elle doit tenir compte des terres, ou n'entrer en jeu qu'au-delà d'une certaine distance. Sans cela, elle aggraverait le cas d'Antigua relevé le 11 novembre.
+3. **Le contour affiché n'est pas le front réel.** `IsochroneFrontier.Contour` dessine une enveloppe convexe. Près d'une île, elle relie des points éloignés de plus de 150 NM et masque où le front est réellement. C'est un défaut d'affichage seulement (le calcul n'utilise pas ce contour), mais il empêche de juger visuellement l'élagage. Un contour qui suit les creux du front (par secteurs) aiderait à vérifier les points 1 et 2.
+4. **Mesurer sur le PC du backend.** Les durées mesurées sur le poste de développement ne valent pas pour le serveur. Les mesures du point 5 doivent être faites là où le backend tourne.
+
+### Ordre que je propose
+
+1. **Mesurer d'abord.** Lancer `TestVRFrontierPruningRoutes` sur le PC du backend pour avoir une référence : milles restants à 48 h et durée.
+2. **Revoir la limite dure.** Garder plusieurs nœuds par secteur quand ils diffèrent d'amure ou de porte suivante, et tester le centrage des secteurs. Comparer à la référence.
+3. **Tester une estimation du temps restant**, limitée à la haute mer, seulement si l'étape 2 ne suffit pas.
+4. **Affiner la grille et filtrer les caps** : le gain attendu est faible, puisque l'affinage existe déjà.
