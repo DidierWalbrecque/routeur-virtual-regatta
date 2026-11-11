@@ -1,5 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
-import type { GeoJSONSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
+import type { GeoJSONSource, ImageSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { approximateDistanceNM, circlePolygon, cutContourAtBreaks, forwardContour, isochroneDisplayInterval, isochroneIntervals, medianAdvanceNM, splitContour, trimStalledContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
@@ -7,6 +7,7 @@ import { checkpointFeatures, checkpointKey, checkpointName, usableCheckpoints } 
 import { gateRingSvg, gateRounding, gateRoundingLabel } from "./lib/gate_marker.ts";
 import { draftFeatureCollection, zonesFeatureCollection, type Zone } from "./lib/zones.ts";
 import type { VrState } from "./lib/types.ts";
+import { windFieldPixels, type WindField } from "./lib/beaufort.ts";
 
 export const DEFAULT_DEPARTURE: Point = { latitude: 13.121111, longitude: 121.586667 };
 export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.336667 };
@@ -120,6 +121,46 @@ function endpointCollection(endpoints: Endpoints): FeatureCollection {
   };
 }
 
+const WIND_LAYER = "wind-field";
+// Un point de vent tous les 12 px d'écran : la grille GFS (0,25°) est plus
+// fine que ça seulement en zoom très large.
+const WIND_CELL_PX = 12;
+
+/** Peint le champ de vent dans une image posée sous les noms de lieux. */
+function drawWindField(map: MapLibreMap, field: WindField, viewWidth: number, viewHeight: number) {
+  const width = Math.max(2, Math.min(1024, Math.round(viewWidth / 2)));
+  const height = Math.max(2, Math.min(1024, Math.round(viewHeight / 2)));
+  const canvas = document.createElement("canvas");
+  canvas.width = width;
+  canvas.height = height;
+  const context = canvas.getContext("2d");
+  if (!context) return;
+  context.putImageData(new ImageData(windFieldPixels(field, width, height) as never, width, height), 0, 0);
+  const url = canvas.toDataURL();
+  const coordinates: [[number, number], [number, number], [number, number], [number, number]] = [
+    [field.west, field.north],
+    [field.east, field.north],
+    [field.east, field.south],
+    [field.west, field.south],
+  ];
+  const source = map.getSource(WIND_LAYER) as ImageSource | undefined;
+  if (source) {
+    source.updateImage({ url, coordinates });
+  } else {
+    map.addSource(WIND_LAYER, { type: "image", url, coordinates });
+    map.addLayer(
+      {
+        id: WIND_LAYER,
+        type: "raster",
+        source: WIND_LAYER,
+        paint: { "raster-opacity": 0.35, "raster-fade-duration": 0, "raster-resampling": "linear" },
+      },
+      map.getLayer("basemap-labels") ? "basemap-labels" : undefined,
+    );
+  }
+  map.setLayoutProperty(WIND_LAYER, "visibility", "visible");
+}
+
 function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
   (map.getSource(id) as GeoJSONSource | undefined)?.setData(data as never);
 }
@@ -193,6 +234,8 @@ type Props = {
   showRoutePoints: boolean;
   /** Afficher le balisage OpenSeaMap (phares, bouées). */
   showSeamarks: boolean;
+  /** Instant (ISO) du vent à colorer selon l'échelle de Beaufort, ou null pour masquer. */
+  windTime: string | null;
   /** Zone mise en évidence depuis la liste des zones, ou null. */
   focusedZoneId: string | null;
   /** Place prise par les panneaux ouverts, à laisser libre lors des cadrages. */
@@ -201,7 +244,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, showSeamarks, focusedZoneId, insets, onError },
+  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, showSeamarks, windTime, focusedZoneId, insets, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -259,6 +302,53 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     if (!map || !ready || !map.getLayer("seamarks")) return;
     map.setLayoutProperty("seamarks", "visibility", showSeamarks ? "visible" : "none");
   }, [showSeamarks, ready]);
+
+  // Fond coloré selon la force du vent (Beaufort), recalculé pour la zone
+  // affichée à chaque déplacement de la carte.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    if (!windTime) {
+      if (map.getLayer(WIND_LAYER)) map.setLayoutProperty(WIND_LAYER, "visibility", "none");
+      return;
+    }
+    let controller: AbortController | undefined;
+    let timer: number | undefined;
+    const load = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(async () => {
+        controller?.abort();
+        controller = new AbortController();
+        const bounds = map.getBounds();
+        const width = map.getContainer().clientWidth;
+        const height = map.getContainer().clientHeight;
+        const cells = (pixels: number) => Math.max(2, Math.min(256, Math.ceil(pixels / WIND_CELL_PX) + 1));
+        const params = new URLSearchParams({
+          time: windTime,
+          south: String(Math.max(-85, bounds.getSouth())),
+          north: String(Math.min(85, bounds.getNorth())),
+          west: String(Math.max(-180, bounds.getWest())),
+          east: String(Math.min(180, bounds.getEast())),
+          cols: String(cells(width)),
+          rows: String(cells(height)),
+        });
+        try {
+          const response = await fetch(`/api/weather/wind?${params}`, { signal: controller.signal });
+          if (!response.ok) return;
+          drawWindField(map, (await response.json()) as WindField, width, height);
+        } catch {
+          // Demande remplacée par une plus récente, ou backend injoignable : on garde l'image actuelle.
+        }
+      }, 250);
+    };
+    load();
+    map.on("moveend", load);
+    return () => {
+      map.off("moveend", load);
+      window.clearTimeout(timer);
+      controller?.abort();
+    };
+  }, [windTime, ready]);
 
   const insetsRef = useRef(insets);
   insetsRef.current = insets;

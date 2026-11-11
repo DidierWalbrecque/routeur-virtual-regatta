@@ -32,6 +32,14 @@ import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usabl
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const SEAMARKS_STORAGE_KEY = "routeur.showSeamarks";
+const WIND_STORAGE_KEY = "routeur.showWind";
+
+/** Début de l'heure en cours : origine du curseur d'heure du vent. */
+function currentHour(): number {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  return now.getTime();
+}
 const LEGEND_STORAGE_KEY = "routeur.legendOpen";
 // Panneaux posés à droite de la carte : un seul ouvert à la fois.
 const RIGHT_PANEL_IDS = ["route-form-panel", "zones-panel", "route-details-panel"];
@@ -206,6 +214,16 @@ export function App() {
     }
   });
   const [zonesOpen, setZonesOpen] = useState(false);
+  const [showWind, setShowWind] = useState(() => {
+    try {
+      return window.localStorage.getItem(WIND_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  // Heure du vent affiché : décalage en heures depuis windBase.
+  const [windBase, setWindBase] = useState(currentHour);
+  const [windHours, setWindHours] = useState(0);
   const [showRoutePoints, setShowRoutePoints] = useState(true);
   const [showSeamarks, setShowSeamarks] = useState(() => {
     try {
@@ -338,6 +356,16 @@ export function App() {
       // Stockage indisponible : le choix reste valable pour la session.
     }
   }, [showSeamarks]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WIND_STORAGE_KEY, String(showWind));
+    } catch {
+      // Stockage indisponible : le choix reste valable pour la session.
+    }
+    // À l'affichage, le curseur repart de l'heure en cours.
+    if (showWind) setWindBase(currentHour());
+  }, [showWind]);
 
   useEffect(() => {
     try {
@@ -873,6 +901,7 @@ export function App() {
         onDraftClick={onDraftClick}
         showRoutePoints={showRoutePoints}
         showSeamarks={showSeamarks}
+        windTime={showWind ? new Date(windBase + windHours * 3_600_000).toISOString() : null}
         focusedZoneId={focusedZoneId}
         insets={mapInsets}
         onError={() => setMapError(true)}
@@ -918,7 +947,16 @@ export function App() {
         </div>
       )}
       <div id="map-corner" className="map-corner">
-        {legendOpen && <MapLegend showSeamarks={showSeamarks} onSeamarks={setShowSeamarks} onClose={() => setLegendOpen(false)} />}
+        {legendOpen && (
+          <MapLegend
+            showSeamarks={showSeamarks}
+            onSeamarks={setShowSeamarks}
+            wind={{ visible: showWind, base: windBase, hours: windHours }}
+            onWindVisible={setShowWind}
+            onWindHours={setWindHours}
+            onClose={() => setLegendOpen(false)}
+          />
+        )}
         <WeatherRunCard
           model={weatherModel}
           warning={horizonNote.warning}

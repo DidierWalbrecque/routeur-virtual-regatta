@@ -17,6 +17,7 @@ func NewHandler() http.Handler {
 	mux.HandleFunc("POST /api/weather/refresh", weatherRefreshHandler)
 	mux.HandleFunc("GET /api/weather/current", weatherCurrentHandler)
 	mux.HandleFunc("GET /api/weather/status", weatherCurrentHandler)
+	mux.HandleFunc("GET /api/weather/wind", windFieldHandler)
 	mux.HandleFunc("POST /api/vr/state", vrState.post)
 	mux.HandleFunc("GET /api/vr/state", vrState.get)
 
