@@ -15,7 +15,8 @@
     "https://vro-api-client.prod.virtualregatta.com/*",
     "https://dev.vro.sparks.virtualregatta.com/*",
     "https://vro-api-ranking.devel.virtualregatta.com/*",
-    "https://vro-api-client.devel.virtualregatta.com/*"
+    "https://vro-api-client.devel.virtualregatta.com/*",
+    "https://routeur-virtual-regatta-1.onrender.com/*"
   ],
   "background": {
     "service_worker": "background.js"
