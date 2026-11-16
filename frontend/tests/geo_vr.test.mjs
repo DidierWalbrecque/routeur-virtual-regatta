@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { forwardContour, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "../src/lib/geo.ts";
-import { checkpointFeatures, equipmentFromVrOptions, usableCheckpoints } from "../src/lib/vr.ts";
+import { cutContourAtBreaks, forwardContour, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition, isochroneDisplayInterval, trimStalledContour } from "../src/lib/geo.ts";
+import { checkpointFeatures, checkpointLabel, equipmentFromVrOptions, meaningfulName, usableCheckpoints } from "../src/lib/vr.ts";
 
 test("parseVirtualRegattaPosition et formatVirtualRegattaPosition sont réciproques", () => {
   const position = parseVirtualRegattaPosition(`47°26'11.95"N - 24°54'55.32"W`);
@@ -43,8 +43,27 @@ test("les portes passées ou à terre ne sont pas utilisables", () => {
   };
   assert.deepEqual(usableCheckpoints(state).map((checkpoint) => checkpoint.group), [2]);
   const features = checkpointFeatures(state);
-  assert.equal(features.length, 4);
-  assert.equal(features[0].geometry.type, "LineString");
+  // Une seule porte utilisable : un point, sur sa marque de départ.
+  assert.equal(features.length, 1);
+  assert.equal(features[0].geometry.type, "Point");
+});
+
+test("une porte nommée « none » par le jeu affiche son sens de passage", () => {
+  const point = { latitude: 1, longitude: 2 };
+  assert.equal(checkpointLabel({ group: 4, id: 4, name: "none", side: "port", start: point, end: point }, 0), "P4.4 — bâbord");
+  assert.equal(checkpointLabel({ group: 4, id: 5, name: " None ", display: "", start: point, end: point }, 1), "P4.5 — sens libre");
+  assert.equal(checkpointLabel({ group: 1, id: 1, name: "none", display: "Bouée de Marie-Galante", start: point, end: point }, 0), "P1.1 — Bouée de Marie-Galante");
+  assert.equal(checkpointLabel({ group: 2, id: 1, name: "Cap Horn", rhumb: true, start: point, end: point }, 0), "P2.1 — Cap Horn");
+
+  const [label] = checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: "none", side: "stbd", start: point, end: point }] });
+  assert.equal(label.properties.name, "tribord");
+  assert.equal(label.properties.label, "P4.4 — tribord");
+
+  assert.equal(meaningfulName("none"), null);
+  assert.equal(meaningfulName("buoy"), null);
+  assert.equal(checkpointLabel({ group: 2, id: 2, name: "buoy", side: "stbd", start: point, end: point }, 0), "P2.2 — tribord");
+  assert.equal(meaningfulName(undefined), null);
+  assert.equal(meaningfulName(" Pointe-à-Pitre "), "Pointe-à-Pitre");
 });
 
 test("forwardContour garde l'arc tourné vers la destination", () => {
@@ -58,6 +77,39 @@ test("forwardContour garde l'arc tourné vers la destination", () => {
   assert.ok(forwardContour(ring, { x: 1, y: 0 }).length >= 2);
 });
 
+test("cutContourAtBreaks ne coupe que les côtés signalés, même longs", () => {
+  const ring = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 0.01 },
+    // Côté de 30 milles : au près, c'est un vrai bord du front.
+    { latitude: 0, longitude: 0.51 },
+    { latitude: 0, longitude: 0.52 },
+    { latitude: 0, longitude: 0.53 },
+  ];
+  assert.deepEqual(cutContourAtBreaks(ring, ring, []).map((part) => part.length), [5]);
+  // Le côté 2 -> 3 traverse une île : il est coupé, dans un sens comme dans l'autre.
+  assert.deepEqual(cutContourAtBreaks(ring, ring, [2]).map((part) => part.length), [3, 2]);
+  assert.deepEqual(cutContourAtBreaks([...ring].reverse(), ring, [2]).map((part) => part.length), [2, 3]);
+});
+
+test("forwardContour garde les flancs de l'enveloppe quand l'angle s'élargit", () => {
+  // Carré orienté nord-sud ; la destination est plein sud.
+  const square = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 1 },
+    { latitude: 1, longitude: 1 },
+    { latitude: 1, longitude: 0 },
+    { latitude: 0, longitude: 0 },
+  ];
+  const south = { x: 0, y: -1 };
+  // À 90°, seul le côté sud reste : les flancs est et ouest disparaissent.
+  assert.equal(forwardContour(square, south).length, 2);
+  // À 110°, les flancs, perpendiculaires à la direction, sont gardés.
+  assert.equal(forwardContour(square, south, 110).length, 4);
+  // Le côté nord, tourné à l'opposé, n'est jamais tracé.
+  assert.ok(forwardContour(square, south, 179).length < 5);
+});
+
 import { EQUIPMENT, EQUIPMENT_LABELS } from "../src/lib/vr.ts";
 
 test("chaque équipement a un libellé lisible", () => {
@@ -65,4 +117,65 @@ test("chaque équipement a un libellé lisible", () => {
     assert.ok(EQUIPMENT_LABELS[item], `libellé manquant pour ${item}`);
     assert.ok(!EQUIPMENT_LABELS[item].includes("_"), `libellé technique pour ${item}`);
   }
+});
+
+test("trimStalledContour retire les côtés où le front n'a pas avancé", () => {
+  // Front précédent : ligne le long de l'équateur, de 0° à 1°E.
+  const previous = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 1 },
+  ];
+  // Nouveau front : la moitié ouest reste collée au précédent (bloquée par une
+  // côte), la moitié est a avancé de 0,2° (12 milles).
+  const part = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0.001, longitude: 0.2 },
+    { latitude: 0.001, longitude: 0.4 },
+    { latitude: 0.2, longitude: 0.6 },
+    { latitude: 0.2, longitude: 0.8 },
+    { latitude: 0.2, longitude: 1 },
+  ];
+  const parts = trimStalledContour([part], previous);
+  assert.equal(parts.length, 1);
+  // La partie bloquée disparaît : le tracé commence sur le côté de transition
+  // (redécoupé en petits morceaux) et finit au bout du front.
+  const first = parts[0][0];
+  assert.ok(first.longitude > 0.4 && first.longitude < 0.6, `début ${first.longitude}`);
+  assert.deepEqual(parts[0].at(-1), part.at(-1));
+  // Un front qui avance partout est gardé en entier.
+  const advanced = part.map((point) => ({ latitude: point.latitude + 0.3, longitude: point.longitude }));
+  const kept = trimStalledContour([advanced], previous);
+  assert.equal(kept.length, 1);
+  assert.deepEqual([kept[0][0], kept[0].at(-1)], [advanced[0], advanced.at(-1)]);
+  // Sans front précédent, rien n'est retiré.
+  assert.deepEqual(trimStalledContour([part], []), [part]);
+});
+
+test("trimStalledContour retire le milieu d'un long côté collé au front précédent", () => {
+  const previous = [
+    { latitude: 0, longitude: 0 },
+    { latitude: 0, longitude: 2 },
+  ];
+  // Deux pointes qui avancent, reliées par un long côté resté sur le front précédent.
+  const part = [
+    { latitude: 0.3, longitude: 0 },
+    { latitude: 0.001, longitude: 0.1 },
+    { latitude: 0.001, longitude: 1.9 },
+    { latitude: 0.3, longitude: 2 },
+  ];
+  const parts = trimStalledContour([part], previous);
+  assert.equal(parts.length, 2);
+  assert.ok(parts.every((piece) => piece.every((point) => point.longitude < 0.3 || point.longitude > 1.7)));
+});
+
+test("isochroneDisplayInterval espace les isochrones selon le zoom", () => {
+  // Front à 0,3 mille/min (18 nœuds), pas de 10 min.
+  // Zoomé (20 px/mille) : 10 min = 60 px, tout est affiché.
+  assert.equal(isochroneDisplayInterval(10, 0.3, 20), 10);
+  // Dézoomé (0,5 px/mille) : 10 min = 1,5 px ; 1 h = 9 px ; 2 h = 18 px.
+  assert.equal(isochroneDisplayInterval(10, 0.3, 0.5), 120);
+  // L'intervalle reste un multiple du pas de calcul.
+  assert.equal(isochroneDisplayInterval(15, 0.3, 2), 30);
+  // Vitesse inconnue : on garde le pas.
+  assert.equal(isochroneDisplayInterval(10, 0, 0.5), 10);
 });

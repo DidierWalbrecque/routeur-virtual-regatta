@@ -1,3 +1,5 @@
+import type { WeatherSwitch } from "./weather_switch.ts";
+
 export type Point = { latitude: number; longitude: number };
 
 export type RoutePoint = {
@@ -21,11 +23,15 @@ export type Isochrone = {
   instant: string;
   positions?: Point[];
   contour: Point[];
+  /** Indices i des côtés contour[i] -> contour[i+1] qui traversent une terre ou une zone interdite. */
+  contourBreaks?: number[];
   completedLayers?: number;
   totalLayers?: number;
 };
 
 export type RouteResult = {
+  /** Run récent encore partiel, complété par le précédent. */
+  weather?: WeatherSwitch;
   position?: Point;
   destination?: Point;
   destinationReached?: boolean;
@@ -37,6 +43,8 @@ export type RouteStart = {
   position?: Point;
   destination?: Point;
   startedAt?: string;
+  totalLayers?: number;
+  weather?: WeatherSwitch;
 };
 
 export type Checkpoint = {
@@ -55,6 +63,9 @@ export type BoatHint = { path: string; value: string };
 
 export type VrState = {
   position?: Point;
+  arrival?: { latitude: number; longitude: number; radius?: number | null; name?: string } | null;
+  legStart?: { latitude: number; longitude: number; name?: string } | null;
+  state?: string;
   stamina?: number | null;
   options?: string[];
   checkpoints?: Checkpoint[];

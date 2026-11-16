@@ -36,8 +36,30 @@ export function checkpointKey(checkpoint: Checkpoint, index: number): string {
   return `${checkpoint.group ?? index + 1}.${checkpoint.id ?? index + 1}`;
 }
 
+// Valeurs que le jeu envoie à la place d'un vrai nom.
+// « buoy » (bouée) n'est qu'un type de marque, pas un nom : la porte est alors
+// désignée par son sens de passage, comme une porte sans nom.
+const PLACEHOLDER_NAMES = new Set(["", "none", "null", "undefined", "-", "—", "buoy", "bouée", "bouee"]);
+
+/** Nom lisible, ou null quand le jeu n'envoie qu'un nom vide, « none » ou « buoy ». */
+export function meaningfulName(value: string | null | undefined): string | null {
+  const name = String(value ?? "").trim();
+  return PLACEHOLDER_NAMES.has(name.toLowerCase()) ? null : name;
+}
+
+export function checkpointSideLabel(checkpoint: Checkpoint): string {
+  if (checkpoint.rhumb) return "dans les deux sens";
+  const side = String(checkpoint.side || "").toLowerCase();
+  return side === "stbd" ? "tribord" : side === "port" ? "bâbord" : "sens libre";
+}
+
+/** Nom de la porte, ou son sens de passage quand le jeu ne la nomme pas. */
+export function checkpointName(checkpoint: Checkpoint): string {
+  return meaningfulName(checkpoint.name) ?? meaningfulName(checkpoint.display) ?? checkpointSideLabel(checkpoint);
+}
+
 export function checkpointLabel(checkpoint: Checkpoint, index: number): string {
-  return `P${checkpointKey(checkpoint, index)} — ${checkpoint.name || checkpoint.display || "Porte"}`;
+  return `P${checkpointKey(checkpoint, index)} — ${checkpointName(checkpoint)}`;
 }
 
 export function checkpointTitle(checkpoint: Checkpoint): string {
@@ -50,53 +72,33 @@ export type MapFeature = {
   geometry: { type: "LineString"; coordinates: number[][] } | { type: "Point"; coordinates: number[] };
 };
 
+/**
+ * Portes encore à passer, pour la carte : un point par porte, sur sa marque de
+ * départ, avec son nom, son sens de passage et son numéro d'ordre de passage
+ * (1 = prochaine porte). La seconde extrémité, souvent un point lointain qui ne
+ * sert qu'à prolonger la ligne, n'est pas dessinée.
+ */
 export function checkpointFeatures(state: VrState | undefined): MapFeature[] {
   return usableCheckpoints(state).flatMap((checkpoint, index): MapFeature[] => {
-    const { start, end } = checkpoint;
-    if (![start, end].every((point) => point && Number.isFinite(Number(point.latitude)) && Number.isFinite(Number(point.longitude)))) return [];
+    const { start } = checkpoint;
+    if (!start || !Number.isFinite(Number(start.latitude)) || !Number.isFinite(Number(start.longitude))) return [];
     const group = checkpoint.group ?? index + 1;
     const id = checkpoint.id ?? index + 1;
-    const name = checkpoint.name || checkpoint.display || "Porte";
-    const side = checkpoint.rhumb ? "any" : String(checkpoint.side || "").toLowerCase();
-    const sideLabel = checkpoint.rhumb ? "dans les deux sens" : side === "stbd" ? "tribord" : side === "port" ? "bâbord" : "sens libre";
-    const properties = {
-      checkpoint: `${group}.${id}`,
-      label: `Porte ${group}.${id} — ${name}`,
-      name,
-      side,
-      sideLabel,
-      rhumb: checkpoint.rhumb === true,
-    };
-    const midpoint = [
-      (Number(start.longitude) + Number(end.longitude)) / 2,
-      (Number(start.latitude) + Number(end.latitude)) / 2,
-    ];
+    const name = checkpointName(checkpoint);
     return [
       {
         type: "Feature",
-        properties,
-        geometry: {
-          type: "LineString",
-          coordinates: [
-            [Number(start.longitude), Number(start.latitude)],
-            [Number(end.longitude), Number(end.latitude)],
-          ],
+        properties: {
+          kind: "label",
+          checkpoint: `${group}.${id}`,
+          label: `P${group}.${id} — ${name}`,
+          name,
+          side: checkpoint.rhumb ? "any" : String(checkpoint.side || "").toLowerCase(),
+          sideLabel: checkpointSideLabel(checkpoint),
+          rhumb: checkpoint.rhumb === true,
+          order: index + 1,
         },
-      },
-      {
-        type: "Feature",
-        properties: { ...properties, kind: "label", label: `P${group}.${id} — ${name}` },
-        geometry: { type: "Point", coordinates: midpoint },
-      },
-      {
-        type: "Feature",
-        properties: { ...properties, kind: "mark", mark: "start", markLabel: "D" },
         geometry: { type: "Point", coordinates: [Number(start.longitude), Number(start.latitude)] },
-      },
-      {
-        type: "Feature",
-        properties: { ...properties, kind: "mark", mark: "end", markLabel: "A" },
-        geometry: { type: "Point", coordinates: [Number(end.longitude), Number(end.latitude)] },
       },
     ];
   });

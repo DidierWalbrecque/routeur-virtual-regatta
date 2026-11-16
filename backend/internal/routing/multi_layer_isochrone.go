@@ -60,15 +60,35 @@ type IsochroneNode struct {
 	SpeedPenalty            *simulation.SpeedPenaltyApplication
 	CourseProgress          CourseProgress
 	State                   simulation.BoatState
+	// ManeuverStamina cumule la stamina dépensée en manœuvres depuis le départ.
+	// La stamina du bateau se recharge avec le temps : seule cette somme garde
+	// la trace des manœuvres faites en route.
+	ManeuverStamina simulation.StaminaLevel
 }
 
 type isochroneParentState struct {
-	Position       navigation.Position
-	Stamina        simulation.StaminaState
-	BoatState      simulation.BoatState
-	WindAngle      navigation.TrueWindAngle
-	CourseProgress CourseProgress
-	HasBoatState   bool
+	Position        navigation.Position
+	Stamina         simulation.StaminaState
+	BoatState       simulation.BoatState
+	WindAngle       navigation.TrueWindAngle
+	CourseProgress  CourseProgress
+	HasBoatState    bool
+	ManeuverStamina simulation.StaminaLevel
+}
+
+// maneuverStaminaDistance convertit la stamina dépensée en manœuvres en
+// distance, pour classer les routes : chaque point de stamina coûte autant
+// que 0,01 NM de progression. Un empannage d'Imoca par vent faible (environ
+// 12 points) vaut ainsi 0,12 NM : une manœuvre est gardée si elle fait gagner
+// davantage, et un aller-retour inutile, qui ne gagne que quelques mètres,
+// est écarté. La pénalité de vitesse reste comptée à part, dans la distance
+// parcourue.
+const maneuverStaminaDistance = 0.01
+
+// rankingProgress est la progression vers la cible diminuée du coût des
+// manœuvres faites depuis le départ.
+func rankingProgress(node IsochroneNode) float64 {
+	return float64(node.TargetProgress) - maneuverStaminaDistance*float64(node.ManeuverStamina)
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
@@ -96,14 +116,44 @@ type IsochroneSearch struct {
 
 // Best returns the best retained node from the final frontier.
 func (search IsochroneSearch) Best() (IsochroneNode, bool) {
-	if len(search.Frontiers) == 0 {
+	index, ok := search.bestFinalIndex()
+	if !ok {
 		return IsochroneNode{}, false
+	}
+	return search.Frontiers[len(search.Frontiers)-1].Nodes[index], true
+}
+
+// bestFinalIndex désigne, dans la dernière frontière, la route retenue : la
+// meilleure une fois le coût de ses manœuvres déduit. Un aller-retour inutile,
+// qui ne fait gagner que quelques mètres, ne l'emporte plus sur la route directe.
+func (search IsochroneSearch) bestFinalIndex() (int, bool) {
+	if len(search.Frontiers) == 0 {
+		return 0, false
 	}
 	final := search.Frontiers[len(search.Frontiers)-1]
 	if len(final.Nodes) == 0 {
-		return IsochroneNode{}, false
+		return 0, false
 	}
-	return final.Nodes[0], true
+	best := 0
+	for index := 1; index < len(final.Nodes); index++ {
+		if finalNodeBetter(final.Nodes[index], final.Nodes[best]) {
+			best = index
+		}
+	}
+	return best, true
+}
+
+// finalNodeBetter classe deux routes complètes : porte franchie, puis
+// progression vers la cible diminuée du coût des manœuvres faites depuis le
+// départ (rankingProgress), puis l'ordre habituel.
+func finalNodeBetter(a, b IsochroneNode) bool {
+	if a.CourseProgress.NextGateIndex != b.CourseProgress.NextGateIndex {
+		return a.CourseProgress.NextGateIndex > b.CourseProgress.NextGateIndex
+	}
+	if left, right := rankingProgress(a), rankingProgress(b); left != right {
+		return left > right
+	}
+	return nodeBetter(a, b)
 }
 
 // BuildIsochroneSearch expands every retained node at each step and applies
@@ -475,6 +525,10 @@ func BuildIsochroneSearch(
 						err,
 					)
 				}
+				maneuverStamina := parentState.ManeuverStamina
+				if transition != nil {
+					maneuverStamina += transition.TotalConsumption
+				}
 				var activeSpeedPenalty *polar.ManeuverPenalty
 				if speedPenalty != nil {
 					activeSpeedPenalty = speedPenalty.RemainingPenalty
@@ -510,11 +564,12 @@ func BuildIsochroneSearch(
 					TargetProgress: DistanceProgress(
 						float64(targetInitialDistance - targetRemainingDistance),
 					),
-					Maneuver:       maneuver,
-					Transition:     transition,
-					SpeedPenalty:   speedPenalty,
-					CourseProgress: nextCourseProgress,
-					State:          state,
+					Maneuver:        maneuver,
+					Transition:      transition,
+					SpeedPenalty:    speedPenalty,
+					CourseProgress:  nextCourseProgress,
+					State:           state,
+					ManeuverStamina: maneuverStamina,
 				})
 			}
 		}
@@ -601,12 +656,13 @@ func BuildIsochroneSearch(
 		parentStates = make([]isochroneParentState, len(nodes))
 		for index, node := range nodes {
 			parentStates[index] = isochroneParentState{
-				Position:       node.State.Position,
-				Stamina:        node.State.Stamina,
-				BoatState:      node.State,
-				WindAngle:      node.Candidate.Step.WindAngle,
-				CourseProgress: node.CourseProgress,
-				HasBoatState:   true,
+				Position:        node.State.Position,
+				Stamina:         node.State.Stamina,
+				BoatState:       node.State,
+				WindAngle:       node.Candidate.Step.WindAngle,
+				CourseProgress:  node.CourseProgress,
+				HasBoatState:    true,
+				ManeuverStamina: node.ManeuverStamina,
 			}
 		}
 		currentInstant = nextInstant
@@ -683,8 +739,12 @@ func nodeBearingRadians(origin navigation.Position, position navigation.Position
 	return math.Atan2(deltaLon, deltaLat)
 }
 
-// nodeBetter ordonne deux nœuds comme sortIsochroneNodes : porte franchie,
-// puis progression vers la cible, puis distance, puis stamina.
+// nodeBetter ordonne deux nœuds pendant le calcul (filtre par secteurs et
+// tri des frontières) : porte franchie, puis progression vers la cible, puis
+// distance, puis stamina. Le coût des manœuvres n'y entre pas : pénaliser une
+// route qui a déjà manœuvré face à une voisine qui manœuvrera plus tard
+// éliminerait trop tôt de bonnes routes. Il ne sert qu'au choix final
+// (finalNodeBetter).
 func nodeBetter(a, b IsochroneNode) bool {
 	if a.CourseProgress.NextGateIndex != b.CourseProgress.NextGateIndex {
 		return a.CourseProgress.NextGateIndex > b.CourseProgress.NextGateIndex
@@ -874,24 +934,13 @@ func pruneIsochroneNodesUnsorted(
 
 func sortIsochroneNodes(selected []IsochroneNode) {
 	sort.SliceStable(selected, func(left, right int) bool {
-		if selected[left].CourseProgress.NextGateIndex !=
-			selected[right].CourseProgress.NextGateIndex {
-			return selected[left].CourseProgress.NextGateIndex >
-				selected[right].CourseProgress.NextGateIndex
+		if nodeBetter(selected[left], selected[right]) {
+			return true
 		}
-		if selected[left].TargetProgress !=
-			selected[right].TargetProgress {
-			return selected[left].TargetProgress >
-				selected[right].TargetProgress
+		if nodeBetter(selected[right], selected[left]) {
+			return false
 		}
-		if selected[left].Progress != selected[right].Progress {
-			return selected[left].Progress > selected[right].Progress
-		}
-		if selected[left].State.Stamina.Level !=
-			selected[right].State.Stamina.Level {
-			return selected[left].State.Stamina.Level >
-				selected[right].State.Stamina.Level
-		}
+		// Égalité parfaite : ordre stable et reproductible.
 		if selected[left].State.Heading != selected[right].State.Heading {
 			return selected[left].State.Heading <
 				selected[right].State.Heading

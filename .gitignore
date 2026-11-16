@@ -45,3 +45,6 @@ __pycache__/
 # Windows et macOS
 Thumbs.db
 .DS_Store
+
+# Graphify
+graphify-out/

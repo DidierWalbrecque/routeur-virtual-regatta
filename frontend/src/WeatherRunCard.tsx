@@ -4,6 +4,9 @@ const HOURS_PER_DAY = 24;
 // Au-delà de cet horizon la prévision GFS devient indicative (re-routage requis).
 const LOW_CONFIDENCE_HOURS = 240;
 
+/** Run suivant en cours de téléchargement. */
+export type NextRun = { label: string; downloaded: number; expected: number };
+
 function formatCoveredUntil(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return "";
@@ -13,17 +16,24 @@ function formatCoveredUntil(iso: string): string {
   return `${day}/${month} ${hour}Z`;
 }
 
-// Timeline « prévision devant toi » : une règle 0 → horizon avec un curseur au
+// Timeline « prévision devant vous » : une règle 0 → horizon avec un curseur au
 // présent. À gauche du curseur le passé (hachuré) depuis l'émission du run, à
 // droite la prévision exploitable. La zone au-delà de LOW_CONFIDENCE_HOURS est
 // hachurée en diagonale (prévision indicative), et tout passe en alerte quand la
-// couverture ne couvre pas l'horizon de calcul demandé.
+// couverture ne couvre pas l'horizon de calcul demandé. Repliée, la carte se
+// réduit à une ligne qui s'ouvre au clic.
 export function WeatherRunCard({
   model,
   warning = false,
+  nextRun = null,
+  collapsed,
+  onToggle,
 }: {
   model: WeatherRunModel | null;
   warning?: boolean;
+  nextRun?: NextRun | null;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
   if (!model) return null;
   const horizon = model.horizonHours;
@@ -31,6 +41,30 @@ export function WeatherRunCard({
   const ahead = Math.max(0, horizon - age);
   const pastPercent = horizon > 0 ? (age / horizon) * 100 : 0;
   const coveredText = formatCoveredUntil(model.coveredUntil);
+  const nextText = nextRun ? `${nextRun.label} en cours ${nextRun.downloaded}/${nextRun.expected}` : "";
+
+  if (collapsed) {
+    return (
+      <button
+        id="weather-run-card"
+        type="button"
+        className="weather-run-card weather-run-chip"
+        aria-expanded="false"
+        title="Afficher le détail des prévisions"
+        onClick={onToggle}
+      >
+        <span className="material-symbols-outlined" aria-hidden="true">
+          cloud
+        </span>
+        <span>
+          <strong>{model.runText.slice(-3)}</strong>
+          {" · "}
+          <span className={warning ? "weather-run-chip-hours is-warning" : "weather-run-chip-hours"}>{`${ahead} h`}</span>
+          {nextRun && <span className="weather-run-chip-next">{` · ${nextRun.label.slice(0, 3)} ${nextRun.downloaded}/${nextRun.expected}`}</span>}
+        </span>
+      </button>
+    );
+  }
 
   const ticks: number[] = [];
   for (let hour = HOURS_PER_DAY; hour < horizon; hour += HOURS_PER_DAY) {
@@ -48,6 +82,11 @@ export function WeatherRunCard({
           <strong>{model.runText}</strong>
         </p>
         <span className="weather-run-age">{`émis il y a ${model.ageHours} h`}</span>
+        <button type="button" className="weather-run-collapse" aria-label="Réduire l'encart météo" title="Réduire" onClick={onToggle}>
+          <span className="material-symbols-outlined" aria-hidden="true">
+            expand_more
+          </span>
+        </button>
       </div>
       <div className="weather-run-track-wrap">
         <div className="weather-run-ends">
@@ -57,7 +96,7 @@ export function WeatherRunCard({
         <div
           className="weather-run-track"
           role="img"
-          aria-label={`${ahead} h de prévision devant, run émis il y a ${model.ageHours} h${
+          aria-label={`${ahead} h de prévision devant vous, run émis il y a ${model.ageHours} h${
             warning ? ", couverture insuffisante pour l’horizon demandé" : ""
           }`}
         >
@@ -83,11 +122,19 @@ export function WeatherRunCard({
       </div>
       <div className="weather-run-summary">
         <strong className={`weather-run-remaining${warning ? " is-warning" : ""}`}>{`${ahead} h`}</strong>
-        <span className="weather-run-remaining-label">de prévision devant toi</span>
+        <span className="weather-run-remaining-label">de prévision devant vous</span>
       </div>
       <p className="weather-run-footline">
         {`${model.fileCount} fichiers${coveredText ? ` · jusqu'au ${coveredText}` : ""}`}
       </p>
+      {nextText && (
+        <p className="weather-run-next" title="Le calcul complète ce run avec le précédent tant qu'il n'est pas entier">
+          <span className="material-symbols-outlined" aria-hidden="true">
+            downloading
+          </span>
+          {`Run ${nextText}`}
+        </p>
+      )}
       {showLowConfidence && (
         <p className="weather-run-legend">{`au-delà de J+${LOW_CONFIDENCE_HOURS / HOURS_PER_DAY} : indicatif`}</p>
       )}

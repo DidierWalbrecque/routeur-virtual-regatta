@@ -13,16 +13,18 @@ type practicalHeadingsStream struct {
 }
 
 type practicalHeadingsStartEvent struct {
-	Position    positionRequest `json:"position"`
-	Destination positionRequest `json:"destination"`
-	StartedAt   time.Time       `json:"startedAt"`
-	TotalLayers int             `json:"totalLayers"`
+	Position    positionRequest       `json:"position"`
+	Destination positionRequest       `json:"destination"`
+	StartedAt   time.Time             `json:"startedAt"`
+	TotalLayers int                   `json:"totalLayers"`
+	Weather     *weatherBlendResponse `json:"weather,omitempty"`
 }
 
 type practicalHeadingsFrontierEvent struct {
 	Instant            string            `json:"instant"`
 	Positions          []positionRequest `json:"positions"`
 	Contour            []positionRequest `json:"contour"`
+	ContourBreaks      []int             `json:"contourBreaks"`
 	CompletedLayers    int               `json:"completedLayers"`
 	TotalLayers        int               `json:"totalLayers"`
 	Progress           float64           `json:"progress"`

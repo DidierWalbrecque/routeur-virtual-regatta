@@ -127,23 +127,27 @@ continue sinon de répondre avec l'ancienne version.
 
 ### Mode et horizon du routage
 
-| Mode | Pas des isochrones | Caps explorés | Horizon maximal |
-|---|---|---|---|
-| Précis | 10 min | tous les 15°, affinés au degré | 3 jours |
-| Rapide | 15 min | tous les 30°, affinés au degré | 5 jours |
+| Mode | Pas des isochrones | Caps explorés | Positions par front | Horizon maximal |
+|---|---|---|---|---|
+| Précis | 10 min | tous les 6°, affinés au degré | 2400 | 4 jours |
+| Rapide | 15 min | tous les 30°, affinés au degré | 1200 | 10 jours |
 
 L'horizon se choisit dans une liste : « Jusqu'à l'arrivée » (le calcul s'arrête
 dès que l'arrivée est atteinte), 4 heures, 24 heures, 2 jours, 3 jours et, en
-mode Rapide seulement, 5 jours. Il ne dépasse jamais ce que couvrent les
-prévisions téléchargées depuis le départ : l'interface le raccourcit et le
-signale. Le bouton GRIB télécharge de quoi couvrir l'horizon choisi (72 h par
-défaut, 84 h pour 3 jours, 132 h pour 5 jours). L'API refuse une durée au-delà
-du maximum du mode. Au-delà de 3 jours, la prévision GFS devient peu fiable :
-la route donne une tendance, pas des caps à suivre.
+mode Rapide seulement, 5, 7 et 10 jours. Il ne dépasse jamais ce que couvrent
+les prévisions téléchargées depuis le départ : l'interface le raccourcit et le
+signale. Le bouton GRIB télécharge tout le GFS 0,25° disponible, de f000 à
+f384. L'API refuse une durée au-delà du maximum du mode. Au-delà de 3 jours,
+la prévision GFS devient peu fiable : la route donne une tendance, pas des caps
+à suivre.
 
-Mesuré sur une route Bretagne–Antilles avec les côtes : le mode Précis demande
-environ 0,15 s par heure d'horizon (3 à 4 s pour 24 h, 9 s pour 63 h), le mode
-Rapide environ deux fois moins.
+Le nombre de positions conservées par front pèse le plus sur la qualité de la
+route. Mesuré sans côtes sur quatre traversées au large de 48 heures, en mode
+Précis, passer de 300 à 2400 positions fait gagner jusqu'à 85 NM et ramène
+une dizaine de virements inutiles à un ou deux. Sur le PC du backend, une route
+de 48 heures demande alors environ 1 min 20 en mode Précis. La comparaison se
+relance avec `VR_MAX_CANDIDATES_COMPARISON=precise go test ./internal/httpapi/
+-run TestVRMaxCandidatesRouteConvergence -v -timeout 120m` depuis `backend`.
 
 ### Polaire du bateau
 
@@ -277,8 +281,8 @@ Champs principaux de la requête de calcul : `weatherFiles`, `polarPath`,
 `position` et `destination` (`latitude`/`longitude` ou `virtualRegatta`),
 `instant` (RFC 3339), `durationMinutes`, `stepMinutes`, `mode` (`quick` ou
 `precise`), `owned`, `useVirtualRegattaState` et `exclusionZones` (liste de
-`{name, points:[{latitude, longitude}]}`). La durée est limitée à 3 jours en mode
-précis et à 5 jours en mode rapide. Chaque point de la route renvoyée porte le
+`{name, points:[{latitude, longitude}]}`). La durée est limitée à 4 jours en mode
+précis et à 10 jours en mode rapide. Chaque point de la route renvoyée porte le
 détail du pas qui y mène (`twd`, `tws`, `twa`, `tack`, `speedKnots`,
 `foilPercent`, `speedCoefficient`, `maneuver`).
 
@@ -667,10 +671,12 @@ manœuvre, le changement de voile, la stamina et la progression ; le fichier
 peut être chargé directement dans MapLibre ou un
 logiciel SIG.
 
-Lorsque le nombre de positions dépasse `-max-candidates`, le moteur agrandit
-progressivement les cellules pour réduire le front tout en conservant une
-répartition géographique. La taille demandée par `-cell-size` reste donc un
-minimum ; la sortie permet de voir si elle a dû être augmentée.
+L'élagage se fait en deux temps. Dans chaque cellule de `-cell-size`, le moteur
+retire les états de bateau dominés, sans fusionner les cellules. Si le front
+dépasse encore `-max-candidates`, il le découpe en autant de secteurs de cap,
+vus depuis le point de départ, et garde le meilleur nœud de chaque secteur :
+le front reste large et les routes alternatives survivent. La taille de
+cellule n'est plus agrandie.
 
 Un espacement de caps plus petit, une cellule minimale plus petite ou une
 limite de candidats plus élevée préservent davantage de routes alternatives,

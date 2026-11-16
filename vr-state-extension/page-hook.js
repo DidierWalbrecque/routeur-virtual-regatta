@@ -14,6 +14,32 @@
   ];
   let latestCheckpoints = [];
   let latestGateGroupCounters = [];
+  let latestArrival = null;
+  let latestLegStart = null;
+
+  // Départ officiel du leg : début du leg (lat, lon, nom).
+  function legStartOf(leg) {
+    const start = leg?.start;
+    const latitude = Number(start?.lat);
+    const longitude = Number(start?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return { latitude, longitude, name: text(start?.name) };
+  }
+
+  // Arrivée officielle du leg : fin du leg (lat, lon, rayon, nom).
+  function legEndOf(leg) {
+    const end = leg?.end;
+    const latitude = Number(end?.lat);
+    const longitude = Number(end?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    const radius = Number(end?.radius);
+    return {
+      latitude,
+      longitude,
+      radius: Number.isFinite(radius) && radius > 0 ? radius : null,
+      name: text(end?.name),
+    };
+  }
 
   function availableSails(options, fullOptions) {
     const normalizedOptions = new Set(options.map((option) => String(option).toLowerCase()));
@@ -207,6 +233,10 @@
     if (Array.isArray(leg?.checkpoints)) {
       latestCheckpoints = checkpointsFromLeg(leg);
     }
+    const arrival = legEndOf(leg);
+    if (arrival) latestArrival = arrival;
+    const legStart = legStartOf(leg);
+    if (legStart) latestLegStart = legStart;
     if (leg && typeof leg === "object") {
       latestZones = collectZones([["res.leg", leg]]);
       latestLegShape = legShapeOf(leg);
@@ -235,6 +265,8 @@
           name: sailName(currentSail),
           automatic: Number(currentSail) >= 10,
         },
+        // Valeur brute du jeu (boat.sail) pour diagnostiquer l'encodage de la voile.
+        rawSail: currentSail,
         heading: Number.isFinite(Number(boat.heading)) ? Number(boat.heading) : null,
         speed: Number.isFinite(Number(boat.speed)) ? Number(boat.speed) : null,
         state: boat.state || "",
@@ -243,6 +275,8 @@
         zones: latestZones,
         legShape: latestLegShape,
         checkpoints: latestCheckpoints,
+        arrival: latestArrival,
+        legStart: latestLegStart,
         gateGroupCounters: latestGateGroupCounters,
         sourceUrl: url,
       },

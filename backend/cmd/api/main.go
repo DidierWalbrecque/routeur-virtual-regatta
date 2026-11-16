@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 	"time"
@@ -16,6 +17,8 @@ func main() {
 		Handler:           httpapi.NewHandler(),
 		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	httpapi.StartGRIBWatcher(context.Background())
 
 	log.Printf("API disponible sur http://localhost%s", serverAddress)
 
