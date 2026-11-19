@@ -1,0 +1,75 @@
+import { formatDuration } from "./horizon.ts";
+
+/** Résultat d'un départ candidat, tel que transmis par /api/departure-window/stream. */
+export type DepartureOutcome = {
+  index: number;
+  departure: string;
+  reached: boolean;
+  arrival?: string;
+  elapsedHours: number;
+  gatesCrossed: number;
+  nextTarget: string;
+  distanceNM: number;
+  position: { latitude: number; longitude: number };
+};
+
+/** Événement « start » : les départs qui vont être comparés. */
+export type DepartureWindowStart = {
+  departures: string[];
+  comparisonHours: number;
+  totalGates: number;
+  coveredUntil: string;
+  windowClose?: string;
+};
+
+/** Durées comparées proposées, en heures. */
+export const COMPARISON_HOURS = [24, 48, 72, 96, 120] as const;
+/** Écarts proposés entre deux départs, en heures. */
+export const DEPARTURE_STEP_HOURS = [3, 6, 12, 24] as const;
+
+/**
+ * Même classement que le serveur : arrivé avant, sinon plus de portes
+ * franchies, sinon plus près de la porte suivante ; à égalité, le plus tôt.
+ */
+export function departureBetter(a: DepartureOutcome, b: DepartureOutcome): boolean {
+  if (a.reached !== b.reached) return a.reached;
+  if (a.reached && a.elapsedHours !== b.elapsedHours) return a.elapsedHours < b.elapsedHours;
+  if (!a.reached) {
+    if (a.gatesCrossed !== b.gatesCrossed) return a.gatesCrossed > b.gatesCrossed;
+    if (a.distanceNM !== b.distanceNM) return a.distanceNM < b.distanceNM;
+  }
+  return Date.parse(a.departure) < Date.parse(b.departure);
+}
+
+/** Indice du meilleur départ, -1 sans résultat. */
+export function bestDepartureIndex(outcomes: DepartureOutcome[]): number {
+  let best = -1;
+  outcomes.forEach((outcome, index) => {
+    if (best < 0 || departureBetter(outcome, outcomes[best])) best = index;
+  });
+  return best;
+}
+
+/**
+ * Où en est la route de ce départ au bout de la durée comparée. gateNames
+ * donne le nom affiché de chaque porte restante, dans l'ordre de passage : le
+ * serveur ne connaît que le nom brut (« Checkpoint 2.8 » pour une porte sans
+ * nom).
+ */
+export function departureSummary(outcome: DepartureOutcome, totalGates: number, gateNames: string[] = []): string {
+  if (outcome.reached) return `arrivée en ${formatDuration(outcome.elapsedHours * 60)}`;
+  const gates = `${outcome.gatesCrossed}/${totalGates} porte${totalGates > 1 ? "s" : ""}`;
+  let target = outcome.nextTarget;
+  if (outcome.gatesCrossed >= totalGates) target = "l'arrivée";
+  else if (gateNames[outcome.gatesCrossed]) target = `la porte ${outcome.gatesCrossed + 1} (${gateNames[outcome.gatesCrossed]})`;
+  return `${gates} · ${Math.round(outcome.distanceNM)} NM de ${target}`;
+}
+
+/**
+ * Écart avec le meilleur départ, en milles, quand les deux visent la même
+ * porte ; null sinon (portes différentes ou arrivée).
+ */
+export function departureGapNM(outcome: DepartureOutcome, best: DepartureOutcome): number | null {
+  if (outcome.reached || best.reached || outcome.gatesCrossed !== best.gatesCrossed) return null;
+  return Math.max(0, outcome.distanceNM - best.distanceNM);
+}

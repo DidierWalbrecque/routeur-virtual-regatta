@@ -10,6 +10,8 @@ import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
 import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
+import type { DepartureWindowHandlers } from "./DepartureWindow.tsx";
+import type { DepartureOutcome, DepartureWindowStart } from "./lib/departure_window.ts";
 import type { CalculationProgress } from "./lib/calculation_progress.ts";
 import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.ts";
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
@@ -29,7 +31,7 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, checkpointName, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const WIND_STORAGE_KEY = "routeur.showWind";
@@ -716,6 +718,43 @@ export function App() {
     };
   }, []);
 
+  // --- Meilleure heure de départ d'un record ---
+  const compareDepartures = async (comparisonHours: number, stepHours: number, handlers: DepartureWindowHandlers, signal: AbortSignal) => {
+    let gribFiles = weather.files;
+    if (gribFiles.length === 0) {
+      const response = await fetch("/api/weather/current", { cache: "no-store" });
+      const body = await readJsonResponse<GribStatusBody>(response);
+      applyGribStatus(body);
+      gribFiles = body.files || [];
+    }
+    if (gribFiles.length === 0) throw new Error("Aucun run GRIB disponible : actualisez les GRIB.");
+    console.info(`[DÉPART] Comparaison demandée : ${comparisonHours} h de route, un départ toutes les ${stepHours} h`);
+    const response = await fetch("/api/departure-window/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        weatherFiles: gribFiles,
+        polarPath: form.polar,
+        destination: { virtualRegatta: form.destination },
+        owned: EQUIPMENT.filter((item) => form.equipment.has(item)),
+        manualStamina: form.staminaSource === "manual" ? Number(form.staminaManual) : null,
+        coastalMarginNM: Number(form.coastalMarginNM),
+        arrivalRadiusNM: vrState?.arrival?.radius ?? null,
+        exclusionZones: zonesForRequest(allZones),
+        comparisonHours,
+        stepHours,
+      }),
+      signal,
+    });
+    await readSSEStream(response, (eventName, data) => {
+      if (eventName === "start") handlers.onStart(data as DepartureWindowStart);
+      if (eventName === "departure") handlers.onOutcome(data as DepartureOutcome);
+      if (eventName === "complete") console.info("[DÉPART] Comparaison terminée");
+      if (eventName === "cancelled") throw new Error((data as { error?: string }).error || "Comparaison annulée.");
+      if (eventName === "error") throw new Error((data as { error?: string }).error || "La comparaison a échoué.");
+    });
+  };
+
   // --- Calcul de la route en flux ---
   const submit = async () => {
     setFormError("");
@@ -1220,6 +1259,15 @@ export function App() {
           onSubmit={() => void submit()}
           onClose={() => setFormOpen(false)}
           startInput={startInput}
+          departureWindow={
+            vrState?.preStart
+              ? {
+                  onRun: compareDepartures,
+                  onPick: (departure) => setField("instant", formatLocalDateTime(departure)),
+                  gateNames: checkpoints.map(checkpointName),
+                }
+              : null
+          }
         />
       )}
     </>

@@ -2156,3 +2156,105 @@ body {
   color: var(--card-muted);
   font-size: 11px;
 }
+
+/* Meilleure heure de départ d'un record */
+.departure-window .secondary-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 38px;
+  margin-top: 4px;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  color: var(--card-text);
+  background: var(--card-field);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.departure-window .secondary-button:hover {
+  border-color: var(--accent-blue);
+}
+
+.departure-window .secondary-button:focus-visible,
+.departure-row:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.departure-window .secondary-button .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.departure-window .form-error {
+  margin-top: 10px;
+}
+
+.departure-list {
+  display: grid;
+  gap: 4px;
+  margin: 10px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.departure-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: baseline;
+  gap: 4px 10px;
+  width: 100%;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  color: var(--card-text);
+  background: var(--card-field);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.departure-row:hover {
+  border-color: var(--card-border);
+}
+
+.departure-row.is-best {
+  border-color: var(--accent-green-text);
+}
+
+.departure-row.is-picked {
+  box-shadow: inset 3px 0 0 var(--accent-yellow);
+}
+
+.departure-time {
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.departure-summary {
+  min-width: 0;
+  color: var(--card-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.departure-badge {
+  color: var(--accent-green-text);
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+@media (max-width: 420px) {
+  .departure-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .departure-summary {
+    grid-column: 1 / -1;
+  }
+}

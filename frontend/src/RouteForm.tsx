@@ -1,4 +1,5 @@
 import type { FormEvent, ReactNode } from "react";
+import { DepartureWindow, type DepartureWindowHandlers } from "./DepartureWindow.tsx";
 import { horizonOptionsFor, type HorizonChoice } from "./lib/horizon.ts";
 import type { Checkpoint, PolarOption } from "./lib/types.ts";
 import {
@@ -49,6 +50,12 @@ type Props = {
   onToggleEquipment: (item: Equipment, checked: boolean) => void;
   onSubmit: () => void;
   onClose: () => void;
+  /** Comparaison des heures de départ, proposée seulement avant le départ d'un record. */
+  departureWindow?: {
+    onRun: (comparisonHours: number, stepHours: number, handlers: DepartureWindowHandlers, signal: AbortSignal) => Promise<void>;
+    onPick: (departure: Date) => void;
+    gateNames: string[];
+  } | null;
   startInput: React.RefObject<HTMLInputElement | null>;
 };
 
@@ -261,6 +268,8 @@ export function RouteForm(props: Props) {
             </div>
             <p className={props.horizonNote.warning ? "field-note warning" : "field-note"}>{props.horizonNote.text}</p>
           </section>
+
+          {props.departureWindow && <DepartureWindow {...props.departureWindow} />}
 
           <Collapsible title="Bateau" summary={boatSummary}>
             <div className="field">
