@@ -311,7 +311,11 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       timer = window.setTimeout(async () => {
         controller?.abort();
         controller = new AbortController();
+        // Longitudes non ramenées à [-180, 180] : l'image suit la vue même
+        // au-delà de l'antiméridien (dézoom complet, Pacifique).
         const bounds = map.getBounds();
+        const west = bounds.getWest();
+        const east = Math.min(bounds.getEast(), west + 360);
         const width = map.getContainer().clientWidth;
         const height = map.getContainer().clientHeight;
         const cells = (pixels: number) => Math.max(2, Math.min(256, Math.ceil(pixels / WIND_CELL_PX) + 1));
@@ -319,8 +323,8 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           time: windTime,
           south: String(Math.max(-85, bounds.getSouth())),
           north: String(Math.min(85, bounds.getNorth())),
-          west: String(Math.max(-180, bounds.getWest())),
-          east: String(Math.min(180, bounds.getEast())),
+          west: String(west),
+          east: String(east),
           cols: String(cells(width)),
           rows: String(cells(height)),
         });
