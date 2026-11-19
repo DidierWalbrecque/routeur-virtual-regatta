@@ -1,10 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   bestDepartureIndex,
+  clampPage,
   COMPARISON_HOURS,
+  DEPARTURES_PER_PAGE,
   DEPARTURE_STEP_HOURS,
   departureGapNM,
   departureTarget,
+  pageCount,
+  pageOf,
   type DepartureOutcome,
   type DepartureWindowStart,
 } from "./lib/departure_window.ts";
@@ -109,6 +113,18 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
   const total = start?.departures.length ?? 0;
   const totalGates = start?.totalGates ?? 0;
   const selected = outcomes.find((outcome) => outcome.departure === picked) ?? (best >= 0 ? outcomes[best] : null);
+  const selectedIndex = selected ? outcomes.indexOf(selected) : -1;
+
+  // Le tableau s'ouvre sur la page du départ choisi (le meilleur par défaut).
+  const [page, setPage] = useState(() => pageOf(selectedIndex));
+  useEffect(() => {
+    if (outcomes.length === 0) setPage(0);
+  }, [outcomes.length]);
+  const pages = pageCount(outcomes.length);
+  const currentPage = clampPage(page, outcomes.length);
+  const first = currentPage * DEPARTURES_PER_PAGE;
+  const visible = outcomes.slice(first, first + DEPARTURES_PER_PAGE);
+  const bestPage = pageOf(best);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -198,7 +214,8 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                 </tr>
               </thead>
               <tbody>
-                {outcomes.map((outcome, index) => {
+                {visible.map((outcome, offset) => {
+                  const index = first + offset;
                   const gap = best >= 0 && index !== best ? departureGapNM(outcome, outcomes[best]) : null;
                   const isSelected = selected?.departure === outcome.departure;
                   const classes = ["route-report-row", index === best ? "departure-best" : "", isSelected ? "route-report-selected" : ""].filter(Boolean);
@@ -231,6 +248,56 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
               </tbody>
             </table>
           </div>
+        )}
+
+        {pages > 1 && (
+          <nav className="departure-pager" aria-label="Pages des départs">
+            <span className="departure-pager-range">
+              Départs {first + 1}–{first + visible.length} sur {outcomes.length}
+            </span>
+            <div className="departure-pager-buttons">
+              <button
+                type="button"
+                className="departure-page-button"
+                aria-label="Page précédente"
+                disabled={currentPage === 0}
+                onClick={() => setPage(currentPage - 1)}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chevron_left
+                </span>
+              </button>
+              {Array.from({ length: pages }, (_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  className={index === currentPage ? "departure-page-button is-current" : "departure-page-button"}
+                  aria-label={`Page ${index + 1}${index === bestPage && best >= 0 ? ", meilleur départ" : ""}`}
+                  aria-current={index === currentPage ? "page" : undefined}
+                  onClick={() => setPage(index)}
+                >
+                  {index + 1}
+                  {index === bestPage && best >= 0 && <span className="departure-page-best" aria-hidden="true" />}
+                </button>
+              ))}
+              <button
+                type="button"
+                className="departure-page-button"
+                aria-label="Page suivante"
+                disabled={currentPage >= pages - 1}
+                onClick={() => setPage(currentPage + 1)}
+              >
+                <span className="material-symbols-outlined" aria-hidden="true">
+                  chevron_right
+                </span>
+              </button>
+            </div>
+            {best >= 0 && bestPage !== currentPage && (
+              <button type="button" className="departure-pager-best" onClick={() => setPage(bestPage)}>
+                Voir le meilleur départ
+              </button>
+            )}
+          </nav>
         )}
       </div>
 

@@ -82,3 +82,21 @@ export function departureGapNM(outcome: DepartureOutcome, best: DepartureOutcome
   if (outcome.reached || best.reached || outcome.gatesCrossed !== best.gatesCrossed) return null;
   return Math.max(0, outcome.distanceNM - best.distanceNM);
 }
+
+/** Nombre de départs affichés par page du tableau. */
+export const DEPARTURES_PER_PAGE = 10;
+
+/** Nombre de pages pour count départs (au moins 1). */
+export function pageCount(count: number, perPage = DEPARTURES_PER_PAGE): number {
+  return Math.max(1, Math.ceil(count / perPage));
+}
+
+/** Page (à partir de 0) qui contient le départ d'indice index. */
+export function pageOf(index: number, perPage = DEPARTURES_PER_PAGE): number {
+  return index < 0 ? 0 : Math.floor(index / perPage);
+}
+
+/** Page ramenée dans les bornes, pour count départs. */
+export function clampPage(page: number, count: number, perPage = DEPARTURES_PER_PAGE): number {
+  return Math.min(Math.max(0, page), pageCount(count, perPage) - 1);
+}

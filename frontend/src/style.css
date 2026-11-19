@@ -2249,6 +2249,90 @@ body {
   border-top: 1px solid var(--card-border);
 }
 
+/* Pagination du tableau des départs : 10 par page. Le point vert signale la
+   page du meilleur départ. */
+.departure-pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-top: 12px;
+}
+
+.departure-pager-range {
+  color: var(--card-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.departure-pager-buttons {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.departure-page-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--card-text);
+  background: var(--card-field);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.departure-page-button .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.departure-page-button:hover:not(:disabled) {
+  border-color: #4a5470;
+}
+
+.departure-page-button.is-current {
+  border-color: var(--accent-yellow);
+  color: var(--accent-yellow);
+  font-weight: 700;
+}
+
+.departure-page-button:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.departure-page-button:focus-visible,
+.departure-pager-best:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.departure-page-best {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-green-text);
+}
+
+.departure-pager-best {
+  padding: 0;
+  border: 0;
+  color: var(--accent-green-text);
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
 /* Fenêtre d'avancement placée sous celle du calcul de route quand les deux tournent. */
 .route-calculation-status.is-stacked {
   top: 190px;

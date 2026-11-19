@@ -70,3 +70,17 @@ test("la porte visée s'affiche par son numéro et son nom", () => {
   assert.equal(departureTarget(outcome({ gatesCrossed: 13, nextTarget: "arrivée" }), 13, names), "arrivée");
   assert.equal(departureTarget(outcome({ gatesCrossed: 5, nextTarget: "Cape Agulhas" }), 13, names), "Cape Agulhas");
 });
+
+test("les départs se répartissent par pages de 10", async () => {
+  const { pageCount, pageOf, clampPage } = await import("../src/lib/departure_window.ts");
+  assert.equal(pageCount(0), 1);
+  assert.equal(pageCount(10), 1);
+  assert.equal(pageCount(11), 2);
+  assert.equal(pageCount(25), 3);
+  assert.equal(pageOf(0), 0);
+  assert.equal(pageOf(9), 0);
+  assert.equal(pageOf(10), 1);
+  assert.equal(pageOf(-1), 0);
+  assert.equal(clampPage(5, 25), 2);
+  assert.equal(clampPage(-1, 25), 0);
+});
