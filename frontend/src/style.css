@@ -2434,7 +2434,7 @@ body {
   border-top: 1px solid var(--card-border);
 }
 
-/* Pagination du tableau des départs : 10 par page. Le point vert signale la
+/* Pagination du tableau des départs : 7 par page. Le point vert signale la
    page du meilleur départ. */
 .departure-pager {
   display: flex;

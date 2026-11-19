@@ -115,7 +115,7 @@ export function departureLagLabel(outcome: DepartureOutcome, best: DepartureOutc
 }
 
 /** Nombre de départs affichés par page du tableau. */
-export const DEPARTURES_PER_PAGE = 10;
+export const DEPARTURES_PER_PAGE = 7;
 
 /** Nombre de pages pour count départs (au moins 1). */
 export function pageCount(count: number, perPage = DEPARTURES_PER_PAGE): number {
