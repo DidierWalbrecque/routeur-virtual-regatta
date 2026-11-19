@@ -7,6 +7,7 @@ import {
   DEPARTURE_STEP_HOURS,
   departureBars,
   departureGapNM,
+  departureLagLabel,
   departureTarget,
   pageCount,
   pageOf,
@@ -171,7 +172,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
       return running ? `En tête pour l'instant : le départ du ${date} ${where(selected)}.` : `Le départ du ${date} est le meilleur : il ${where(selected)}.`;
     }
     const gap = departureGapNM(selected, outcomes[best]);
-    const behind = gap === null ? "sur une autre cible que le meilleur" : `${Math.round(gap)} NM derrière le meilleur`;
+    const behind = gap === null ? `${departureLagLabel(selected, outcomes[best]) ?? "derrière"} sur le meilleur` : `${Math.round(gap)} NM derrière le meilleur`;
     return `Le départ du ${date} ${where(selected)}, ${behind}.`;
   })();
 
@@ -303,7 +304,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                   <th className="numeric" title="Distance au point le plus proche de la cible suivante">
                     Distance
                   </th>
-                  <th className="numeric" title="Retard sur le meilleur départ, quand les deux visent la même cible">
+                  <th className="numeric" title="Retard sur le meilleur départ : en milles vers la même cible, sinon en portes">
                     Retard
                   </th>
                 </tr>
@@ -335,7 +336,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                       <td>{outcome.reached ? "arrivée" : `${outcome.gatesCrossed}/${totalGates}`}</td>
                       <td>{outcome.reached ? `en ${formatDuration(outcome.elapsedHours * 60)}` : departureTarget(outcome, totalGates, gateNames)}</td>
                       <td className="numeric">{outcome.reached ? "—" : `${Math.round(outcome.distanceNM)} NM`}</td>
-                      <td className="numeric">{index === best ? "—" : gap === null ? "autre cible" : `${Math.round(gap)} NM`}</td>
+                      <td className="numeric">{index === best ? "—" : gap === null ? (departureLagLabel(outcome, outcomes[best]) ?? "—") : `${Math.round(gap)} NM`}</td>
                     </tr>
                   );
                 })}

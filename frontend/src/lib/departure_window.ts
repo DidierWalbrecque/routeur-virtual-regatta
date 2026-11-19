@@ -83,6 +83,18 @@ export function departureGapNM(outcome: DepartureOutcome, best: DepartureOutcome
   return Math.max(0, outcome.distanceNM - best.distanceNM);
 }
 
+/**
+ * Retard sur le meilleur départ quand il ne se mesure pas en milles : portes
+ * de moins franchies, ou arrivée manquée alors que le meilleur arrive. Null
+ * quand les deux visent la même cible (le retard est alors departureGapNM).
+ */
+export function departureLagLabel(outcome: DepartureOutcome, best: DepartureOutcome): string | null {
+  if (best.reached && !outcome.reached) return "n'arrive pas";
+  const missing = best.gatesCrossed - outcome.gatesCrossed;
+  if (outcome.reached || missing <= 0) return null;
+  return `${missing} porte${missing > 1 ? "s" : ""} de retard`;
+}
+
 /** Nombre de départs affichés par page du tableau. */
 export const DEPARTURES_PER_PAGE = 10;
 

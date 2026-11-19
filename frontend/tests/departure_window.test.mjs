@@ -110,3 +110,12 @@ test("les barres de la fenêtre de départ suivent le retard sur le meilleur", a
   assert.ok(Math.abs(arrived[1].value - 0.15) < 1e-9);
   assert.equal(arrived[2].comparable, false);
 });
+
+test("le retard hors milles se dit en portes, ou en arrivée manquée", async () => {
+  const { departureLagLabel } = await import("../src/lib/departure_window.ts");
+  const best = outcome({ gatesCrossed: 3, distanceNM: 100 });
+  assert.equal(departureLagLabel(outcome({ gatesCrossed: 2 }), best), "1 porte de retard");
+  assert.equal(departureLagLabel(outcome({ gatesCrossed: 1 }), best), "2 portes de retard");
+  assert.equal(departureLagLabel(outcome({ gatesCrossed: 3, distanceNM: 150 }), best), null);
+  assert.equal(departureLagLabel(outcome({ gatesCrossed: 13 }), outcome({ reached: true, elapsedHours: 60 })), "n'arrive pas");
+});
