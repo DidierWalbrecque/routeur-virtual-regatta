@@ -84,3 +84,29 @@ test("les départs se répartissent par pages de 10", async () => {
   assert.equal(clampPage(5, 25), 2);
   assert.equal(clampPage(-1, 25), 0);
 });
+
+test("les barres de la fenêtre de départ suivent le retard sur le meilleur", async () => {
+  const { departureBars } = await import("../src/lib/departure_window.ts");
+  // Retards : 100, 0, 700 (isolé), 200, 300, 400 ; l'échelle s'arrête au
+  // 80e centile, 400 NM, et le départ isolé reste au plancher.
+  const bars = departureBars([
+    outcome({ gatesCrossed: 1, distanceNM: 300 }),
+    outcome({ gatesCrossed: 1, distanceNM: 200 }),
+    outcome({ gatesCrossed: 1, distanceNM: 900 }),
+    outcome({ gatesCrossed: 1, distanceNM: 400 }),
+    outcome({ gatesCrossed: 1, distanceNM: 500 }),
+    outcome({ gatesCrossed: 1, distanceNM: 600 }),
+    outcome({ gatesCrossed: 0, distanceNM: 50 }),
+  ]);
+  assert.equal(bars[1].value, 1);
+  assert.ok(Math.abs(bars[0].value - (1 - 0.85 * (100 / 400))) < 1e-9);
+  assert.ok(Math.abs(bars[5].value - 0.15) < 1e-9);
+  assert.ok(Math.abs(bars[2].value - 0.15) < 1e-9);
+  assert.ok(bars[0].value > bars[3].value && bars[3].value > bars[4].value);
+  assert.equal(bars[6].comparable, false);
+  assert.deepEqual(departureBars([]), []);
+  const arrived = departureBars([outcome({ reached: true, elapsedHours: 50 }), outcome({ reached: true, elapsedHours: 60 }), outcome({ gatesCrossed: 9 })]);
+  assert.equal(arrived[0].value, 1);
+  assert.ok(Math.abs(arrived[1].value - 0.15) < 1e-9);
+  assert.equal(arrived[2].comparable, false);
+});

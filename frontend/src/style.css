@@ -2237,11 +2237,152 @@ body {
 
 .departure-badge {
   margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid currentColor;
+  border-radius: 999px;
   color: var(--accent-green-text);
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.departure-empty {
+  margin: 14px 0 0;
+  color: var(--card-muted);
+  line-height: 1.5;
+}
+
+/* Fenêtre de départ : un trait vertical par départ, sur l'axe du temps, comme
+   un barographe. La hauteur dit l'avance prise sur les autres départs qui
+   visent la même cible ; le vert marque le meilleur, le jaune le départ
+   choisi. Les départs pas encore calculés restent en pointillés. */
+.departure-window {
+  margin: 16px 0 4px;
+}
+
+.departure-chart {
+  display: flex;
+  align-items: stretch;
+  gap: 3px;
+  height: 132px;
+  padding: 10px 10px 0;
+  border: 1px solid var(--card-border);
+  border-radius: 10px;
+  background:
+    repeating-linear-gradient(to top, transparent 0 32px, #3a425640 32px 33px),
+    #161c28;
+}
+
+.departure-slot {
+  display: flex;
+  flex: 1 1 0;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.departure-bar {
+  display: flex;
+  flex: 1;
+  align-items: flex-end;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  cursor: pointer;
+}
+
+.departure-bar > span {
+  display: block;
+  width: 100%;
+  min-height: 3px;
+  border-radius: 3px 3px 0 0;
+  background: #7cc0ff8c;
+  transition: background 0.15s ease;
+}
+
+.departure-bar:hover:not(:disabled) > span {
+  background: var(--accent-blue);
+}
+
+.departure-bar.is-best > span {
+  background: var(--accent-green-text);
+}
+
+.departure-bar.is-off > span {
+  background: repeating-linear-gradient(135deg, #b8b3c055 0 2px, transparent 2px 4px);
+}
+
+.departure-bar.is-pending {
+  cursor: default;
+}
+
+.departure-bar.is-pending > span {
+  border: 1px dashed #3a4256;
+  border-bottom: 0;
+  background: none;
+}
+
+.departure-bar.is-selected > span {
+  box-shadow: 0 0 0 2px var(--accent-yellow);
+}
+
+.departure-bar:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.departure-day {
+  height: 22px;
+  overflow: visible;
+  color: var(--card-muted);
+  font-size: 11px;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.departure-day-short {
+  display: none;
+}
+
+/* Sur téléphone, le nom du jour ne tient plus sous deux départs : seul son numéro reste. */
+@media (max-width: 560px) {
+  .departure-day-long {
+    display: none;
+  }
+
+  .departure-day-short {
+    display: inline;
+  }
+}
+
+.departure-window figcaption {
+  margin-top: 12px;
+}
+
+.departure-verdict {
+  max-width: 62ch;
+  margin: 0;
+  color: var(--card-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.departure-verdict.is-waiting {
+  color: var(--card-muted);
+  font-weight: 500;
+}
+
+.departure-context {
+  max-width: 72ch;
+  margin: 4px 0 0;
+  color: var(--card-muted);
+  line-height: 1.45;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .departure-bar > span {
+    transition: none;
+  }
 }
 
 .departure-footer {

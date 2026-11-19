@@ -100,3 +100,53 @@ export function pageOf(index: number, perPage = DEPARTURES_PER_PAGE): number {
 export function clampPage(page: number, count: number, perPage = DEPARTURES_PER_PAGE): number {
   return Math.min(Math.max(0, page), pageCount(count, perPage) - 1);
 }
+
+/** Barre d'un départ dans le graphique de la fenêtre de départ. */
+export type DepartureBar = {
+  /** Hauteur relative, de 0 à 1 ; 1 pour le meilleur départ. */
+  value: number;
+  /**
+   * Faux quand le départ ne se compare pas au meilleur en milles : arrivée
+   * pour l'un et pas pour l'autre, ou une porte de moins franchie.
+   */
+  comparable: boolean;
+};
+
+/** Hauteur minimale d'une barre comparable : le pire départ reste visible. */
+const WORST_BAR = 0.15;
+/** Hauteur d'un départ qui ne se compare pas au meilleur. */
+const OFF_BAR = 0.06;
+
+/** Part des départs comparables dont l'écart reste lisible sur l'échelle. */
+const SCALE_QUANTILE = 0.8;
+
+/**
+ * Hauteur de chaque barre du graphique : l'avance prise par rapport aux autres
+ * départs qui visent la même cible que le meilleur. Le meilleur monte à 1 ;
+ * les autres descendent en proportion de leur retard, en milles (ou en heures
+ * quand l'arrivée est atteinte).
+ *
+ * L'échelle s'arrête au retard des 80 % de départs les moins en retard : un
+ * seul départ très en retard (928 NM contre 250 à 450 pour les autres sur la
+ * capture du Jules Verne) écraserait sinon toutes les autres barres en haut du
+ * graphique. Les départs au-delà restent au plancher, à 0,15 ; le tableau
+ * donne leur retard exact.
+ */
+export function departureBars(outcomes: DepartureOutcome[]): DepartureBar[] {
+  const bestIndex = bestDepartureIndex(outcomes);
+  if (bestIndex < 0) return [];
+  const best = outcomes[bestIndex];
+  const lag = (outcome: DepartureOutcome): number | null => {
+    if (best.reached) return outcome.reached ? outcome.elapsedHours - best.elapsedHours : null;
+    return departureGapNM(outcome, best);
+  };
+  const lags = outcomes.map(lag);
+  const sorted = lags.filter((value): value is number => value !== null).sort((a, b) => a - b);
+  let scale = sorted[Math.floor(SCALE_QUANTILE * (sorted.length - 1))] ?? 0;
+  if (scale <= 0) scale = sorted[sorted.length - 1] ?? 0;
+  return lags.map((value) => {
+    if (value === null) return { value: OFF_BAR, comparable: false };
+    if (scale <= 0) return { value: 1, comparable: true };
+    return { value: Math.max(WORST_BAR, 1 - (1 - WORST_BAR) * (value / scale)), comparable: true };
+  });
+}
