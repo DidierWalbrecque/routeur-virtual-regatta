@@ -10,6 +10,8 @@ import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
 import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
+import { DeparturePanel, useDepartureWindow, type DepartureWindowHandlers } from "./DeparturePanel.tsx";
+import type { DepartureOutcome, DepartureWindowStart } from "./lib/departure_window.ts";
 import type { CalculationProgress } from "./lib/calculation_progress.ts";
 import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.ts";
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
@@ -29,7 +31,7 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, checkpointName, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const WIND_STORAGE_KEY = "routeur.showWind";
@@ -217,6 +219,7 @@ export function App() {
     }
   });
   const [zonesOpen, setZonesOpen] = useState(false);
+  const [departureOpen, setDepartureOpen] = useState(false);
   const [showWind, setShowWind] = useState(() => {
     try {
       return window.localStorage.getItem(WIND_STORAGE_KEY) === "true";
@@ -716,6 +719,51 @@ export function App() {
     };
   }, []);
 
+  // --- Meilleure heure de départ d'un record ---
+  const compareDepartures = async (comparisonHours: number, stepHours: number, handlers: DepartureWindowHandlers, signal: AbortSignal) => {
+    let gribFiles = weather.files;
+    if (gribFiles.length === 0) {
+      const response = await fetch("/api/weather/current", { cache: "no-store" });
+      const body = await readJsonResponse<GribStatusBody>(response);
+      applyGribStatus(body);
+      gribFiles = body.files || [];
+    }
+    if (gribFiles.length === 0) throw new Error("Aucun run GRIB disponible : actualisez les GRIB.");
+    console.info(`[DÉPART] Comparaison demandée : ${comparisonHours} h de route, un départ toutes les ${stepHours} h`);
+    const response = await fetch("/api/departure-window/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        weatherFiles: gribFiles,
+        polarPath: form.polar,
+        destination: { virtualRegatta: form.destination },
+        owned: EQUIPMENT.filter((item) => form.equipment.has(item)),
+        manualStamina: form.staminaSource === "manual" ? Number(form.staminaManual) : null,
+        coastalMarginNM: Number(form.coastalMarginNM),
+        arrivalRadiusNM: vrState?.arrival?.radius ?? null,
+        exclusionZones: zonesForRequest(allZones),
+        comparisonHours,
+        stepHours,
+      }),
+      signal,
+    });
+    await readSSEStream(response, (eventName, data) => {
+      if (eventName === "start") handlers.onStart(data as DepartureWindowStart);
+      if (eventName === "departure") handlers.onOutcome(data as DepartureOutcome);
+      if (eventName === "complete") console.info("[DÉPART] Comparaison terminée");
+      if (eventName === "cancelled") throw new Error((data as { error?: string }).error || "Comparaison annulée.");
+      if (eventName === "error") throw new Error((data as { error?: string }).error || "La comparaison a échoué.");
+    });
+  };
+
+  // À la fin de la comparaison (ou à son arrêt), le tableau des résultats s'ouvre.
+  const departureWindow = useDepartureWindow(compareDepartures, () => {
+    setFormOpen(false);
+    setZonesOpen(false);
+    setDetailsOpen(false);
+    setDepartureOpen(true);
+  });
+
   // --- Calcul de la route en flux ---
   const submit = async () => {
     setFormError("");
@@ -834,6 +882,7 @@ export function App() {
           setFrame({ result: complete, showRoute: true, fit: true, key: String(frameCounter.current) });
           if ((complete.route?.length ?? 0) > 0) {
             setDetailsSummaryOnly(true);
+            setDepartureOpen(false);
             setDetailsOpen(true);
           }
           return;
@@ -922,6 +971,7 @@ export function App() {
   const openForm = () => {
     setZonesOpen(false);
     setDetailsOpen(false);
+    setDepartureOpen(false);
     setFormOpen(true);
   };
   const [selectedRow, setSelectedRow] = useState<{ index: number; point: Point } | null>(null);
@@ -949,6 +999,20 @@ export function App() {
         insets={mapInsets}
         onError={() => setMapError(true)}
       />
+      {departureWindow.running && (
+        <CalculationStatus
+          id="departure-calculation-status"
+          title="Comparaison des départs"
+          unitLabel="Départ"
+          preparingText="Préparation : départs possibles, météo et portes…"
+          cancelLabel="Arrêter la comparaison"
+          progress={departureWindow.progress}
+          startedAt={departureWindow.startedAt}
+          onCancel={departureWindow.cancel}
+          cancelOnEscape={!calculating}
+          stacked={calculating}
+        />
+      )}
       {calculating && (
         <CalculationStatus
           progress={progress}
@@ -1015,6 +1079,24 @@ export function App() {
         >
           <MaterialIcon name="alt_route" />
         </button>
+        {vrState?.preStart && (
+          <button
+            id="toggle-departure"
+            className={departureOpen || departureWindow.running ? "map-dock-button is-active" : "map-dock-button"}
+            type="button"
+            aria-label="Meilleure heure de départ"
+            aria-pressed={departureOpen}
+            data-tooltip="Meilleure heure de départ du record"
+            onClick={() => {
+              setFormOpen(false);
+              setZonesOpen(false);
+              setDetailsOpen(false);
+              setDepartureOpen((open) => !open);
+            }}
+          >
+            <MaterialIcon name="schedule" />
+          </button>
+        )}
         <hr />
         <button
           id="toggle-route-points"
@@ -1051,6 +1133,7 @@ export function App() {
           onClick={() => {
             setFormOpen(false);
             setDetailsOpen(false);
+            setDepartureOpen(false);
             setZonesOpen((open) => !open);
           }}
         >
@@ -1129,7 +1212,7 @@ export function App() {
           <MaterialIcon name="my_location" />
         </button>
       </div>
-      {hasRoute && !detailsOpen && !formOpen && !zonesOpen && (
+      {hasRoute && !detailsOpen && !formOpen && !zonesOpen && !departureOpen && (
         <button
           id="show-route-details"
           className="route-details-button"
@@ -1139,6 +1222,7 @@ export function App() {
           onClick={() => {
             setFormOpen(false);
             setZonesOpen(false);
+            setDepartureOpen(false);
             setDetailsSummaryOnly(false);
             setDetailsOpen(true);
           }}
@@ -1146,6 +1230,18 @@ export function App() {
           <MaterialIcon name="route" />
           Route et ordres
         </button>
+      )}
+      {departureOpen && vrState?.preStart && (
+        <DeparturePanel
+          model={departureWindow}
+          gateNames={checkpoints.map(checkpointName)}
+          onClose={() => setDepartureOpen(false)}
+          onUse={(departure) => {
+            setField("instant", formatLocalDateTime(departure));
+            console.info(`[DÉPART] Départ retenu : ${departure.toISOString()}`);
+            openForm();
+          }}
+        />
       )}
       {detailsOpen && result && <RouteDetailsPanel
           result={result}
