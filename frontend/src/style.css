@@ -721,13 +721,15 @@ body {
   padding: 2px 0 6px;
 }
 
-.route-form-panel .chips {
+.route-form-panel .chips,
+.departure-panel .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.route-form-panel .chip {
+.route-form-panel .chip,
+.departure-panel .chip {
   position: relative;
   padding: 6px 12px;
   border: 1px solid var(--card-border);
@@ -739,23 +741,27 @@ body {
   transition: all 0.15s ease;
 }
 
-.route-form-panel .chip:hover {
+.route-form-panel .chip:hover,
+.departure-panel .chip:hover {
   color: var(--card-text);
 }
 
-.route-form-panel .chip.on {
+.route-form-panel .chip.on,
+.departure-panel .chip.on {
   border-color: #2e9b5f99;
   color: var(--card-text);
   background: #2e9b5f26;
 }
 
-.route-form-panel .chip input {
+.route-form-panel .chip input,
+.departure-panel .chip input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.route-form-panel .chip:has(input:focus-visible) {
+.route-form-panel .chip:has(input:focus-visible),
+.departure-panel .chip:has(input:focus-visible) {
   outline: 2px solid var(--accent-yellow);
   outline-offset: 1px;
 }
@@ -2256,6 +2262,37 @@ body {
   margin: 14px 0 0;
   color: var(--card-muted);
   line-height: 1.5;
+}
+
+/* Bateau de la comparaison : voiles et options, sans option par défaut. */
+.departure-boat {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.departure-boat legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--card-text);
+  font-weight: 600;
+}
+
+.departure-boat-group {
+  display: grid;
+  gap: 6px;
+}
+
+.departure-boat-label {
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
+.departure-boat:disabled .chip {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* Fenêtre de départ : un trait vertical par départ, sur l'axe du temps, comme

@@ -31,7 +31,7 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, EQUIPMENT_LABELS, equipmentFromVrOptions, checkpointKey, checkpointName, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, checkpointName, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const WIND_STORAGE_KEY = "routeur.showWind";
@@ -720,7 +720,13 @@ export function App() {
   }, []);
 
   // --- Meilleure heure de départ d'un record ---
-  const compareDepartures = async (comparisonHours: number, stepHours: number, handlers: DepartureWindowHandlers, signal: AbortSignal) => {
+  const compareDepartures = async (
+    comparisonHours: number,
+    stepHours: number,
+    owned: Equipment[],
+    handlers: DepartureWindowHandlers,
+    signal: AbortSignal,
+  ) => {
     let gribFiles = weather.files;
     if (gribFiles.length === 0) {
       const response = await fetch("/api/weather/current", { cache: "no-store" });
@@ -729,7 +735,9 @@ export function App() {
       gribFiles = body.files || [];
     }
     if (gribFiles.length === 0) throw new Error("Aucun run GRIB disponible : actualisez les GRIB.");
-    console.info(`[DÉPART] Comparaison demandée : ${comparisonHours} h de route, un départ toutes les ${stepHours} h`);
+    console.info(
+      `[DÉPART] Comparaison demandée : ${comparisonHours} h de route, un départ toutes les ${stepHours} h, options : ${owned.join(", ") || "aucune"}`,
+    );
     const response = await fetch("/api/departure-window/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -737,7 +745,7 @@ export function App() {
         weatherFiles: gribFiles,
         polarPath: form.polar,
         destination: { virtualRegatta: form.destination },
-        owned: EQUIPMENT.filter((item) => form.equipment.has(item)),
+        owned,
         manualStamina: form.staminaSource === "manual" ? Number(form.staminaManual) : null,
         coastalMarginNM: Number(form.coastalMarginNM),
         arrivalRadiusNM: vrState?.arrival?.radius ?? null,
@@ -757,6 +765,7 @@ export function App() {
   };
 
   // À la fin de la comparaison (ou à son arrêt), le tableau des résultats s'ouvre.
+  const formPolarName = polarDisplayName(polars.find((polar) => polar.value === form.polar)?.label ?? form.polar.split(/[\\/]/).pop() ?? "");
   const departureWindow = useDepartureWindow(
     compareDepartures,
     () => {
@@ -765,10 +774,7 @@ export function App() {
       setDetailsOpen(false);
       setDepartureOpen(true);
     },
-    {
-      polar: polarDisplayName(polars.find((polar) => polar.value === form.polar)?.label ?? form.polar.split(/[\\/]/).pop() ?? ""),
-      options: EQUIPMENT.filter((item) => form.equipment.has(item)).map((item) => EQUIPMENT_LABELS[item]),
-    },
+    formPolarName,
   );
 
   // --- Calcul de la route en flux ---
@@ -1242,10 +1248,13 @@ export function App() {
         <DeparturePanel
           model={departureWindow}
           gateNames={checkpoints.map(checkpointName)}
+          polar={formPolarName}
           onClose={() => setDepartureOpen(false)}
-          onUse={(departure) => {
+          onUse={(departure, owned) => {
+            // La route se calcule avec le même bateau que la comparaison.
             setField("instant", formatLocalDateTime(departure));
-            console.info(`[DÉPART] Départ retenu : ${departure.toISOString()}`);
+            setField("equipment", new Set(owned));
+            console.info(`[DÉPART] Départ retenu : ${departure.toISOString()}, options : ${owned.join(", ") || "aucune"}`);
             openForm();
           }}
         />
