@@ -133,3 +133,13 @@ test("deux départs identiques sont tous deux meilleurs", async () => {
   assert.equal(departuresTied(outcome({ gatesCrossed: 2, distanceNM: 100 }), outcome({ gatesCrossed: 1, distanceNM: 100 })), false);
   assert.equal(departuresTied(outcome({ reached: true, elapsedHours: 50 }), outcome({ reached: true, elapsedHours: 50.001 })), true);
 });
+
+test("la phrase des réglages nomme la polaire et les options utilisées", async () => {
+  const { departureSettingsText } = await import("../src/lib/departure_window.ts");
+  assert.equal(
+    departureSettingsText({ polar: "Ultim BP 11", options: ["Light", "Heavy", "Foils"] }),
+    "Calculé avec la polaire Ultim BP 11 et les options Light, Heavy et Foils.",
+  );
+  assert.equal(departureSettingsText({ polar: "Imoca 60 Foils", options: ["Code 0"] }), "Calculé avec la polaire Imoca 60 Foils et l'option Code 0.");
+  assert.equal(departureSettingsText({ polar: "Class 40", options: [] }), "Calculé avec la polaire Class 40, sans option.");
+});

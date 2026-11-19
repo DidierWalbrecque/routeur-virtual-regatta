@@ -181,3 +181,19 @@ export function departureBars(outcomes: DepartureOutcome[]): DepartureBar[] {
     return { value: Math.max(WORST_BAR, 1 - (1 - WORST_BAR) * (value / scale)), comparable: true };
   });
 }
+
+/** Polaire et options avec lesquelles une comparaison a été lancée. */
+export type DepartureSettings = {
+  /** Nom affiché de la polaire, par exemple « Ultim BP 11 ». */
+  polar: string;
+  /** Noms affichés des options possédées, dans l'ordre du formulaire. */
+  options: string[];
+};
+
+/** « Calculé avec la polaire Ultim BP 11 et les options Light, Heavy et Foils. » */
+export function departureSettingsText(settings: DepartureSettings): string {
+  const { polar, options } = settings;
+  if (options.length === 0) return `Calculé avec la polaire ${polar}, sans option.`;
+  const list = options.length === 1 ? options[0] : `${options.slice(0, -1).join(", ")} et ${options[options.length - 1]}`;
+  return `Calculé avec la polaire ${polar} et ${options.length === 1 ? "l'option" : "les options"} ${list}.`;
+}

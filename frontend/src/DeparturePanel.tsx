@@ -9,10 +9,12 @@ import {
   departureBars,
   departureGapNM,
   departureLagLabel,
+  departureSettingsText,
   departureTarget,
   pageCount,
   pageOf,
   type DepartureOutcome,
+  type DepartureSettings,
   type DepartureWindowStart,
 } from "./lib/departure_window.ts";
 import { formatDuration } from "./lib/horizon.ts";
@@ -36,7 +38,7 @@ export type DepartureWindowModel = ReturnType<typeof useDepartureWindow>;
  * fermé pendant le calcul (plusieurs minutes), qui continue avec sa fenêtre
  * d'avancement et garde ses résultats.
  */
-export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => void) {
+export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => void, settings: DepartureSettings) {
   const [comparisonHours, setComparisonHours] = useState(72);
   // Un départ toutes les 12 h : environ 25 départs sur 16 jours de prévisions,
   // à une dizaine de secondes chacun.
@@ -47,6 +49,9 @@ export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => 
   const [startedAt, setStartedAt] = useState(0);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState("");
+  // Polaire et options du formulaire au lancement : les résultats affichés
+  // restent liés à ces réglages même si le formulaire change ensuite.
+  const [usedSettings, setUsedSettings] = useState<DepartureSettings | null>(null);
   const controller = useRef<AbortController | null>(null);
 
   useEffect(() => () => controller.current?.abort(), []);
@@ -59,6 +64,7 @@ export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => 
     setOutcomes([]);
     setError("");
     setPicked("");
+    setUsedSettings(settings);
     setStartedAt(Date.now());
     setRunning(true);
     try {
@@ -88,7 +94,23 @@ export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => 
   };
 
   const progress = start ? { completed: outcomes.length, total: start.departures.length } : null;
-  return { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, startedAt, progress, error, picked, setPicked, run, cancel };
+  return {
+    comparisonHours,
+    setComparisonHours,
+    stepHours,
+    setStepHours,
+    start,
+    outcomes,
+    running,
+    startedAt,
+    progress,
+    error,
+    picked,
+    setPicked,
+    usedSettings,
+    run,
+    cancel,
+  };
 }
 
 const dateFormat: Intl.DateTimeFormatOptions = { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" };
@@ -127,7 +149,7 @@ type Props = {
  * d'avance), puis tableau paginé des départs comparés.
  */
 export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
-  const { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked } = model;
+  const { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked, usedSettings } = model;
   const best = bestDepartureIndex(outcomes);
   // Les départs à égalité avec le meilleur sont tous affichés comme meilleurs.
   const bestSet = new Set(bestDepartureIndices(outcomes));
@@ -314,6 +336,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                 {total} départ{total > 1 ? "s" : ""} sur {hours} h de route. Prévisions jusqu'au {formatDate(start.coveredUntil)}
                 {start.windowClose ? `, fermeture du leg le ${formatDate(start.windowClose)}` : ""}.
               </p>
+              {usedSettings && <p className="departure-context departure-settings-used">{departureSettingsText(usedSettings)}</p>}
             </figcaption>
           </figure>
         )}

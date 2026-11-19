@@ -4,7 +4,7 @@ import { CalculationStatus } from "./CalculationStatus.tsx";
 import { WindCard } from "./WindCard.tsx";
 import { MapLegend } from "./MapLegend.tsx";
 import { RouteDetailsPanel } from "./RouteDetailsPanel.tsx";
-import { RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
+import { polarDisplayName, RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
 import { WeatherRunCard } from "./WeatherRunCard.tsx";
 import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
@@ -31,7 +31,7 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, checkpointName, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, EQUIPMENT_LABELS, equipmentFromVrOptions, checkpointKey, checkpointName, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const WIND_STORAGE_KEY = "routeur.showWind";
@@ -757,12 +757,19 @@ export function App() {
   };
 
   // À la fin de la comparaison (ou à son arrêt), le tableau des résultats s'ouvre.
-  const departureWindow = useDepartureWindow(compareDepartures, () => {
-    setFormOpen(false);
-    setZonesOpen(false);
-    setDetailsOpen(false);
-    setDepartureOpen(true);
-  });
+  const departureWindow = useDepartureWindow(
+    compareDepartures,
+    () => {
+      setFormOpen(false);
+      setZonesOpen(false);
+      setDetailsOpen(false);
+      setDepartureOpen(true);
+    },
+    {
+      polar: polarDisplayName(polars.find((polar) => polar.value === form.polar)?.label ?? form.polar.split(/[\\/]/).pop() ?? ""),
+      options: EQUIPMENT.filter((item) => form.equipment.has(item)).map((item) => EQUIPMENT_LABELS[item]),
+    },
+  );
 
   // --- Calcul de la route en flux ---
   const submit = async () => {
