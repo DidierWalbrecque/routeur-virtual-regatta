@@ -1,6 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { bestDepartureIndex, departureBetter, departureGapNM, departureSummary } from "../src/lib/departure_window.ts";
+import { checkpointName } from "../src/lib/vr.ts";
 
 const outcome = (fields) => ({
   index: 0,
@@ -48,4 +50,16 @@ test("l'écart au meilleur n'a de sens que vers la même porte", () => {
   const best = outcome({ gatesCrossed: 2, distanceNM: 100 });
   assert.equal(departureGapNM(outcome({ gatesCrossed: 2, distanceNM: 160 }), best), 60);
   assert.equal(departureGapNM(outcome({ gatesCrossed: 1, distanceNM: 10 }), best), null);
+});
+
+test("les portes sans nom de la capture du Jules Verne sont nommées par leur sens", () => {
+  const leg = JSON.parse(readFileSync(new URL("../../data/data-record.json", import.meta.url), "utf8")).res.leg;
+  const names = leg.checkpoints.map((checkpoint) => checkpointName(checkpoint));
+  assert.equal(names[0], "Biscay");
+  // Porte 2.8 : nom vide, display « none ».
+  assert.equal(names[1], "tribord");
+  assert.equal(
+    departureSummary(outcome({ gatesCrossed: 1, distanceNM: 235, nextTarget: "Checkpoint 2.8" }), names.length, names),
+    "1/13 portes · 235 NM de la porte 2 (tribord)",
+  );
 });

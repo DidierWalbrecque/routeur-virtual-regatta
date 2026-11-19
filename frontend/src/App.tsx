@@ -10,7 +10,7 @@ import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
 import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
-import type { DepartureWindowHandlers } from "./DepartureWindow.tsx";
+import { useDepartureWindow, type DepartureWindowHandlers } from "./DepartureWindow.tsx";
 import type { DepartureOutcome, DepartureWindowStart } from "./lib/departure_window.ts";
 import type { CalculationProgress } from "./lib/calculation_progress.ts";
 import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.ts";
@@ -755,6 +755,8 @@ export function App() {
     });
   };
 
+  const departureWindow = useDepartureWindow(compareDepartures);
+
   // --- Calcul de la route en flux ---
   const submit = async () => {
     setFormError("");
@@ -1262,7 +1264,7 @@ export function App() {
           departureWindow={
             vrState?.preStart
               ? {
-                  onRun: compareDepartures,
+                  model: departureWindow,
                   onPick: (departure) => setField("instant", formatLocalDateTime(departure)),
                   gateNames: checkpoints.map(checkpointName),
                 }

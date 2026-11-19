@@ -14,9 +14,17 @@ export type DepartureWindowHandlers = {
   onOutcome: (outcome: DepartureOutcome) => void;
 };
 
+export type DepartureWindowRun = (
+  comparisonHours: number,
+  stepHours: number,
+  handlers: DepartureWindowHandlers,
+  signal: AbortSignal,
+) => Promise<void>;
+
+export type DepartureWindowModel = ReturnType<typeof useDepartureWindow>;
+
 type Props = {
-  /** Lance la comparaison ; se termine à la fin du flux ou lève une erreur. */
-  onRun: (comparisonHours: number, stepHours: number, handlers: DepartureWindowHandlers, signal: AbortSignal) => Promise<void>;
+  model: DepartureWindowModel;
   /** Reporte l'heure de départ choisie dans le formulaire. */
   onPick: (departure: Date) => void;
   /** Noms affichés des portes restantes, dans l'ordre de passage. */
@@ -30,10 +38,11 @@ function formatDeparture(value: string): string {
 }
 
 /**
- * Comparaison des heures de départ d'un record : chaque départ possible est
- * routé pendant la même durée, le plus avancé est mis en avant.
+ * État de la comparaison des départs. Il vit dans App, pas dans le formulaire :
+ * lancer le calcul de route ferme le formulaire, et la comparaison (plusieurs
+ * minutes) doit continuer et garder ses résultats.
  */
-export function DepartureWindow(props: Props) {
+export function useDepartureWindow(onRun: DepartureWindowRun) {
   const [comparisonHours, setComparisonHours] = useState(72);
   // Un départ toutes les 12 h : environ 25 départs sur 16 jours de prévisions,
   // à une dizaine de secondes chacun.
@@ -57,7 +66,7 @@ export function DepartureWindow(props: Props) {
     setPicked("");
     setRunning(true);
     try {
-      await props.onRun(
+      await onRun(
         comparisonHours,
         stepHours,
         {
@@ -78,6 +87,15 @@ export function DepartureWindow(props: Props) {
     setRunning(false);
   };
 
+  return { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked, run, cancel };
+}
+
+/**
+ * Comparaison des heures de départ d'un record : chaque départ possible est
+ * routé pendant la même durée, le plus avancé est mis en avant.
+ */
+export function DepartureWindow(props: Props) {
+  const { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked, run, cancel } = props.model;
   const best = bestDepartureIndex(outcomes);
   const total = start?.departures.length ?? 0;
   const closing = start?.windowClose ? new Date(start.windowClose).toLocaleString("fr-FR", dateFormat) : null;

@@ -1,5 +1,5 @@
 import type { FormEvent, ReactNode } from "react";
-import { DepartureWindow, type DepartureWindowHandlers } from "./DepartureWindow.tsx";
+import { DepartureWindow, type DepartureWindowModel } from "./DepartureWindow.tsx";
 import { horizonOptionsFor, type HorizonChoice } from "./lib/horizon.ts";
 import type { Checkpoint, PolarOption } from "./lib/types.ts";
 import {
@@ -52,7 +52,7 @@ type Props = {
   onClose: () => void;
   /** Comparaison des heures de départ, proposée seulement avant le départ d'un record. */
   departureWindow?: {
-    onRun: (comparisonHours: number, stepHours: number, handlers: DepartureWindowHandlers, signal: AbortSignal) => Promise<void>;
+    model: DepartureWindowModel;
     onPick: (departure: Date) => void;
     gateNames: string[];
   } | null;
