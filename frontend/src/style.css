@@ -2245,6 +2245,13 @@ body {
   font-weight: 600;
 }
 
+.departure-hidden {
+  max-width: 72ch;
+  margin: 10px 0 0;
+  color: var(--card-muted);
+  line-height: 1.45;
+}
+
 .departure-empty {
   margin: 14px 0 0;
   color: var(--card-muted);

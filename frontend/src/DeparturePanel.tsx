@@ -131,20 +131,28 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
   const total = start?.departures.length ?? 0;
   const totalGates = start?.totalGates ?? 0;
   const hours = start?.comparisonHours ?? comparisonHours;
-  const selected = outcomes.find((outcome) => outcome.departure === picked) ?? (best >= 0 ? outcomes[best] : null);
-  const selectedIndex = selected ? outcomes.indexOf(selected) : -1;
   const bars = departureBars(outcomes);
+  // Le tableau ne liste que les départs comparables au meilleur, en milles vers
+  // la même cible : ceux qui ont une porte de retard (ou n'arrivent pas) n'y
+  // apparaissent pas ; le graphique les montre hachurés.
+  const listed = outcomes.map((outcome, index) => ({ outcome, index })).filter(({ index }) => bars[index]?.comparable !== false);
+  const hidden = outcomes.length - listed.length;
+  const hiddenReason = best >= 0 && outcomes[best].reached ? "n'arrivent pas dans la durée comparée" : "ont franchi moins de portes que le meilleur";
+  const positionOf = (index: number) => listed.findIndex((entry) => entry.index === index);
+  const pickedIndex = outcomes.findIndex((outcome) => outcome.departure === picked);
+  const selectedIndex = pickedIndex >= 0 && positionOf(pickedIndex) >= 0 ? pickedIndex : best;
+  const selected = selectedIndex >= 0 ? outcomes[selectedIndex] : null;
 
   // Le tableau s'ouvre sur la page du départ choisi (le meilleur par défaut).
-  const [page, setPage] = useState(() => pageOf(selectedIndex));
+  const [page, setPage] = useState(() => pageOf(positionOf(selectedIndex)));
   useEffect(() => {
     if (outcomes.length === 0) setPage(0);
   }, [outcomes.length]);
-  const pages = pageCount(outcomes.length);
-  const currentPage = clampPage(page, outcomes.length);
+  const pages = pageCount(listed.length);
+  const currentPage = clampPage(page, listed.length);
   const first = currentPage * DEPARTURES_PER_PAGE;
-  const visible = outcomes.slice(first, first + DEPARTURES_PER_PAGE);
-  const bestPage = pageOf(best);
+  const visible = listed.slice(first, first + DEPARTURES_PER_PAGE);
+  const bestPage = pageOf(positionOf(best));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -155,8 +163,10 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
   }, [onClose, running]);
 
   const choose = (index: number) => {
+    const position = positionOf(index);
+    if (position < 0) return;
     setPicked(outcomes[index].departure);
-    setPage(pageOf(index));
+    setPage(pageOf(position));
   };
 
   const where = (outcome: DepartureOutcome) =>
@@ -172,7 +182,12 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
       return running ? `En tête pour l'instant : le départ du ${date} ${where(selected)}.` : `Le départ du ${date} est le meilleur : il ${where(selected)}.`;
     }
     const gap = departureGapNM(selected, outcomes[best]);
-    const behind = gap === null ? `${departureLagLabel(selected, outcomes[best]) ?? "derrière"} sur le meilleur` : `${Math.round(gap)} NM derrière le meilleur`;
+    const behind =
+      gap !== null
+        ? `${Math.round(gap)} NM derrière le meilleur`
+        : selected.reached && outcomes[best].reached
+          ? `${formatDuration((selected.elapsedHours - outcomes[best].elapsedHours) * 60)} derrière le meilleur`
+          : `${departureLagLabel(selected, outcomes[best]) ?? "en retard"} sur le meilleur`;
     return `Le départ du ${date} ${where(selected)}, ${behind}.`;
   })();
 
@@ -255,15 +270,16 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                   done && slot.outcomeIndex === best ? "is-best" : "",
                   done && slot.outcomeIndex === selectedIndex ? "is-selected" : "",
                 ].filter(Boolean);
+                const lagLabel = outcome && best >= 0 ? departureLagLabel(outcome, outcomes[best]) : null;
                 const label = outcome
-                  ? `${formatDate(slot.departure)} : ${outcome.reached ? "arrivée" : `${Math.round(outcome.distanceNM)} NM de ${departureTarget(outcome, totalGates, gateNames)}`}`
+                  ? `${formatDate(slot.departure)} : ${outcome.reached ? "arrivée" : `${Math.round(outcome.distanceNM)} NM de ${departureTarget(outcome, totalGates, gateNames)}`}${lagLabel ? `, ${lagLabel} (absent du tableau)` : ""}`
                   : `${formatDate(slot.departure)} : en attente`;
                 return (
                   <div className="departure-slot" key={slot.departure}>
                     <button
                       type="button"
                       className={classes.join(" ")}
-                      disabled={!done}
+                      disabled={!done || bar?.comparable === false}
                       aria-pressed={done ? slot.outcomeIndex === selectedIndex : undefined}
                       aria-label={label}
                       title={label}
@@ -293,7 +309,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
           </figure>
         )}
 
-        {outcomes.length > 0 && (
+        {listed.length > 0 && (
           <div className="route-details-table-wrapper">
             <table className="route-details-table route-report-table departure-table">
               <thead>
@@ -304,15 +320,22 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                   <th className="numeric" title="Distance au point le plus proche de la cible suivante">
                     Distance
                   </th>
-                  <th className="numeric" title="Retard sur le meilleur départ : en milles vers la même cible, sinon en portes">
+                  <th className="numeric" title="Retard sur le meilleur départ, en milles vers la même cible (en heures quand les deux arrivent)">
                     Retard
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {visible.map((outcome, offset) => {
-                  const index = first + offset;
+                {visible.map(({ outcome, index }) => {
                   const gap = best >= 0 && index !== best ? departureGapNM(outcome, outcomes[best]) : null;
+                  const lag =
+                    index === best || best < 0
+                      ? "—"
+                      : gap !== null
+                        ? `${Math.round(gap)} NM`
+                        : outcome.reached && outcomes[best].reached
+                          ? formatDuration((outcome.elapsedHours - outcomes[best].elapsedHours) * 60)
+                          : "—";
                   const isSelected = index === selectedIndex;
                   const classes = ["route-report-row", index === best ? "departure-best" : "", isSelected ? "route-report-selected" : ""].filter(Boolean);
                   return (
@@ -336,7 +359,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                       <td>{outcome.reached ? "arrivée" : `${outcome.gatesCrossed}/${totalGates}`}</td>
                       <td>{outcome.reached ? `en ${formatDuration(outcome.elapsedHours * 60)}` : departureTarget(outcome, totalGates, gateNames)}</td>
                       <td className="numeric">{outcome.reached ? "—" : `${Math.round(outcome.distanceNM)} NM`}</td>
-                      <td className="numeric">{index === best ? "—" : gap === null ? (departureLagLabel(outcome, outcomes[best]) ?? "—") : `${Math.round(gap)} NM`}</td>
+                      <td className="numeric">{lag}</td>
                     </tr>
                   );
                 })}
@@ -345,10 +368,18 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
           </div>
         )}
 
+        {hidden > 0 && (
+          <p className="departure-hidden">
+            {hidden > 1
+              ? `${hidden} départs ${hiddenReason} : ils ne sont pas listés et restent hachurés sur le graphique.`
+              : `1 départ ${hiddenReason.replace("n'arrivent", "n'arrive").replace("ont franchi", "a franchi")} : il n'est pas listé et reste hachuré sur le graphique.`}
+          </p>
+        )}
+
         {pages > 1 && (
           <nav className="departure-pager" aria-label="Pages des départs">
             <span className="departure-pager-range">
-              Départs {first + 1} à {first + visible.length} sur {outcomes.length}
+              Départs {first + 1} à {first + visible.length} sur {listed.length}
             </span>
             <div className="departure-pager-buttons">
               <button
