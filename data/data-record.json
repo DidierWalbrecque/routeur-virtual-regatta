@@ -1,0 +1,423 @@
+{
+    "rc": "ok",
+    "res": {
+        "bs": null,
+        "engine": {
+            "lastCalc": 1794852720000,
+            "nextCalc": 1794852810000,
+            "lastWindUpdate": 1794852004295,
+            "lastFineWindUpdate": 1794846636042
+        },
+        "ba": null,
+        "leg": {
+            "_id": {
+                "race_id": 817,
+                "num": 1
+            },
+            "_updatedAt": "2026-11-09T12:44:53.213Z",
+            "boat": {
+                "assetBundle": "ultimbp11",
+                "defaultSkin": "ultimbp11_VR_grey",
+                "idx": 18,
+                "label": "Ultim BP XI",
+                "name": "Ultim BP 11",
+                "polar_id": 21,
+                "stats": {
+                    "length": 32,
+                    "width": 23,
+                    "airDraught": 35,
+                    "draught": 4.5,
+                    "weight": 16000,
+                    "upwindSails": 430,
+                    "downwindSails": 650
+                },
+                "type": "ultimbp11"
+            },
+            "checkpoints": [
+                {
+                    "id": 7,
+                    "group": 1,
+                    "name": "Biscay",
+                    "start": {
+                        "lat": 43.054789,
+                        "lon": -9.3006874
+                    },
+                    "end": {
+                        "lat": 42.010469,
+                        "lon": -71.129496
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "port"
+                },
+                {
+                    "id": 8,
+                    "group": 2,
+                    "name": "",
+                    "start": {
+                        "lat": 1.6267552220703,
+                        "lon": -49.912141628906
+                    },
+                    "end": {
+                        "lat": 14.74079,
+                        "lon": -17.529798
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "stbd"
+                },
+                {
+                    "id": 1,
+                    "group": 3,
+                    "name": "Equator",
+                    "start": {
+                        "lat": 0,
+                        "lon": -51.07755
+                    },
+                    "end": {
+                        "lat": 0,
+                        "lon": 9.3477
+                    },
+                    "engine": true,
+                    "display": "gate",
+                    "ranking": true,
+                    "side": "stbd"
+                },
+                {
+                    "id": 2,
+                    "group": 4,
+                    "name": "Cape Agulhas",
+                    "start": {
+                        "lat": -34.831021,
+                        "lon": 20.012
+                    },
+                    "end": {
+                        "lat": -70.858818,
+                        "lon": 20.012
+                    },
+                    "engine": true,
+                    "display": "gate",
+                    "ranking": true,
+                    "side": "port"
+                },
+                {
+                    "id": 3,
+                    "group": 5,
+                    "name": "Cape Leeuwin",
+                    "start": {
+                        "lat": -34.375782,
+                        "lon": 115.13656
+                    },
+                    "end": {
+                        "lat": -66.480459,
+                        "lon": 115.13656
+                    },
+                    "engine": true,
+                    "display": "gate",
+                    "ranking": true,
+                    "side": "port"
+                },
+                {
+                    "id": 12,
+                    "group": 6,
+                    "name": "",
+                    "start": {
+                        "lat": -71.281641,
+                        "lon": 170.25374
+                    },
+                    "end": {
+                        "lat": 60.572858,
+                        "lon": 170.77631
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "stbd"
+                },
+                {
+                    "id": 13,
+                    "group": 7,
+                    "name": "",
+                    "start": {
+                        "lat": -72.727444,
+                        "lon": -103.26151
+                    },
+                    "end": {
+                        "lat": 18.155054378906,
+                        "lon": -102.90586658203
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "stbd"
+                },
+                {
+                    "id": 4,
+                    "group": 8,
+                    "name": "Cabo de Hornos",
+                    "start": {
+                        "lat": -66.949922375,
+                        "lon": -67.230617904297
+                    },
+                    "end": {
+                        "lat": -55.958717380859,
+                        "lon": -67.279713058105
+                    },
+                    "engine": true,
+                    "display": "gate",
+                    "ranking": true,
+                    "side": "stbd"
+                },
+                {
+                    "id": 5,
+                    "group": 9,
+                    "name": "",
+                    "start": {
+                        "lat": -7.2767573167112,
+                        "lon": -34.798641996658
+                    },
+                    "end": {
+                        "lat": -16.968107328125,
+                        "lon": 11.759867884277
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "port"
+                },
+                {
+                    "id": 11,
+                    "group": 10,
+                    "name": "Equator (way back)",
+                    "start": {
+                        "lat": 0,
+                        "lon": -51.077547
+                    },
+                    "end": {
+                        "lat": 0.00020439680231732,
+                        "lon": 9.3501330639535
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": true,
+                    "side": "port"
+                },
+                {
+                    "id": 9,
+                    "group": 11,
+                    "name": "",
+                    "start": {
+                        "lat": 14.746941518555,
+                        "lon": -17.529038116455
+                    },
+                    "end": {
+                        "lat": 35.300301,
+                        "lon": -75.9036
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "stbd"
+                },
+                {
+                    "id": 10,
+                    "group": 12,
+                    "name": "",
+                    "start": {
+                        "lat": 43.047206,
+                        "lon": -9.29984
+                    },
+                    "end": {
+                        "lat": 66.353329,
+                        "lon": -37.24498
+                    },
+                    "engine": true,
+                    "display": "none",
+                    "ranking": false,
+                    "side": "stbd"
+                },
+                {
+                    "id": 6,
+                    "group": 13,
+                    "name": "Arrival",
+                    "start": {
+                        "lat": 49.960499,
+                        "lon": -5.1845490000001
+                    },
+                    "end": {
+                        "lat": 48.483425,
+                        "lon": -5.100535
+                    },
+                    "engine": true,
+                    "display": "gate",
+                    "ranking": false,
+                    "side": "port"
+                }
+            ],
+            "close": {
+                "date": 1806620340000
+            },
+            "course": [
+                {
+                    "lat": 48.5203,
+                    "lon": -5.14313
+                },
+                {
+                    "lat": 41.3012,
+                    "lon": -29.6968
+                },
+                {
+                    "lat": -0.0350334,
+                    "lon": -27.6039
+                },
+                {
+                    "lat": -42.9849,
+                    "lon": -24.4781
+                },
+                {
+                    "lat": -51.0426,
+                    "lon": 35.4251
+                },
+                {
+                    "lat": -54.8423,
+                    "lon": 58.9554
+                },
+                {
+                    "lat": -57.9336,
+                    "lon": 115.093
+                },
+                {
+                    "lat": -60.6359,
+                    "lon": 155.819
+                },
+                {
+                    "lat": -60.3494,
+                    "lon": -170.18
+                },
+                {
+                    "lat": -59.712,
+                    "lon": -84.3802
+                },
+                {
+                    "lat": -56.0667,
+                    "lon": -66.3874
+                },
+                {
+                    "lat": -50.9336,
+                    "lon": -21.8684
+                },
+                {
+                    "lat": 0.0443483,
+                    "lon": -29.205
+                },
+                {
+                    "lat": 42.2341,
+                    "lon": -35.7864
+                },
+                {
+                    "lat": 49.4594,
+                    "lon": -5.15517
+                }
+            ],
+            "defaultMapPreset": "satellite",
+            "displayOrder": 30,
+            "end": {
+                "date": 1806015540000,
+                "lat": 48.3571,
+                "lon": -4.47226,
+                "name": "Brest",
+                "radius": 0,
+                "countryCode": "FRA",
+                "countryFlag": "FR"
+            },
+            "estimatedLength": 23500,
+            "estimatedTime": 41,
+            "freeCredits": 2200,
+            "ice_limits": {
+                "maxLat": 90,
+                "minLat": -90,
+                "north": [],
+                "south": [
+                    {
+                        "lat": -90,
+                        "lon": -180
+                    },
+                    {
+                        "lat": -90,
+                        "lon": -90
+                    },
+                    {
+                        "lat": -90,
+                        "lon": 0
+                    },
+                    {
+                        "lat": -90,
+                        "lon": 90
+                    },
+                    {
+                        "lat": -90,
+                        "lon": 180
+                    }
+                ]
+            },
+            "lastUpdate": 1794226769693,
+            "mapPresets": [
+                "default",
+                "satellite",
+                "vro1",
+                "old",
+                "imray",
+                "navionics"
+            ],
+            "name": "Jules Verne Trophy",
+            "open": {
+                "date": 1794142804188
+            },
+            "optionPrices": {
+                "foil": 1990,
+                "winch": 900,
+                "radio": 200,
+                "skin": 1500,
+                "hull": 590,
+                "reach": 1430,
+                "heavy": 1010,
+                "light": 1260,
+                "comfortLoungePug": 780,
+                "magicFurler": 1140,
+                "vrtexJacket": 1020
+            },
+            "priceLevel": 1,
+            "race": {
+                "name": "Jules Verne Trophy 2026",
+                "type": "record"
+            },
+            "schedule": "validated",
+            "stamina": true,
+            "start": {
+                "date": 1794142800000,
+                "heading": 246,
+                "lat": 48.52034,
+                "lon": -5.143132,
+                "name": "Ouessant",
+                "countryCode": "FRA",
+                "countryFlag": "FR"
+            },
+            "status": "started",
+            "syncAWS": "Yes",
+            "vsrLevel": 1,
+            "fineWinds": true,
+            "overrideLoadingScreen": {},
+            "raceOfTheMoment": {
+                "enabled": true,
+                "img": "https://static.virtualregatta.com/offshore/images/race-of-the-moment/NGame-ROTM_3nga.png"
+            },
+            "raceBrandingLogo": "https://static.virtualregatta.com/offshore/sponsor/logo/Jules_Verne_26.png?t=1793976707",
+            "specialIcons": {
+                "raceLogo": true,
+                "raceBranding": false
+            }
+        }
+    }
+}

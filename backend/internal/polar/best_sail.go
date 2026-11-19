@@ -102,3 +102,64 @@ func (polar *Polar) BestEffectiveSailAt(
 	best.Speed = effectiveSpeed
 	return best, nil
 }
+
+// PreferredEffectiveSailAt returns the fastest available sail, but keeps the
+// current sail when no alternative beats it by more than the sail-change
+// tolerance (Virtual Regatta's autoSailChangeTolerance). A purely greedy
+// per-step choice otherwise oscillates between near-equal sails and drains
+// stamina. A zero or non-positive currentSailID, or a tolerance <= 1, disables
+// the hysteresis and returns the fastest sail.
+func (polar *Polar) PreferredEffectiveSailAt(
+	windSpeed WindSpeed,
+	windAngle TrueWindAngle,
+	availableSails []SailID,
+	options SpeedOptions,
+	currentSailID SailID,
+	tolerance SpeedRatio,
+) (SailPerformance, error) {
+	best, err := polar.BestEffectiveSailAt(
+		windSpeed,
+		windAngle,
+		availableSails,
+		options,
+	)
+	if err != nil {
+		return SailPerformance{}, err
+	}
+	if currentSailID <= 0 || tolerance <= 1 || currentSailID == best.SailID {
+		return best, nil
+	}
+	available := false
+	for _, sailID := range availableSails {
+		if sailID == currentSailID {
+			available = true
+			break
+		}
+	}
+	if !available {
+		return best, nil
+	}
+	currentSpeed, err := polar.EffectiveSpeedAt(
+		currentSailID,
+		windSpeed,
+		windAngle,
+		options,
+	)
+	if err != nil {
+		return SailPerformance{}, err
+	}
+	// On ne change de voile que si la meilleure bat la voile courante de plus
+	// que la tolérance ; sinon on garde la courante (hystérésis).
+	if float64(best.Speed) <= float64(currentSpeed)*float64(tolerance) {
+		name := ""
+		if sail, exists := polar.sailByID(currentSailID); exists {
+			name = sail.Name
+		}
+		return SailPerformance{
+			SailID:   currentSailID,
+			SailName: name,
+			Speed:    currentSpeed,
+		}, nil
+	}
+	return best, nil
+}

@@ -68,10 +68,34 @@ test("buildRouteDetailsModel associe à chaque départ de pas le détail du pas 
   assert.equal(first.sail, "Light Gennaker");
   assert.equal(first.maneuver, "tack");
   assert.equal(model.maneuverCount, 1);
-  // Le dernier pas rejoint la destination : aucun détail de pas à afficher.
+  // Arrivée nue (backend ancien, cap absent) : pas de détail pour le dernier bord.
   assert.equal(model.rows[1].heading, null);
   assert.equal(model.rows[1].tack, "—");
   assert.equal(model.rows[2].terminal, true);
+});
+
+test("buildRouteDetailsModel affiche le dernier bord quand l'arrivée le décrit", () => {
+  const route = [
+    { position: { latitude: 16.43, longitude: -61.8 }, instant: "2026-11-12T19:23:00Z", stamina: 100 },
+    {
+      position: { latitude: 16.4311, longitude: -61.8004 }, instant: "2026-11-12T19:33:00Z", stamina: 100,
+      heading: 190, sail: "Jib", twa: 60, twd: 130, tws: 9, tack: "port", speedKnots: 8,
+    },
+    {
+      position: { latitude: 16.367, longitude: -61.78 }, instant: "2026-11-12T19:43:00Z", stamina: 100, terminal: true,
+      heading: 196, sail: "Jib", twa: 66, twd: 130, tws: 9.2, tack: "port", speedKnots: 8.4,
+    },
+  ];
+  const model = buildRouteDetailsModel({ destinationReached: true, route });
+  assert.equal(model.rows[1].heading, 196);
+  assert.equal(model.rows[1].windAngle, 66);
+  assert.equal(model.rows[1].sail, "Jib");
+  assert.equal(model.rows[1].speedKnots, 8.4);
+  // Après l'arrivée, il n'y a plus de bord.
+  assert.equal(model.rows[2].heading, null);
+  // Une arrivée nue avec un cap à 0 ne remplit pas la ligne précédente.
+  const bare = { ...route[2], heading: 0, twa: undefined, twd: undefined, tws: undefined, sail: "", speedKnots: undefined, tack: "" };
+  assert.equal(buildRouteDetailsModel({ route: [route[0], route[1], bare] }).rows[1].heading, null);
 });
 
 test("formatPosition et formatElapsed reproduisent le format du jeu", () => {

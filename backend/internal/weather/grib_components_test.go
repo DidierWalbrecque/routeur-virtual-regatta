@@ -105,10 +105,10 @@ func TestGRIB2WindGridValidate(t *testing.T) {
 			ValidAt:    time.Date(2026, 4, 29, 9, 0, 0, 0, time.UTC),
 			Width:      2,
 			Height:     1,
-			Latitudes:  []float64{13, 13},
+			Latitudes:  []float64{13},
 			Longitudes: []float64{121.5, 121.75},
-			U:          []float64{-2, -2.5},
-			V:          []float64{1, 1.5},
+			U:          []float32{-2, -2.5},
+			V:          []float32{1, 1.5},
 		}
 	}
 
@@ -159,14 +159,14 @@ func TestGRIB2WindGridValidate(t *testing.T) {
 		{
 			name: "composante U non finie",
 			change: func(grid *GRIB2WindGrid) {
-				grid.U[0] = math.NaN()
+				grid.U[0] = float32(math.NaN())
 			},
 			wantErr: "composante U",
 		},
 		{
 			name: "composante V non finie",
 			change: func(grid *GRIB2WindGrid) {
-				grid.V[0] = math.Inf(1)
+				grid.V[0] = float32(math.Inf(1))
 			},
 			wantErr: "composante V",
 		},

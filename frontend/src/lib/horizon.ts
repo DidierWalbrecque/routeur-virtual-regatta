@@ -1,4 +1,4 @@
-export type HorizonChoice = "arrival" | "4h" | "24h" | "2d" | "3d" | "5d";
+export type HorizonChoice = "arrival" | "4h" | "24h" | "2d" | "3d" | "5d" | "7d" | "10d" | "16d";
 export type CalculationMode = "quick" | "precise";
 
 export const HORIZON_OPTIONS: { value: HorizonChoice; label: string }[] = [
@@ -8,16 +8,34 @@ export const HORIZON_OPTIONS: { value: HorizonChoice; label: string }[] = [
   { value: "2d", label: "2 jours" },
   { value: "3d", label: "3 jours" },
   { value: "5d", label: "5 jours" },
+  { value: "7d", label: "7 jours" },
+  { value: "10d", label: "10 jours" },
+  { value: "16d", label: "16 jours" },
 ];
 
 const MINUTES_PER_DAY = 24 * 60;
-/** Plafond de « jusqu'à l'arrivée » : au-delà, les prévisions ne sont plus fiables. */
-export const MAX_HORIZON_MINUTES = 5 * MINUTES_PER_DAY;
 
-/** Horizon maximal par mode : le mode précis s'arrête à 3 jours, le rapide va à 5. */
+/** Échéance maximale fournie par le GFS 0.25° de NOMADS (16 jours). */
+export const GFS_MAX_FORECAST_HOURS = 384;
+
+/** Échéances GRIB téléchargées, indépendantes de l'horizon de routage : tout
+ * le GFS 0.25° en 3-horaire, de f000 à f384 (cadence native). Le routage est
+ * ensuite plafonné à ce que ces fichiers couvrent. */
+export const GRIB_FORECAST_HOURS: number[] = Array.from(
+  { length: GFS_MAX_FORECAST_HOURS / 3 + 1 },
+  (_, index) => index * 3,
+);
+
+/** Plafond absolu de « jusqu'à l'arrivée » : la limite du GFS (16 jours). Au-delà
+ * de ~7 jours la prévision devient peu fiable — l'horizon reste proposé, mais à
+ * utiliser en connaissance de cause. */
+export const MAX_HORIZON_MINUTES = 10 * MINUTES_PER_DAY;
+
+/** Horizon maximal par mode : le mode précis (plus lourd) s'arrête à 7 jours, le
+ * rapide va jusqu'à 16 jours pour couvrir une transat entière. */
 export const MAX_MINUTES_BY_MODE: Record<CalculationMode, number> = {
-  precise: 3 * MINUTES_PER_DAY,
-  quick: 5 * MINUTES_PER_DAY,
+  precise: 4 * MINUTES_PER_DAY,
+  quick: 10 * MINUTES_PER_DAY,
 };
 
 const REQUESTED_MINUTES: Record<Exclude<HorizonChoice, "arrival">, number> = {
@@ -26,6 +44,9 @@ const REQUESTED_MINUTES: Record<Exclude<HorizonChoice, "arrival">, number> = {
   "2d": 2 * MINUTES_PER_DAY,
   "3d": 3 * MINUTES_PER_DAY,
   "5d": 5 * MINUTES_PER_DAY,
+  "7d": 7 * MINUTES_PER_DAY,
+  "10d": 10 * MINUTES_PER_DAY,
+  "16d": 16 * MINUTES_PER_DAY,
 };
 
 export type HorizonResult =
@@ -41,23 +62,11 @@ export function horizonOptionsFor(mode: CalculationMode): { value: HorizonChoice
 
 /** Ramène un horizon trop long pour le mode au plus grand horizon permis. */
 export function horizonAllowedIn(choice: HorizonChoice, mode: CalculationMode): HorizonChoice {
-  return horizonOptionsFor(mode).some((option) => option.value === choice) ? choice : "3d";
+  return horizonOptionsFor(mode).some((option) => option.value === choice) ? choice : "2d";
 }
 
 export function isHorizonChoice(value: unknown): value is HorizonChoice {
   return HORIZON_OPTIONS.some((option) => option.value === value);
-}
-
-/** Au moins 3 jours de prévisions, pour pouvoir changer d'horizon sans retélécharger. */
-const MIN_FORECAST_HOURS = 72;
-/** Marge pour l'écart entre l'émission du run et le départ. */
-const RUN_AGE_MARGIN_HOURS = 12;
-
-/** Échéances de prévision (en heures, de 3 en 3) à télécharger pour l'horizon choisi. */
-export function forecastHoursFor(choice: HorizonChoice): number[] {
-  const requestedHours = choice === "arrival" ? 0 : REQUESTED_MINUTES[choice] / 60;
-  const last = Math.max(MIN_FORECAST_HOURS, Math.ceil((requestedHours + RUN_AGE_MARGIN_HOURS) / 3) * 3);
-  return Array.from({ length: last / 3 + 1 }, (_, index) => index * 3);
 }
 
 /**

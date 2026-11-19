@@ -215,3 +215,56 @@ func bestSailTestPolar() *Polar {
 		},
 	}
 }
+
+func hysteresisTestPolar() *Polar {
+	grid := func(v BoatSpeed) SpeedGrid {
+		return SpeedGrid{Values: [][]BoatSpeed{{v, v}, {v, v}}}
+	}
+	return &Polar{
+		GlobalSpeedRatio: 1,
+		WindSpeeds:       []WindSpeed{10, 20},
+		WindAngles:       []TrueWindAngle{80, 100},
+		Sails: []Sail{
+			{ID: 1, Name: "A", Speeds: grid(20)},
+			{ID: 2, Name: "B", Speeds: grid(23)},
+		},
+	}
+}
+
+func TestPreferredEffectiveSailAtAppliesHysteresis(t *testing.T) {
+	polar := hysteresisTestPolar()
+	available := []SailID{1, 2}
+	var ws WindSpeed = 15
+	var wa TrueWindAngle = 90
+	var opts SpeedOptions
+
+	// Sans voile courante : on prend la plus rapide (B, +15 %).
+	best, err := polar.PreferredEffectiveSailAt(ws, wa, available, opts, 0, 1.1)
+	if err != nil {
+		t.Fatalf("sélection impossible: %v", err)
+	}
+	if best.SailID != 2 {
+		t.Errorf("sans voile courante, voile = %d, attendue 2 (la plus rapide)", best.SailID)
+	}
+
+	// Voile courante A, gain 15 % > tol 10 % : on change pour B.
+	switched, err := polar.PreferredEffectiveSailAt(ws, wa, available, opts, 1, 1.1)
+	if err != nil {
+		t.Fatalf("sélection impossible: %v", err)
+	}
+	if switched.SailID != 2 {
+		t.Errorf("gain 15%% > tol 10%%, voile = %d, attendue 2", switched.SailID)
+	}
+
+	// Voile courante A, tol 20 % > gain 15 % : on garde A (hystérésis).
+	kept, err := polar.PreferredEffectiveSailAt(ws, wa, available, opts, 1, 1.2)
+	if err != nil {
+		t.Fatalf("sélection impossible: %v", err)
+	}
+	if kept.SailID != 1 {
+		t.Errorf("gain 15%% < tol 20%%, voile = %d, attendue 1 (conservée)", kept.SailID)
+	}
+	if math.Abs(float64(kept.Speed)-20) > 1e-9 {
+		t.Errorf("vitesse voile conservée = %.3f, attendue 20", float64(kept.Speed))
+	}
+}

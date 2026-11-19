@@ -12,8 +12,50 @@
     { id: 6, name: "Heavy Gennaker", option: "heavy" },
     { id: 7, name: "Light Gennaker", option: "light" },
   ];
-  let latestCheckpoints = [];
-  let latestGateGroupCounters = [];
+  // Données de la manche mémorisées d'une réponse à l'autre (toutes les
+  // réponses ne contiennent pas la manche), une mémoire par course : le jeu peut
+  // interroger plusieurs courses, et les portes franchies de l'une ne doivent
+  // pas s'appliquer à une autre.
+  function newRaceMemory(legNum = "") {
+    return {
+      legNum,
+      checkpoints: [],
+      gateGroupCounters: [],
+      arrival: null,
+      legStart: null,
+      zones: [],
+      legShape: [],
+      raceType: "",
+      startWindow: null,
+      endDate: null,
+    };
+  }
+  const raceMemories = new Map();
+  let memory = { ...newRaceMemory(), anonymous: true };
+
+  // Départ officiel du leg : début du leg (lat, lon, nom).
+  function legStartOf(leg) {
+    const start = leg?.start;
+    const latitude = Number(start?.lat);
+    const longitude = Number(start?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    return { latitude, longitude, name: text(start?.name) };
+  }
+
+  // Arrivée officielle du leg : fin du leg (lat, lon, rayon, nom).
+  function legEndOf(leg) {
+    const end = leg?.end;
+    const latitude = Number(end?.lat);
+    const longitude = Number(end?.lon);
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
+    const radius = Number(end?.radius);
+    return {
+      latitude,
+      longitude,
+      radius: Number.isFinite(radius) && radius > 0 ? radius : null,
+      name: text(end?.name),
+    };
+  }
 
   function availableSails(options, fullOptions) {
     const normalizedOptions = new Set(options.map((option) => String(option).toLowerCase()));
@@ -105,8 +147,6 @@
   const zoneKeyPattern = /zone|restrict|forbid|exclu|polygon|danger|obstacle/i;
   const zoneIgnoredKeyPattern = /checkpoint|ice|limit/i;
   const zoneVertexKeys = ["vertices", "points", "coords", "coordinates", "polygon", "path", "shape", "latlons", "boundary", "positions"];
-  let latestZones = [];
-  let latestLegShape = [];
 
   function samePosition(first, second) {
     return first.latitude === second.latitude && first.longitude === second.longitude;
@@ -190,11 +230,95 @@
       .map(([key, value]) => ({ path: "res.leg." + key, value: describeShape("", value).replace(/^ : /, "") }));
   }
 
+  // Dates d'ouverture et de fermeture du leg, et date de son arrivée
+  // (leg.end.date), en millisecondes du jeu.
+  function dateOf(value) {
+    const date = Number(value?.date);
+    return Number.isFinite(date) && date > 0 ? date : null;
+  }
+
+  function startWindowOf(leg) {
+    const open = dateOf(leg?.open);
+    const close = dateOf(leg?.close);
+    if (open == null && close == null) return null;
+    return { open, close };
+  }
+
+  // Choisit la mémoire de la course reçue. Une réponse sans identifiant de
+  // course garde la mémoire courante. Un numéro d'étape absent d'une réponse
+  // (souvent celles sans manche) ne fait rien oublier ; seul un changement
+  // d'étape connu repart d'une mémoire vide.
+  function selectRaceMemory(raceId, legNum) {
+    if (raceId === "") return;
+    let selected = raceMemories.get(raceId);
+    // Mémoire remplie par des réponses sans identifiant : elle revient à la
+    // première course identifiée.
+    if (!selected && memory.anonymous) {
+      delete memory.anonymous;
+      selected = memory;
+      raceMemories.set(raceId, selected);
+    }
+    if (!selected || (legNum !== "" && selected.legNum !== "" && selected.legNum !== legNum)) {
+      selected = newRaceMemory(legNum);
+      raceMemories.set(raceId, selected);
+    } else if (legNum !== "") {
+      selected.legNum = legNum;
+    }
+    memory = selected;
+  }
+
+  function rememberLeg(leg) {
+    if (!leg || typeof leg !== "object") return;
+    if (Array.isArray(leg.checkpoints)) {
+      memory.checkpoints = checkpointsFromLeg(leg);
+    }
+    const arrival = legEndOf(leg);
+    if (arrival) memory.arrival = arrival;
+    const legStart = legStartOf(leg);
+    if (legStart) memory.legStart = legStart;
+    memory.zones = collectZones([["res.leg", leg]]);
+    memory.legShape = legShapeOf(leg);
+    const raceType = text(leg.race?.type).toLowerCase();
+    if (raceType) memory.raceType = raceType;
+    const startWindow = startWindowOf(leg);
+    if (startWindow) memory.startWindow = startWindow;
+    const endDate = dateOf(leg.end);
+    if (endDate != null) memory.endDate = endDate;
+  }
+
+  function hasPosition(boat) {
+    return Boolean(boat?.pos) && Number.isFinite(Number(boat.pos.lat)) && Number.isFinite(Number(boat.pos.lon));
+  }
+
+  function legContext() {
+    return {
+      raceType: memory.raceType,
+      startWindow: memory.startWindow,
+      endDate: memory.endDate,
+      zones: memory.zones,
+      legShape: memory.legShape,
+      checkpoints: memory.checkpoints,
+      arrival: memory.arrival,
+      legStart: memory.legStart,
+      gateGroupCounters: memory.gateGroupCounters,
+    };
+  }
+
   function publish(body, url) {
     const boat = body?.res?.bs || body?.bs || body?.res?.boat;
-    if (!boat || !boat.pos || !Number.isFinite(Number(boat.pos.lat)) || !Number.isFinite(Number(boat.pos.lon))) return;
+    const leg = body?.res?.leg || body?.leg || null;
+    const boatId = boat?._id || {};
+    const legId = leg?._id || {};
+    const raceId = text(boatId.raceId ?? boatId.race_id ?? legId.race_id ?? legId.raceId);
+    const legNum = text(boatId.legNum ?? boatId.leg_num ?? legId.num ?? legId.legNum ?? legId.leg_num);
+    selectRaceMemory(raceId, legNum);
+    rememberLeg(leg);
 
-    const id = boat._id || {};
+    if (!hasPosition(boat)) {
+      publishPreStart(body, leg, raceId, legNum, url);
+      return;
+    }
+
     const options = Array.isArray(boat.options)
       ? boat.options.slice()
       : boat.options == null
@@ -203,24 +327,16 @@
 
     const fullOptions = boat.fullOptions === true;
     const currentSail = boat.sail ?? null;
-    const leg = body?.res?.leg || body?.leg || null;
-    if (Array.isArray(leg?.checkpoints)) {
-      latestCheckpoints = checkpointsFromLeg(leg);
-    }
-    if (leg && typeof leg === "object") {
-      latestZones = collectZones([["res.leg", leg]]);
-      latestLegShape = legShapeOf(leg);
-    }
     const counters = gateCounters(boat.gateGroupCounters);
-    if (counters) latestGateGroupCounters = counters;
+    if (counters) memory.gateGroupCounters = counters;
 
     window.postMessage({
       source: "vr-state-lite",
       type: "boat-state",
       state: {
-        raceId: text(id.raceId ?? id.race_id),
-        legNum: text(id.legNum ?? id.leg_num),
-        userId: text(id.user_id ?? id.userId),
+        raceId,
+        legNum,
+        userId: text(boatId.user_id ?? boatId.userId),
         displayName: boat.displayName || "",
         position: {
           latitude: Number(boat.pos.lat),
@@ -235,15 +351,53 @@
           name: sailName(currentSail),
           automatic: Number(currentSail) >= 10,
         },
+        // Valeur brute du jeu (boat.sail) pour diagnostiquer l'encodage de la voile.
+        rawSail: currentSail,
         heading: Number.isFinite(Number(boat.heading)) ? Number(boat.heading) : null,
         speed: Number.isFinite(Number(boat.speed)) ? Number(boat.speed) : null,
         state: boat.state || "",
         updatedAt: boat.lastCalcDate ?? null,
         boatHints: collectBoatHints([["res.bs", boat], ["res.leg", leg], ["res", body?.res], ["body", body]]),
-        zones: latestZones,
-        legShape: latestLegShape,
-        checkpoints: latestCheckpoints,
-        gateGroupCounters: latestGateGroupCounters,
+        ...legContext(),
+        sourceUrl: url,
+      },
+    }, "*");
+  }
+
+  // Épreuve à record avant le départ : le jeu ne renvoie pas d'état de bateau
+  // (bs est nul). On publie quand même la description du leg, avec la ligne de
+  // départ comme position, pour préparer la route. Réservé aux records : dans
+  // une course classique, une réponse sans bateau ne doit pas remplacer la
+  // position live par la ligne de départ.
+  function publishPreStart(body, leg, raceId, legNum, url) {
+    if (!leg || body?.res?.bs != null || memory.raceType !== "record" || !memory.legStart) return;
+
+    window.postMessage({
+      source: "vr-state-lite",
+      type: "boat-state",
+      state: {
+        raceId,
+        legNum,
+        userId: "",
+        displayName: "",
+        preStart: true,
+        position: {
+          latitude: memory.legStart.latitude,
+          longitude: memory.legStart.longitude,
+        },
+        stamina: null,
+        // Les options du joueur ne sont pas connues avant le départ.
+        options: [],
+        fullOptions: false,
+        sails: [],
+        currentSail: null,
+        rawSail: null,
+        heading: null,
+        speed: null,
+        state: "",
+        updatedAt: null,
+        boatHints: collectBoatHints([["res.leg", leg], ["res", body?.res], ["body", body]]),
+        ...legContext(),
         sourceUrl: url,
       },
     }, "*");

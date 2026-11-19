@@ -60,15 +60,35 @@ type IsochroneNode struct {
 	SpeedPenalty            *simulation.SpeedPenaltyApplication
 	CourseProgress          CourseProgress
 	State                   simulation.BoatState
+	// ManeuverStamina cumule la stamina dépensée en manœuvres depuis le départ.
+	// La stamina du bateau se recharge avec le temps : seule cette somme garde
+	// la trace des manœuvres faites en route.
+	ManeuverStamina simulation.StaminaLevel
 }
 
 type isochroneParentState struct {
-	Position       navigation.Position
-	Stamina        simulation.StaminaState
-	BoatState      simulation.BoatState
-	WindAngle      navigation.TrueWindAngle
-	CourseProgress CourseProgress
-	HasBoatState   bool
+	Position        navigation.Position
+	Stamina         simulation.StaminaState
+	BoatState       simulation.BoatState
+	WindAngle       navigation.TrueWindAngle
+	CourseProgress  CourseProgress
+	HasBoatState    bool
+	ManeuverStamina simulation.StaminaLevel
+}
+
+// maneuverStaminaDistance convertit la stamina dépensée en manœuvres en
+// distance, pour classer les routes : chaque point de stamina coûte autant
+// que 0,01 NM de progression. Un empannage d'Imoca par vent faible (environ
+// 12 points) vaut ainsi 0,12 NM : une manœuvre est gardée si elle fait gagner
+// davantage, et un aller-retour inutile, qui ne gagne que quelques mètres,
+// est écarté. La pénalité de vitesse reste comptée à part, dans la distance
+// parcourue.
+const maneuverStaminaDistance = 0.01
+
+// rankingProgress est la progression vers la cible diminuée du coût des
+// manœuvres faites depuis le départ.
+func rankingProgress(node IsochroneNode) float64 {
+	return float64(node.TargetProgress) - maneuverStaminaDistance*float64(node.ManeuverStamina)
 }
 
 // IsochroneFrontier contains the retained positions reached at one instant.
@@ -96,14 +116,44 @@ type IsochroneSearch struct {
 
 // Best returns the best retained node from the final frontier.
 func (search IsochroneSearch) Best() (IsochroneNode, bool) {
-	if len(search.Frontiers) == 0 {
+	index, ok := search.bestFinalIndex()
+	if !ok {
 		return IsochroneNode{}, false
+	}
+	return search.Frontiers[len(search.Frontiers)-1].Nodes[index], true
+}
+
+// bestFinalIndex désigne, dans la dernière frontière, la route retenue : la
+// meilleure une fois le coût de ses manœuvres déduit. Un aller-retour inutile,
+// qui ne fait gagner que quelques mètres, ne l'emporte plus sur la route directe.
+func (search IsochroneSearch) bestFinalIndex() (int, bool) {
+	if len(search.Frontiers) == 0 {
+		return 0, false
 	}
 	final := search.Frontiers[len(search.Frontiers)-1]
 	if len(final.Nodes) == 0 {
-		return IsochroneNode{}, false
+		return 0, false
 	}
-	return final.Nodes[0], true
+	best := 0
+	for index := 1; index < len(final.Nodes); index++ {
+		if finalNodeBetter(final.Nodes[index], final.Nodes[best]) {
+			best = index
+		}
+	}
+	return best, true
+}
+
+// finalNodeBetter classe deux routes complètes : porte franchie, puis
+// progression vers la cible diminuée du coût des manœuvres faites depuis le
+// départ (rankingProgress), puis l'ordre habituel.
+func finalNodeBetter(a, b IsochroneNode) bool {
+	if a.CourseProgress.NextGateIndex != b.CourseProgress.NextGateIndex {
+		return a.CourseProgress.NextGateIndex > b.CourseProgress.NextGateIndex
+	}
+	if left, right := rankingProgress(a), rankingProgress(b); left != right {
+		return left > right
+	}
+	return nodeBetter(a, b)
 }
 
 // BuildIsochroneSearch expands every retained node at each step and applies
@@ -254,25 +304,18 @@ func BuildIsochroneSearch(
 		)
 	}
 
-	courseTargets := make([]navigation.Position, len(input.Gates)+1)
+	courseWaypoints := make([]courseWaypoint, len(input.Gates)+1)
 	targetInitialDistances := make(
 		[]navigation.NauticalMiles,
-		len(courseTargets),
+		len(courseWaypoints),
 	)
-	for nextGateIndex := range courseTargets {
-		courseTarget, targetErr := (CourseProgress{
-			NextGateIndex: nextGateIndex,
-		}).Target(input.Gates, input.Destination)
-		if targetErr != nil {
-			return IsochroneSearch{}, fmt.Errorf(
-				"routing: construction des isochrones impossible: cible de parcours %d invalide: %w",
-				nextGateIndex+1,
-				targetErr,
-			)
+	for nextGateIndex := range courseWaypoints {
+		waypoint := courseWaypoint{destination: input.Destination}
+		if nextGateIndex < len(input.Gates) {
+			waypoint = courseWaypoint{gate: &input.Gates[nextGateIndex]}
 		}
-		targetInitialDistance, distanceErr := navigation.DistanceBetween(
+		targetInitialDistance, _, distanceErr := waypoint.distanceFrom(
 			input.Position,
-			courseTarget,
 		)
 		if distanceErr != nil {
 			return IsochroneSearch{}, fmt.Errorf(
@@ -281,7 +324,7 @@ func BuildIsochroneSearch(
 				distanceErr,
 			)
 		}
-		courseTargets[nextGateIndex] = courseTarget
+		courseWaypoints[nextGateIndex] = waypoint
 		targetInitialDistances[nextGateIndex] = targetInitialDistance
 	}
 
@@ -350,7 +393,7 @@ func BuildIsochroneSearch(
 
 		var refinement *headingRefinement
 		if input.RefineHeadings {
-			refinement = &headingRefinement{spacing: input.HeadingSpacing, targets: courseTargets}
+			refinement = &headingRefinement{spacing: input.HeadingSpacing, waypoints: courseWaypoints}
 		}
 		parentCandidates, err := evaluateParentHeadingCandidates(
 			ctx,
@@ -453,12 +496,10 @@ func BuildIsochroneSearch(
 					)
 				}
 
-				courseTarget := courseTargets[nextCourseProgress.NextGateIndex]
 				targetInitialDistance :=
 					targetInitialDistances[nextCourseProgress.NextGateIndex]
-				targetRemainingDistance, err := navigation.DistanceBetween(
+				targetRemainingDistance, courseTarget, err := courseWaypoints[nextCourseProgress.NextGateIndex].distanceFrom(
 					candidate.Step.NextPosition,
-					courseTarget,
 				)
 				if err != nil {
 					return IsochroneSearch{}, fmt.Errorf(
@@ -473,6 +514,7 @@ func BuildIsochroneSearch(
 					maneuver,
 					transition,
 					input.StepDuration,
+					float64(candidate.Step.WindKnots),
 					input.StaminaRecoveryRules,
 				)
 				if err != nil {
@@ -482,6 +524,10 @@ func BuildIsochroneSearch(
 						candidate.Heading,
 						err,
 					)
+				}
+				maneuverStamina := parentState.ManeuverStamina
+				if transition != nil {
+					maneuverStamina += transition.TotalConsumption
 				}
 				var activeSpeedPenalty *polar.ManeuverPenalty
 				if speedPenalty != nil {
@@ -518,11 +564,12 @@ func BuildIsochroneSearch(
 					TargetProgress: DistanceProgress(
 						float64(targetInitialDistance - targetRemainingDistance),
 					),
-					Maneuver:       maneuver,
-					Transition:     transition,
-					SpeedPenalty:   speedPenalty,
-					CourseProgress: nextCourseProgress,
-					State:          state,
+					Maneuver:        maneuver,
+					Transition:      transition,
+					SpeedPenalty:    speedPenalty,
+					CourseProgress:  nextCourseProgress,
+					State:           state,
+					ManeuverStamina: maneuverStamina,
 				})
 			}
 		}
@@ -609,12 +656,13 @@ func BuildIsochroneSearch(
 		parentStates = make([]isochroneParentState, len(nodes))
 		for index, node := range nodes {
 			parentStates[index] = isochroneParentState{
-				Position:       node.State.Position,
-				Stamina:        node.State.Stamina,
-				BoatState:      node.State,
-				WindAngle:      node.Candidate.Step.WindAngle,
-				CourseProgress: node.CourseProgress,
-				HasBoatState:   true,
+				Position:        node.State.Position,
+				Stamina:         node.State.Stamina,
+				BoatState:       node.State,
+				WindAngle:       node.Candidate.Step.WindAngle,
+				CourseProgress:  node.CourseProgress,
+				HasBoatState:    true,
+				ManeuverStamina: node.ManeuverStamina,
 			}
 		}
 		currentInstant = nextInstant
@@ -661,34 +709,117 @@ func pruneIsochroneNodesToLimit(
 	minimumCellSize float64,
 	maxCandidates int,
 ) ([]IsochroneNode, float64, error) {
-	effectiveCellSize := minimumCellSize
-	for {
-		selected, err := pruneIsochroneNodesUnsorted(
-			origin,
-			nodes,
-			effectiveCellSize,
-		)
-		if err != nil {
-			return nil, 0, err
-		}
-		if maxCandidates == 0 || len(selected) <= maxCandidates {
-			sortIsochroneNodes(selected)
-			return selected, effectiveCellSize, nil
-		}
-		if effectiveCellSize >= maximumStateAwareCellSize {
-			sortIsochroneNodes(selected)
-			return selected[:maxCandidates], effectiveCellSize, nil
-		}
-
-		nextCellSize := effectiveCellSize * 2
-		if math.IsInf(nextCellSize, 0) ||
-			nextCellSize <= effectiveCellSize {
-			return nil, 0, errors.New(
-				"impossible d'agrandir les cellules pour respecter la limite de candidats",
-			)
-		}
-		effectiveCellSize = nextCellSize
+	// Élagage state-aware à la résolution de base : on retire les états
+	// dominés sans fusionner les cellules (ce qui pincerait la frontière en
+	// couloir).
+	selected, err := pruneIsochroneNodesUnsorted(origin, nodes, minimumCellSize)
+	if err != nil {
+		return nil, 0, err
 	}
+	if maxCandidates == 0 || len(selected) <= maxCandidates {
+		sortIsochroneNodes(selected)
+		return selected, minimumCellSize, nil
+	}
+	// Trop de nœuds : on borne en répartissant par secteurs de cap depuis
+	// l'origine (le meilleur par secteur). La frontière reste large et la
+	// diversité latérale — donc les routes alternatives — survit.
+	kept := retainAngularSectors(origin, selected, maxCandidates)
+	sortIsochroneNodes(kept)
+	return kept, minimumCellSize, nil
+}
+
+// nodeBearingRadians retourne le cap planaire origine -> position, corrigé
+// de la compression des longitudes par la latitude. Suffisant pour le
+// découpage en secteurs (seul l'ordre angulaire compte).
+func nodeBearingRadians(origin navigation.Position, position navigation.Position) float64 {
+	deltaLat := float64(position.Latitude) - float64(origin.Latitude)
+	meanLat := (float64(position.Latitude) + float64(origin.Latitude)) / 2
+	deltaLon := (float64(position.Longitude) - float64(origin.Longitude)) *
+		math.Cos(meanLat*math.Pi/180)
+	return math.Atan2(deltaLon, deltaLat)
+}
+
+// nodeBetter ordonne deux nœuds pendant le calcul (filtre par secteurs et
+// tri des frontières) : porte franchie, puis progression vers la cible, puis
+// distance, puis stamina. Le coût des manœuvres n'y entre pas : pénaliser une
+// route qui a déjà manœuvré face à une voisine qui manœuvrera plus tard
+// éliminerait trop tôt de bonnes routes. Il ne sert qu'au choix final
+// (finalNodeBetter).
+func nodeBetter(a, b IsochroneNode) bool {
+	if a.CourseProgress.NextGateIndex != b.CourseProgress.NextGateIndex {
+		return a.CourseProgress.NextGateIndex > b.CourseProgress.NextGateIndex
+	}
+	if a.TargetProgress != b.TargetProgress {
+		return a.TargetProgress > b.TargetProgress
+	}
+	if a.Progress != b.Progress {
+		return a.Progress > b.Progress
+	}
+	return a.State.Stamina.Level > b.State.Stamina.Level
+}
+
+// retainAngularSectors borne le nombre de nœuds en préservant la largeur de
+// la frontière : l'étendue des caps (depuis l'origine) est découpée en
+// maxCandidates secteurs, et on garde le meilleur nœud de chaque secteur.
+func retainAngularSectors(
+	origin navigation.Position,
+	nodes []IsochroneNode,
+	maxCandidates int,
+) []IsochroneNode {
+	if maxCandidates <= 0 || len(nodes) <= maxCandidates {
+		return nodes
+	}
+	bearings := make([]float64, len(nodes))
+	for index, node := range nodes {
+		bearings[index] = nodeBearingRadians(origin, node.Candidate.Step.NextPosition)
+	}
+	ordered := append([]float64(nil), bearings...)
+	sort.Float64s(ordered)
+	// Étendue robuste au passage ±180° : le plus grand trou sur le cercle est
+	// hors frontière, l'étendue utile est son complément.
+	largestGap, gapIndex := -1.0, 0
+	for index := range ordered {
+		next := ordered[0] + 2*math.Pi
+		if index+1 < len(ordered) {
+			next = ordered[index+1]
+		}
+		if gap := next - ordered[index]; gap > largestGap {
+			largestGap = gap
+			gapIndex = index
+		}
+	}
+	start := ordered[(gapIndex+1)%len(ordered)]
+	span := 2*math.Pi - largestGap
+	if span <= 1e-9 {
+		sortIsochroneNodes(nodes)
+		return nodes[:maxCandidates]
+	}
+	width := span / float64(maxCandidates)
+	best := make([]*IsochroneNode, maxCandidates)
+	for index := range nodes {
+		relative := bearings[index] - start
+		for relative < 0 {
+			relative += 2 * math.Pi
+		}
+		sector := int(relative / width)
+		if sector < 0 {
+			sector = 0
+		}
+		if sector >= maxCandidates {
+			sector = maxCandidates - 1
+		}
+		if best[sector] == nil || nodeBetter(nodes[index], *best[sector]) {
+			candidate := nodes[index]
+			best[sector] = &candidate
+		}
+	}
+	kept := make([]IsochroneNode, 0, maxCandidates)
+	for _, node := range best {
+		if node != nil {
+			kept = append(kept, *node)
+		}
+	}
+	return kept
 }
 
 const maximumStateAwareCellSize = 360 * nauticalMilesPerDegree
@@ -803,24 +934,13 @@ func pruneIsochroneNodesUnsorted(
 
 func sortIsochroneNodes(selected []IsochroneNode) {
 	sort.SliceStable(selected, func(left, right int) bool {
-		if selected[left].CourseProgress.NextGateIndex !=
-			selected[right].CourseProgress.NextGateIndex {
-			return selected[left].CourseProgress.NextGateIndex >
-				selected[right].CourseProgress.NextGateIndex
+		if nodeBetter(selected[left], selected[right]) {
+			return true
 		}
-		if selected[left].TargetProgress !=
-			selected[right].TargetProgress {
-			return selected[left].TargetProgress >
-				selected[right].TargetProgress
+		if nodeBetter(selected[right], selected[left]) {
+			return false
 		}
-		if selected[left].Progress != selected[right].Progress {
-			return selected[left].Progress > selected[right].Progress
-		}
-		if selected[left].State.Stamina.Level !=
-			selected[right].State.Stamina.Level {
-			return selected[left].State.Stamina.Level >
-				selected[right].State.Stamina.Level
-		}
+		// Égalité parfaite : ordre stable et reproductible.
 		if selected[left].State.Heading != selected[right].State.Heading {
 			return selected[left].State.Heading <
 				selected[right].State.Heading

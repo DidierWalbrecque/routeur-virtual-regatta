@@ -113,8 +113,8 @@ func (grid GRIB2WindGrid) validateInterpolationShape() error {
 	}
 
 	expected := grid.Width * grid.Height
-	if len(grid.Latitudes) != expected ||
-		len(grid.Longitudes) != expected ||
+	if len(grid.Latitudes) != grid.Height ||
+		len(grid.Longitudes) != grid.Width ||
 		len(grid.U) != expected ||
 		len(grid.V) != expected {
 		return fmt.Errorf(
@@ -123,8 +123,8 @@ func (grid GRIB2WindGrid) validateInterpolationShape() error {
 	}
 
 	for row := 1; row < grid.Height; row++ {
-		previous := grid.Latitudes[(row-1)*grid.Width]
-		current := grid.Latitudes[row*grid.Width]
+		previous := grid.Latitudes[row-1]
+		current := grid.Latitudes[row]
 		if !finite(previous) || !finite(current) || current >= previous {
 			return fmt.Errorf(
 				"axe des latitudes non strictement décroissant à la ligne %d",
@@ -152,7 +152,7 @@ func (grid GRIB2WindGrid) latitudeBounds(
 	latitude float64,
 ) (int, int, float64, error) {
 	northernmost := grid.Latitudes[0]
-	southernmost := grid.Latitudes[(grid.Height-1)*grid.Width]
+	southernmost := grid.Latitudes[grid.Height-1]
 	if latitude > northernmost+interpolationTolerance ||
 		latitude < southernmost-interpolationTolerance {
 		return 0, 0, 0, fmt.Errorf(
@@ -164,18 +164,18 @@ func (grid GRIB2WindGrid) latitudeBounds(
 	}
 
 	south := sort.Search(grid.Height, func(row int) bool {
-		return grid.Latitudes[row*grid.Width] <= latitude
+		return grid.Latitudes[row] <= latitude
 	})
 	if south == grid.Height {
 		south = grid.Height - 1
 	}
-	southLatitude := grid.Latitudes[south*grid.Width]
+	southLatitude := grid.Latitudes[south]
 	if nearlyEqual(southLatitude, latitude) || south == 0 {
 		return south, south, 0, nil
 	}
 
 	north := south - 1
-	northLatitude := grid.Latitudes[north*grid.Width]
+	northLatitude := grid.Latitudes[north]
 	ratio := (northLatitude - latitude) / (northLatitude - southLatitude)
 	return north, south, ratio, nil
 }
@@ -269,7 +269,7 @@ func (grid GRIB2WindGrid) longitudeIsCyclic() bool {
 }
 
 func (grid GRIB2WindGrid) interpolateComponent(
-	values []float64,
+	values []float32,
 	north,
 	south,
 	west,
@@ -277,10 +277,10 @@ func (grid GRIB2WindGrid) interpolateComponent(
 	latitudeRatio,
 	longitudeRatio float64,
 ) float64 {
-	northWest := values[north*grid.Width+west]
-	northEast := values[north*grid.Width+east]
-	southWest := values[south*grid.Width+west]
-	southEast := values[south*grid.Width+east]
+	northWest := float64(values[north*grid.Width+west])
+	northEast := float64(values[north*grid.Width+east])
+	southWest := float64(values[south*grid.Width+west])
+	southEast := float64(values[south*grid.Width+east])
 
 	northValue := linearInterpolation(
 		northWest,

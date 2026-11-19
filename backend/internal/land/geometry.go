@@ -145,16 +145,53 @@ func segmentForbiddenByPolygon(
 
 	projectedStart := projectPointWithScale(localStart, localReferenceLongitude, referenceLatitude, longitudeScale)
 	projectedEnd := projectPointWithScale(localEnd, localReferenceLongitude, referenceLatitude, longitudeScale)
+	distances := newMarginDistances()
 	for _, ring := range rings {
 		for index := 1; index < len(ring); index++ {
 			edgeStart := projectPointWithScale(ring[index-1], localReferenceLongitude, referenceLatitude, longitudeScale)
 			edgeEnd := projectPointWithScale(ring[index], localReferenceLongitude, referenceLatitude, longitudeScale)
-			if projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd) <= margin+geometryEpsilon {
-				return true, nil
-			}
+			distances.add(projectedStart, projectedEnd, edgeStart, edgeEnd)
 		}
 	}
-	return false, nil
+	return distances.forbidden(margin), nil
+}
+
+// marginDistances gathers, for one polygon, the distances from the coast that
+// decide whether a segment respects the coastal margin.
+type marginDistances struct {
+	segment float64
+	start   float64
+	end     float64
+}
+
+func newMarginDistances() marginDistances {
+	return marginDistances{segment: math.Inf(1), start: math.Inf(1), end: math.Inf(1)}
+}
+
+func (distances *marginDistances) add(start, end, edgeStart, edgeEnd projectedPoint) {
+	distances.segment = math.Min(distances.segment, projectedSegmentDistance(start, end, edgeStart, edgeEnd))
+	distances.start = math.Min(distances.start, projectedPointToSegmentDistance(start, edgeStart, edgeEnd))
+	distances.end = math.Min(distances.end, projectedPointToSegmentDistance(end, edgeStart, edgeEnd))
+}
+
+// marginEscapeTolerance absorbs rounding when comparing two distances, in
+// nautical miles.
+const marginEscapeTolerance = 1e-9
+
+// forbidden reports whether the segment breaks the coastal margin. A boat
+// that is already inside the margin (a race start or finish close to the
+// shore) may still leave it: its segment is accepted when it ends farther from
+// the coast than it starts and never comes closer than its starting point.
+func (distances marginDistances) forbidden(margin float64) bool {
+	if distances.segment > margin+geometryEpsilon {
+		return false
+	}
+	if distances.start > margin+geometryEpsilon {
+		return true
+	}
+	movesAway := distances.end > distances.start+marginEscapeTolerance
+	neverCloser := distances.segment >= distances.start-marginEscapeTolerance
+	return !(movesAway && neverCloser)
 }
 
 // segmentForbiddenByIndexedPolygon gives the same answer as the exhaustive
@@ -215,6 +252,9 @@ func segmentForbiddenByIndexedPolygon(
 
 	projectedStart := projectPointWithScale(localStart, localReferenceLongitude, referenceLatitude, longitudeScale)
 	projectedEnd := projectPointWithScale(localEnd, localReferenceLongitude, referenceLatitude, longitudeScale)
+	// Edges farther than the margin from the segment cannot change the answer:
+	// they are farther than the margin from its start and its end too.
+	distances := newMarginDistances()
 	for _, edge := range edges {
 		if edge.index == 0 {
 			continue
@@ -222,11 +262,9 @@ func segmentForbiddenByIndexedPolygon(
 		ring := rings[edge.ring]
 		edgeStart := projectPointWithScale(ring[edge.index-1], localReferenceLongitude, referenceLatitude, longitudeScale)
 		edgeEnd := projectPointWithScale(ring[edge.index], localReferenceLongitude, referenceLatitude, longitudeScale)
-		if projectedSegmentDistance(projectedStart, projectedEnd, edgeStart, edgeEnd) <= margin+geometryEpsilon {
-			return true, true
-		}
+		distances.add(projectedStart, projectedEnd, edgeStart, edgeEnd)
 	}
-	return false, true
+	return distances.forbidden(margin), true
 }
 
 func projectPointWithScale(

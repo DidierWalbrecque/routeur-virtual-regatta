@@ -216,3 +216,64 @@ func projectGatePosition(
 func crossGatePoints(first, second gatePoint) float64 {
 	return first.x*second.y - first.y*second.x
 }
+
+// ClosestPoint returns the point of the finite gate segment nearest to the
+// given position, in the gate's local flat frame. It lets the router measure
+// progress toward the gate line itself rather than toward its centre, so every
+// valid crossing point is treated as equally good. The gate is assumed already
+// validated by the caller.
+func (gate CourseGate) ClosestPoint(
+	from navigation.Position,
+) (navigation.Position, error) {
+	gateEnd, err := projectGatePosition(gate.FirstMark, gate.SecondMark)
+	if err != nil {
+		return navigation.Position{}, err
+	}
+	fromVector, err := projectGatePosition(gate.FirstMark, from)
+	if err != nil {
+		return navigation.Position{}, err
+	}
+	lengthSquared := gateEnd.x*gateEnd.x + gateEnd.y*gateEnd.y
+	parameter := 0.0
+	if lengthSquared > gateGeometryEpsilon {
+		parameter = (fromVector.x*gateEnd.x + fromVector.y*gateEnd.y) /
+			lengthSquared
+		if parameter < 0 {
+			parameter = 0
+		}
+		if parameter > 1 {
+			parameter = 1
+		}
+	}
+	closest := gatePoint{x: parameter * gateEnd.x, y: parameter * gateEnd.y}
+	referenceLatitudeRadians := float64(gate.FirstMark.Latitude) * math.Pi / 180
+	cosLatitude := math.Cos(referenceLatitudeRadians)
+	offsetLongitude := 0.0
+	if math.Abs(cosLatitude) > gateGeometryEpsilon {
+		offsetLongitude = closest.x / cosLatitude
+	}
+	longitude, err := navigation.NormalizeLongitude(
+		float64(gate.FirstMark.Longitude) + offsetLongitude,
+	)
+	if err != nil {
+		return navigation.Position{}, fmt.Errorf(
+			"routing: point le plus proche de la porte %q impossible: %w",
+			gate.Name,
+			err,
+		)
+	}
+	point := navigation.Position{
+		Latitude: navigation.Latitude(
+			float64(gate.FirstMark.Latitude) + closest.y,
+		),
+		Longitude: longitude,
+	}
+	if err := point.Validate(); err != nil {
+		return navigation.Position{}, fmt.Errorf(
+			"routing: point le plus proche de la porte %q invalide: %w",
+			gate.Name,
+			err,
+		)
+	}
+	return point, nil
+}

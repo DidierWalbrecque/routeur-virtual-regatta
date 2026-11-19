@@ -1,15 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
+import { MapView, DEFAULT_DEPARTURE, DEFAULT_DESTINATION, type Endpoints, type GpxOverlay, type MapInsets, type MapViewHandle, type RouteFrame } from "./MapView.tsx";
+import { CalculationStatus } from "./CalculationStatus.tsx";
+import { WindCard } from "./WindCard.tsx";
+import { MapLegend } from "./MapLegend.tsx";
 import { RouteDetailsPanel } from "./RouteDetailsPanel.tsx";
 import { RouteForm, type FormState, type VrStatus } from "./RouteForm.tsx";
 import { WeatherRunCard } from "./WeatherRunCard.tsx";
 import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
-import { forecastHoursFor, formatDuration, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
+import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
+import type { CalculationProgress } from "./lib/calculation_progress.ts";
+import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.ts";
 import type { Checkpoint, Isochrone, Point, PolarOption, RouteResult, RouteStart, VrState } from "./lib/types.ts";
 import { matchPolar } from "./lib/polar_match.ts";
-import { buildWeatherRunModel } from "./lib/weather_run.ts";
+import { parseGpx, gpxFeatureCollection, gpxPointCount } from "./lib/gpx.ts";
+import { buildWeatherRunModel, shortRunLabel } from "./lib/weather_run.ts";
+import { friendlyRouteError } from "./lib/route_errors.ts";
+import { useLongPressTips } from "./lib/long_press_tips.ts";
 import {
   DISABLED_GAME_ZONES_KEY,
   MIN_ZONE_POINTS,
@@ -21,9 +29,51 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, usableCheckpoints, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
+const WIND_STORAGE_KEY = "routeur.showWind";
+
+/** Début de l'heure en cours : origine du curseur d'heure du vent. */
+function currentHour(): number {
+  const now = new Date();
+  now.setMinutes(0, 0, 0);
+  return now.getTime();
+}
+const LEGEND_STORAGE_KEY = "routeur.legendOpen";
+// Panneaux posés à droite de la carte : un seul ouvert à la fois.
+const RIGHT_PANEL_IDS = ["route-form-panel", "zones-panel", "route-details-panel"];
+
+/** Écran étroit (téléphone) : la légende démarre fermée. */
+function isNarrowScreen(): boolean {
+  try {
+    return window.matchMedia("(max-width: 600px)").matches;
+  } catch {
+    return false;
+  }
+}
+
+/** Place prise par les panneaux ouverts au-dessus de la carte. */
+function mapInsets(): MapInsets {
+  const width = window.innerWidth;
+  const height = window.innerHeight;
+  let right = 0;
+  // Sur téléphone, un panneau occupe toute la largeur (en bas quand il est
+  // réduit) : il gêne en bas, pas à droite.
+  let panelBottom = 0;
+  for (const id of RIGHT_PANEL_IDS) {
+    const rect = document.getElementById(id)?.getBoundingClientRect();
+    if (!rect || rect.width === 0) continue;
+    if (rect.left < width * 0.3) panelBottom = Math.max(panelBottom, height - rect.top);
+    else right = Math.max(right, width - rect.left);
+  }
+  const corner = document.getElementById("map-corner")?.getBoundingClientRect();
+  const visible = Boolean(corner && corner.height > 0);
+  const cornerBottom = visible && corner ? height - corner.top : 0;
+  // Avec un panneau en bas, tout se réserve en bas (left à 0).
+  if (panelBottom > 0) return { right, bottom: Math.max(panelBottom, cornerBottom), left: 0 };
+  return { right, bottom: cornerBottom, left: visible && corner ? corner.right : 0 };
+}
 const DEFAULT_POLAR = "../data/polars/ultim_bp_11.json";
 // Le tracé affiché vient des isochrones du mode choisi ; ces paramètres ne servent
 // qu'à l'évaluation des caps pratiques, que l'interface n'affiche pas.
@@ -31,9 +81,13 @@ const PRACTICAL_HEADINGS = Array.from({ length: 24 }, (_, index) => index * 15);
 
 function initialForm(): FormState {
   return {
-    start: `13°N 07'16" - 121°E 35'12"`,
-    useVrState: true,
-    destination: `13°N 10'16" - 121°E 20'12"`,
+    start: `13°07'16.00"N - 121°35'12.00"E`,
+    positionSource: "vr",
+    staminaSource: "vr",
+    staminaManual: "100",
+    useCourseGates: true,
+    coastalMarginNM: "2",
+    destination: `13°10'16.00"N - 121°20'12.00"E`,
     instant: formatLocalDateTime(new Date()),
     polar: DEFAULT_POLAR,
     horizon: "arrival",
@@ -44,9 +98,74 @@ function initialForm(): FormState {
   };
 }
 
+// Réglages du formulaire mémorisés d'une session à l'autre (sauf l'heure de
+// départ, toujours réinitialisée à « maintenant »).
+const FORM_STORAGE_KEY = "routeur-form";
+// Dernier départ de course appliqué au formulaire : un rechargement de la page
+// n'écrase pas un départ saisi à la main pendant la même course.
+const RACE_START_STORAGE_KEY = "routeur.lastRaceStart";
+
+function loadForm(): FormState {
+  const base = initialForm();
+  try {
+    const raw = window.localStorage.getItem(FORM_STORAGE_KEY);
+    if (!raw) return base;
+    const saved = JSON.parse(raw) as Partial<Omit<FormState, "equipment">> & {
+      equipment?: Equipment[];
+      useVrState?: boolean;
+    };
+    const merged: FormState = {
+      ...base,
+      ...saved,
+      instant: base.instant,
+      equipment: new Set<Equipment>(saved.equipment ?? []),
+    };
+    // Migration de l'ancien réglage unique vers les trois réglages découplés.
+    if (saved.positionSource === undefined && typeof saved.useVrState === "boolean") {
+      const vr = saved.useVrState;
+      merged.positionSource = vr ? "vr" : "manual";
+      merged.staminaSource = vr ? "vr" : "manual";
+      merged.useCourseGates = vr;
+    }
+    return merged;
+  } catch {
+    return base;
+  }
+}
+
 // randomUUID n'existe que dans un contexte sécurisé (localhost, HTTPS).
 function newId(): string {
   return globalThis.crypto?.randomUUID?.() ?? `zone-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+}
+
+// Lecture tolérante d'une réponse JSON : un corps vide (backend injoignable,
+// proxy Vite en erreur) ne doit pas faire planter l'appelant avec
+// « Unexpected end of JSON input ». On lit le texte puis on parse si possible.
+type GribTarget = { run: string; downloaded: number; expected: number; complete: boolean };
+type GribStatusBody = { files?: string[]; run?: string; removedFiles?: string[]; target?: GribTarget | null; busy?: boolean };
+const GRIB_STATUS_POLL_MS = 10_000;
+
+async function readJsonResponse<T = unknown>(response: Response): Promise<T> {
+  const text = await response.text();
+  let body: unknown;
+  if (text) {
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = undefined;
+    }
+  }
+  if (!response.ok) {
+    const message =
+      body && typeof body === "object" && "error" in body && typeof (body as { error?: unknown }).error === "string"
+        ? (body as { error: string }).error
+        : `HTTP ${response.status}`;
+    throw new Error(message);
+  }
+  if (body === undefined) {
+    throw new Error("réponse vide du serveur (backend injoignable ?)");
+  }
+  return body as T;
 }
 
 function MaterialIcon({ name }: { name: string }) {
@@ -58,7 +177,7 @@ function MaterialIcon({ name }: { name: string }) {
 }
 
 export function App() {
-  const [form, setForm] = useState<FormState>(initialForm);
+  const [form, setForm] = useState<FormState>(loadForm);
   const [formOpen, setFormOpen] = useState(false);
   const [formError, setFormError] = useState("");
   const [polars, setPolars] = useState<PolarOption[]>([{ label: "ultim_bp_11.json", value: DEFAULT_POLAR }]);
@@ -66,13 +185,22 @@ export function App() {
   const [frame, setFrame] = useState<RouteFrame | null>(null);
   const [result, setResult] = useState<RouteResult | undefined>();
   const [detailsOpen, setDetailsOpen] = useState(false);
+  // Juste après un calcul, le panneau s'ouvre réduit au résumé chiffré.
+  const [detailsSummaryOnly, setDetailsSummaryOnly] = useState(false);
   const [calculating, setCalculating] = useState(false);
-  const [progress, setProgress] = useState("");
+  const [progress, setProgress] = useState<CalculationProgress | null>(null);
+  const [calculationStartedAt, setCalculationStartedAt] = useState(0);
+  // Run récent encore partiel utilisé par le dernier calcul, et avertissement à afficher.
+  const [routeWeather, setRouteWeather] = useState<WeatherSwitch | null>(null);
+  const [weatherNotice, setWeatherNotice] = useState("");
   const [vrState, setVrState] = useState<VrState | undefined>();
   const [vrStatus, setVrStatus] = useState<VrStatus>({ ok: false, text: "Virtual Regatta : lecture en cours…" });
   const [weather, setWeather] = useState<{ files: string[]; run: string }>({ files: [], run: "" });
   const [weatherStatus, setWeatherStatus] = useState("");
   const [refreshing, setRefreshing] = useState(false);
+  const [gribTarget, setGribTarget] = useState<GribTarget | null>(null);
+  const [gribBusy, setGribBusy] = useState(false);
+  const lastGribRunRef = useRef("");
   const [mapError, setMapError] = useState(false);
   const [zones, setZones] = useState<Zone[]>(() => {
     try {
@@ -89,20 +217,68 @@ export function App() {
     }
   });
   const [zonesOpen, setZonesOpen] = useState(false);
+  const [showWind, setShowWind] = useState(() => {
+    try {
+      return window.localStorage.getItem(WIND_STORAGE_KEY) === "true";
+    } catch {
+      return false;
+    }
+  });
+  // Heure du vent affiché : décalage en heures depuis windBase.
+  const [windBase, setWindBase] = useState(currentHour);
+  const [windHours, setWindHours] = useState(0);
+  const [showRoutePoints, setShowRoutePoints] = useState(true);
+  // Légende ouverte par défaut sur ordinateur, fermée sur téléphone ; le
+  // dernier choix de l'utilisateur est ensuite conservé.
+  const [legendOpen, setLegendOpen] = useState(() => {
+    try {
+      const saved = window.localStorage.getItem(LEGEND_STORAGE_KEY);
+      if (saved !== null) return saved === "true";
+    } catch {
+      // Stockage indisponible : valeur par défaut selon l'écran.
+    }
+    return !isNarrowScreen();
+  });
+  // L'encart météo démarre replié en pastille ; un clic l'ouvre en entier.
+  const [weatherCollapsed, setWeatherCollapsed] = useState(true);
+  const [focusedZoneId, setFocusedZoneId] = useState<string | null>(null);
   const [draft, setDraft] = useState<Point[] | null>(null);
+  const [gpx, setGpx] = useState<{ name: string; count: number; overlay: GpxOverlay } | null>(null);
+  const [gpxError, setGpxError] = useState("");
 
   const mapHandle = useRef<MapViewHandle>(null);
   const startInput = useRef<HTMLInputElement>(null);
   const activeController = useRef<AbortController | null>(null);
+  // Contrôleur du calcul annulé à la demande : son interruption n'est pas une erreur.
+  const cancelledController = useRef<AbortController | null>(null);
   const checkpointCache = useRef(new Map<string, { start: Checkpoint["start"]; end: Checkpoint["end"] }>());
   const streamIsochrones = useRef<Isochrone[]>([]);
   const streamBase = useRef<RouteResult | null>(null);
   const frameCounter = useRef(0);
+  const gpxInput = useRef<HTMLInputElement>(null);
+  const gpxCounter = useRef(0);
+  const dock = useRef<HTMLDivElement>(null);
+  useLongPressTips(dock, ".map-dock-button");
 
   const weatherModel = useMemo(
     () => (weather.run ? buildWeatherRunModel(weather.run, weather.files) : null),
     [weather],
   );
+
+  const nextRun = useMemo(
+    () =>
+      gribTarget && !gribTarget.complete && gribTarget.downloaded > 0
+        ? { label: shortRunLabel(gribTarget.run), downloaded: gribTarget.downloaded, expected: gribTarget.expected }
+        : null,
+    [gribTarget],
+  );
+  const gribProgressText = nextRun
+    ? `Run ${nextRun.label} en cours de publication : ${nextRun.downloaded}/${nextRun.expected} échéances`
+    : "";
+
+  // Le bouton tourne pendant un clic « Actualiser » et pendant le téléchargement du run suivant en arrière-plan.
+  const gribDownloading =
+    refreshing || gribBusy || (gribTarget !== null && !gribTarget.complete && gribTarget.downloaded > 0);
   const checkpoints = useMemo(() => usableCheckpoints(vrState), [vrState]);
 
   // Ce que les prévisions téléchargées permettent pour l'horizon choisi.
@@ -139,7 +315,7 @@ export function App() {
   useEffect(() => {
     if (!polarMatch || polarMatch.polar.value === autoPolar.current) return;
     autoPolar.current = polarMatch.polar.value;
-    setForm((previous) => ({ ...previous, polar: polarMatch.polar.value }));
+    setForm((previous) => (previous.positionSource === "vr" ? { ...previous, polar: polarMatch.polar.value } : previous));
   }, [polarMatch]);
   const polarNote = polarMatch
     ? {
@@ -155,7 +331,7 @@ export function App() {
         title: undefined,
       };
 
-  // En mode précis, l'horizon de 5 jours n'existe pas : on revient à 3 jours.
+  // Un horizon trop long pour le mode choisi (ex. 10/16 j en précis) est ramené au maximum permis.
   useEffect(() => {
     const allowed = horizonAllowedIn(form.horizon, form.mode);
     if (allowed !== form.horizon) setForm((previous) => ({ ...previous, horizon: allowed }));
@@ -169,6 +345,24 @@ export function App() {
       // Stockage indisponible : les zones restent valables pour la session.
     }
   }, [zones]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(WIND_STORAGE_KEY, String(showWind));
+    } catch {
+      // Stockage indisponible : le choix reste valable pour la session.
+    }
+    // À l'affichage, le curseur repart de l'heure en cours.
+    if (showWind) setWindBase(currentHour());
+  }, [showWind]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LEGEND_STORAGE_KEY, String(legendOpen));
+    } catch {
+      // Stockage indisponible : le choix reste valable pour la session.
+    }
+  }, [legendOpen]);
 
   useEffect(() => {
     try {
@@ -186,6 +380,15 @@ export function App() {
   const setField = useCallback(<K extends keyof FormState>(field: K, value: FormState[K]) => {
     setForm((previous) => ({ ...previous, [field]: value }));
   }, []);
+
+  // Mémorise les réglages (la Set d'équipements est sérialisée en tableau).
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(FORM_STORAGE_KEY, JSON.stringify({ ...form, equipment: [...form.equipment] }));
+    } catch {
+      // Stockage indisponible : les réglages restent valables pour la session.
+    }
+  }, [form]);
 
   // --- Réinitialisation de la route (uniquement sur action de l'utilisateur) ---
   const resetRoute = useCallback(() => {
@@ -206,6 +409,64 @@ export function App() {
     },
     [resetRoute],
   );
+
+  // Les marqueurs suivent toujours le formulaire, y compris au chargement (valeurs mémorisées)
+  // et après une modification indirecte (point de porte, saisie). Un départ
+  // recopié depuis la position du bateau dans le jeu déplace seulement le
+  // marqueur : la route affichée n'est effacée que sur action de l'utilisateur.
+  const vrStartText = useRef("");
+  useEffect(() => {
+    if (form.start && form.start === vrStartText.current) {
+      const position = parseVirtualRegattaPosition(form.start);
+      if (position) setEndpoints((previous) => ({ ...previous, position }));
+      return;
+    }
+    updateEndpoints(form.start, form.destination);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start, updateEndpoints]);
+  useEffect(() => {
+    updateEndpoints(form.start, form.destination);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.destination, updateEndpoints]);
+
+  // L'arrivée officielle du jeu remplace la destination dès qu'elle change (nouveau leg, première lecture).
+  const gameArrivalKey = vrState?.arrival ? `${vrState.arrival.latitude},${vrState.arrival.longitude}` : "";
+  useEffect(() => {
+    if (!vrState?.arrival) return;
+    const text = formatVirtualRegattaPosition({ latitude: vrState.arrival.latitude, longitude: vrState.arrival.longitude });
+    setForm((previous) => (previous.destination === text ? previous : { ...previous, destination: text, checkpoint: "" }));
+    console.info(`[VR] Arrivée du jeu : ${vrState.arrival.name || "sans nom"}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameArrivalKey]);
+
+  // Le départ officiel du jeu remplace le départ saisi à la main quand la course
+  // change (nouveau départ). En mode Virtual Regatta, la position du bateau
+  // fait déjà foi.
+  const gameStartKey = vrState?.legStart ? `${vrState.legStart.latitude},${vrState.legStart.longitude}` : "";
+  useEffect(() => {
+    const legStart = vrState?.legStart;
+    if (!legStart || !gameStartKey) return;
+    let applied = "";
+    try {
+      applied = window.localStorage.getItem(RACE_START_STORAGE_KEY) ?? "";
+      window.localStorage.setItem(RACE_START_STORAGE_KEY, gameStartKey);
+    } catch {
+      // Stockage indisponible : le départ de la course s'applique à chaque lecture.
+    }
+    if (applied === gameStartKey) return;
+    const text = formatVirtualRegattaPosition({ latitude: legStart.latitude, longitude: legStart.longitude });
+    setForm((previous) => (previous.positionSource === "vr" || previous.start === text ? previous : { ...previous, start: text }));
+    console.info(`[VR] Départ de la course : ${legStart.name || "sans nom"}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameStartKey]);
+
+  // En mode Virtual Regatta, le marqueur de calcul suit la position live du bateau.
+  const boatLatitude = vrState?.position?.latitude;
+  const boatLongitude = vrState?.position?.longitude;
+  useEffect(() => {
+    if (form.positionSource !== "vr" || boatLatitude === undefined || boatLongitude === undefined) return;
+    setEndpoints((previous) => ({ ...previous, position: { latitude: boatLatitude, longitude: boatLongitude } }));
+  }, [form.positionSource, boatLatitude, boatLongitude]);
 
   // --- Zones interdites (actions de l'utilisateur : la route affichée devient périmée) ---
   const startDrawing = () => {
@@ -275,6 +536,14 @@ export function App() {
   };
   const onCheckpoint = (key: string) => {
     setField("checkpoint", key);
+    if (key === "game-arrival") {
+      const arrival = vrState?.arrival;
+      if (!arrival) return;
+      const destination = formatVirtualRegattaPosition({ latitude: arrival.latitude, longitude: arrival.longitude });
+      setForm((previous) => ({ ...previous, checkpoint: key, destination }));
+      updateEndpoints(form.start, destination);
+      return;
+    }
     const checkpoint = checkpointCache.current.get(key);
     if (!checkpoint?.start) return;
     const destination = formatVirtualRegattaPosition(checkpoint.start);
@@ -310,24 +579,28 @@ export function App() {
   const refreshVrState = useCallback(async () => {
     try {
       const response = await fetch("/api/vr/state", { cache: "no-store" });
-      const state = (await response.json()) as VrState & { error?: string };
-      if (!response.ok) throw new Error(state.error || `HTTP ${response.status}`);
+      const state = await readJsonResponse<VrState>(response);
       (state.checkpoints || []).forEach((checkpoint, index) => {
         checkpointCache.current.set(checkpointKey(checkpoint, index), { start: checkpoint.start, end: checkpoint.end });
       });
       setVrState(state);
       const position = formatVirtualRegattaPosition(state.position);
-      // Mise à jour silencieuse : la route affichée n'est pas effacée.
-      setForm((previous) => ({
-        ...previous,
-        start: position || previous.start,
-        equipment: equipmentFromVrOptions(state.options),
-      }));
-      const stamina = state.stamina == null ? "inconnue" : `${Number(state.stamina).toFixed(1)} %`;
-      const remaining = usableCheckpoints(state).length;
+      if (position) vrStartText.current = position;
+      // Mise à jour silencieuse : la route affichée n'est pas effacée. Avant le
+      // départ d'un record, les options du joueur sont inconnues : les
+      // équipements choisis dans le formulaire sont conservés.
+      setForm((previous) =>
+        previous.positionSource === "vr"
+          ? {
+              ...previous,
+              start: position || previous.start,
+              equipment: state.preStart ? previous.equipment : equipmentFromVrOptions(state.options),
+            }
+          : previous,
+      );
       setVrStatus({
         ok: true,
-        text: `Virtual Regatta connecté · stamina ${stamina} · ${remaining} porte(s) restante(s)`,
+        text: vrStatusText(state),
         title: state.updatedAt ? `Mise à jour ${new Date(Number(state.updatedAt)).toLocaleTimeString()}` : undefined,
       });
     } catch (error) {
@@ -340,11 +613,27 @@ export function App() {
     void refreshVrState();
   }, [refreshVrState]);
 
+  // La position du bateau est relue en continu tant que l'onglet est visible,
+  // et tout de suite au retour sur l'onglet : un rafraîchissement fait dans le
+  // jeu met ainsi à jour le départ sans ouvrir le formulaire.
   useEffect(() => {
-    if (!formOpen && !zonesOpen) return;
-    void refreshVrState();
-    const timer = setInterval(() => void refreshVrState(), VR_POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (!document.hidden) void refreshVrState();
+    }, VR_POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (!document.hidden) void refreshVrState();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refreshVrState]);
+
+  useEffect(() => {
+    if (formOpen || zonesOpen) void refreshVrState();
   }, [formOpen, zonesOpen, refreshVrState]);
 
   useEffect(() => {
@@ -359,15 +648,12 @@ export function App() {
       const response = await fetch("/api/weather/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ forecastHours: forecastHoursFor(form.horizon), lookbackHours: 48 }),
+        body: JSON.stringify({ forecastHours: GRIB_FORECAST_HOURS, lookbackHours: 48 }),
       });
-      const body = await response.json();
-      if (!response.ok) throw new Error(body.error || `HTTP ${response.status}`);
-      const files: string[] = body.files || [];
-      const run: string = body.run || "";
-      setWeather({ files, run });
+      const body = await readJsonResponse<GribStatusBody>(response);
+      applyGribStatus(body);
       setWeatherStatus("");
-      console.info(`[GRIB] Actualisation réussie : run ${run}, ${files.length} fichier(s), ${body.removedFiles?.length || 0} ancien(s) supprimé(s)`);
+      console.info(`[GRIB] Actualisation réussie : run ${body.run || "aucun"}, ${body.files?.length || 0} fichier(s), ${body.removedFiles?.length || 0} ancien(s) supprimé(s)`);
     } catch (error) {
       setWeatherStatus(`Actualisation des GRIB impossible : ${(error as Error).message}`);
       console.error("[GRIB] Échec de l’actualisation", error);
@@ -376,26 +662,102 @@ export function App() {
     }
   };
 
+  // Adopte le run actif renvoyé par le serveur. Il ne change qu'une fois le run suivant entièrement téléchargé.
+  const applyGribStatus = (body: GribStatusBody) => {
+    const files: string[] = body.files || [];
+    const run: string = body.run || "";
+    setGribTarget(body.target ?? null);
+    setGribBusy(body.busy ?? false);
+    if (!run || files.length === 0) return;
+    if (lastGribRunRef.current !== run) {
+      console.info(`[GRIB] Run actif : ${run}, ${files.length} fichier(s)`);
+      lastGribRunRef.current = run;
+    }
+    setWeather(previous =>
+      previous.run === run && previous.files.length === files.length ? previous : { files, run },
+    );
+  };
+
+  // Suivi de la publication du run suivant : le serveur le télécharge en arrière-plan.
+  useEffect(() => {
+    let cancelled = false;
+    const poll = async () => {
+      try {
+        const response = await fetch("/api/weather/status", { cache: "no-store" });
+        const body = await readJsonResponse<GribStatusBody>(response);
+        if (!cancelled) applyGribStatus(body);
+      } catch (error) {
+        console.warn("[GRIB] Suivi de publication indisponible", error);
+      }
+    };
+    const timer = window.setInterval(() => void poll(), GRIB_STATUS_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, []);
+
+  // Au démarrage, adopter les GRIB déjà présents sur disque sans re-télécharger.
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const response = await fetch("/api/weather/current", { cache: "no-store" });
+        const body = await readJsonResponse<GribStatusBody>(response);
+        if (cancelled) return;
+        applyGribStatus(body);
+        if (body.run) console.info(`[GRIB] Run existant adopté : ${body.run}, ${body.files?.length || 0} fichier(s)`);
+      } catch (error) {
+        console.warn("[GRIB] État initial des GRIB indisponible", error);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // --- Calcul de la route en flux ---
   const submit = async () => {
     setFormError("");
-    if (weather.files.length === 0 || !weather.run) {
-      setFormError("Actualisez les GRIB avant de lancer le calcul.");
-      console.warn("[ROUTE] Calcul impossible : actualisez d’abord les GRIB");
+    // L'état local peut être en retard sur le watcher : le serveur fait foi pour le run actif.
+    let gribFiles = weather.files;
+    let gribRun = weather.run;
+    if (gribFiles.length === 0 || !gribRun) {
+      try {
+        const response = await fetch("/api/weather/current", { cache: "no-store" });
+        const body = await readJsonResponse<GribStatusBody>(response);
+        applyGribStatus(body);
+        gribFiles = body.files || [];
+        gribRun = body.run || "";
+      } catch (error) {
+        console.warn("[ROUTE] Run GRIB actif indisponible", error);
+      }
+    }
+    if (gribFiles.length === 0 || !gribRun) {
+      setFormError(
+        gribProgressText
+          ? `${gribProgressText}. Le calcul sera possible dès que le run est complet.`
+          : "Aucun run GRIB disponible : actualisez les GRIB.",
+      );
+      console.warn("[ROUTE] Calcul impossible : aucun run GRIB complet");
       return;
     }
+    const gribModel = buildWeatherRunModel(gribRun, gribFiles);
     activeController.current?.abort();
     resetRoute();
     const controller = new AbortController();
     activeController.current = controller;
-    console.info(`[ROUTE] Calcul demandé avec le run ${weather.run}`);
+    console.info(`[ROUTE] Calcul demandé avec le run ${gribRun}`);
+    console.info(
+      `[GRIB] ${gribFiles.length} fichier(s) envoyé(s) au calcul : ${gribFiles[0]?.split(/[\\/]/).pop() ?? "aucun"} → ${gribFiles[gribFiles.length - 1]?.split(/[\\/]/).pop() ?? "aucun"}`,
+    );
     try {
       const instant = parseLocalDate(form.instant);
-      if (!weatherModel) throw new Error("Run GRIB invalide : actualisez les GRIB.");
+      if (!gribModel) throw new Error("Run GRIB invalide : actualisez les GRIB.");
       const horizon = horizonMinutes(
         form.horizon,
         Date.parse(instant),
-        Date.parse(weatherModel.coveredUntil),
+        Date.parse(gribModel.coveredUntil),
         MAX_MINUTES_BY_MODE[form.mode],
       );
       if (!horizon.ok) throw new Error(horizon.error);
@@ -405,12 +767,15 @@ export function App() {
         throw new Error("Le pas est invalide pour cet horizon.");
       }
       setCalculating(true);
-      setProgress("");
+      setProgress(null);
+      setCalculationStartedAt(Date.now());
+      setRouteWeather(null);
+      setWeatherNotice("");
       const response = await fetch("/api/practical-headings/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          weatherFiles: weather.files,
+          weatherFiles: gribFiles,
           polarPath: form.polar,
           position: { virtualRegatta: form.start },
           destination: { virtualRegatta: form.destination },
@@ -422,7 +787,12 @@ export function App() {
           fixedSailID: 0,
           mode: form.mode,
           requireRobustScenarios: false,
-          useVirtualRegattaState: form.useVrState,
+          positionSource: form.positionSource,
+          staminaSource: form.staminaSource,
+          manualStamina: form.staminaSource === "manual" ? Number(form.staminaManual) : null,
+          useCourseGates: form.useCourseGates,
+          coastalMarginNM: Number(form.coastalMarginNM),
+          arrivalRadiusNM: vrState?.arrival?.radius ?? null,
           exclusionZones: zonesForRequest(allZones),
         }),
         signal: controller.signal,
@@ -431,6 +801,9 @@ export function App() {
         if (activeController.current !== controller) return;
         if (eventName === "start") {
           const start = data as RouteStart;
+          if (start.totalLayers) setProgress({ completed: 0, total: start.totalLayers });
+          setRouteWeather(start.weather ?? null);
+          if (start.weather) console.info(`[GRIB] ${weatherSwitchMessage(start.weather)}`);
           const position = start.position || DEFAULT_DEPARTURE;
           const destination = start.destination || DEFAULT_DESTINATION;
           frameCounter.current += 1;
@@ -451,13 +824,18 @@ export function App() {
           const partial = { ...base, isochrones: streamIsochrones.current };
           setFrame({ result: partial, showRoute: false, fit: false, key: String(frameCounter.current) });
           const frontier = data as Isochrone;
-          setProgress(` (${frontier.completedLayers}/${frontier.totalLayers})`);
+          if (frontier.totalLayers) setProgress({ completed: frontier.completedLayers ?? 0, total: frontier.totalLayers });
           return;
         }
         if (eventName === "complete") {
           const complete = data as RouteResult;
           setResult(complete);
+          if (complete.weather?.affectsRoute) setWeatherNotice(weatherSwitchMessage(complete.weather));
           setFrame({ result: complete, showRoute: true, fit: true, key: String(frameCounter.current) });
+          if ((complete.route?.length ?? 0) > 0) {
+            setDetailsSummaryOnly(true);
+            setDetailsOpen(true);
+          }
           return;
         }
         if (eventName === "cancelled") throw new Error((data as { error?: string }).error || "Calcul annulé.");
@@ -466,8 +844,18 @@ export function App() {
       setFormOpen(false);
       console.info("[ROUTE] Flux de calcul terminé");
     } catch (error) {
-      if (!(controller.signal.aborted && activeController.current !== controller)) {
-        setFormError((error as Error).message || "Le calcul a échoué.");
+      if (cancelledController.current === controller) {
+        // Annulation demandée : les isochrones déjà calculées restent affichées.
+        cancelledController.current = null;
+        setFormError("Routage annulé. Les isochrones déjà calculées restent affichées.");
+        console.info("[ROUTE] Calcul annulé à la demande");
+      } else if (!(controller.signal.aborted && activeController.current !== controller)) {
+        setFormError(
+          friendlyRouteError((error as Error).message || "", {
+            coastalMarginNM: Number(form.coastalMarginNM) || 0,
+            enabledZoneCount,
+          }),
+        );
         console.error("[ROUTE] Échec du calcul", error);
       }
     } finally {
@@ -478,7 +866,66 @@ export function App() {
     }
   };
 
+  // Annule le calcul en cours : le serveur arrête la recherche quand la connexion se ferme.
+  const cancelCalculation = useCallback(() => {
+    const controller = activeController.current;
+    if (!controller) return;
+    cancelledController.current = controller;
+    controller.abort();
+  }, []);
+
+  // --- Trace GPX importée (affichée en référence sur la carte) ---
+  const onGpxFile = useCallback(async (file: File | null) => {
+    if (!file) return;
+    try {
+      const geometry = parseGpx(await file.text());
+      const count = gpxPointCount(geometry);
+      if (count === 0) throw new Error("aucune trace ni point de passage exploitable.");
+      gpxCounter.current += 1;
+      setGpx({
+        name: file.name,
+        count,
+        overlay: { collection: gpxFeatureCollection(geometry), key: String(gpxCounter.current) },
+      });
+      setGpxError("");
+      console.info(`[GPX] ${file.name} importé : ${count} point(s)`);
+    } catch (error) {
+      setGpx(null);
+      setGpxError(`GPX illisible (${file.name}) : ${(error as Error).message}`);
+      console.error("[GPX] Import impossible", error);
+    }
+  }, []);
+  const clearGpx = useCallback(() => {
+    setGpx(null);
+    setGpxError("");
+  }, []);
+
   const closeDetails = useCallback(() => setDetailsOpen(false), []);
+  const toggleGameZones = (targets: Zone[], enabled: boolean) => {
+    setDisabledGameZones((previous) => {
+      const next = new Set(previous);
+      for (const zone of targets) {
+        if (enabled) next.delete(zone.id);
+        else next.add(zone.id);
+      }
+      return next;
+    });
+    resetRoute();
+  };
+  const focusZone = (zone: Zone) => {
+    setFocusedZoneId((current) => (current === zone.id ? null : zone.id));
+    if (focusedZoneId !== zone.id) mapHandle.current?.focusPoints(zone.points);
+  };
+  useEffect(() => {
+    if (!zonesOpen) setFocusedZoneId(null);
+  }, [zonesOpen]);
+  const openForm = () => {
+    setZonesOpen(false);
+    setDetailsOpen(false);
+    setFormOpen(true);
+  };
+  const [selectedRow, setSelectedRow] = useState<{ index: number; point: Point } | null>(null);
+  useEffect(() => setSelectedRow(null), [result]);
   const hasRoute = Boolean(result && result.route.length > 0);
 
   return (
@@ -486,37 +933,112 @@ export function App() {
       <MapView
         ref={mapHandle}
         endpoints={endpoints}
+        raceStart={vrState?.legStart ? { latitude: vrState.legStart.latitude, longitude: vrState.legStart.longitude } : null}
+        gameArrival={vrState?.arrival ? { latitude: vrState.arrival.latitude, longitude: vrState.arrival.longitude } : null}
+        arrivalRadiusNM={vrState?.arrival?.radius ?? null}
         frame={frame}
         vrState={vrState}
         zones={allZones}
+        highlight={selectedRow?.point ?? null}
         draft={draft}
+        gpx={gpx?.overlay ?? null}
         onDraftClick={onDraftClick}
-        rightPadding={() => document.getElementById("route-form-panel")?.getBoundingClientRect().width || 0}
+        showRoutePoints={showRoutePoints}
+        windTime={showWind ? new Date(windBase + windHours * 3_600_000).toISOString() : null}
+        focusedZoneId={focusedZoneId}
+        insets={mapInsets}
         onError={() => setMapError(true)}
       />
       {calculating && (
-        <div id="route-calculation-status" className="route-calculation-status" role="status" aria-live="polite">
-          <MaterialIcon name="progress_activity" />
-          <span>{`Calcul de la route en cours…${progress}`}</span>
-        </div>
+        <CalculationStatus
+          progress={progress}
+          startedAt={calculationStartedAt}
+          onCancel={cancelCalculation}
+          weatherNote={routeWeather ? weatherSwitchMessage(routeWeather) : ""}
+          weatherWarning={routeWeather?.affectsRoute ?? false}
+        />
       )}
       <div id="map-error" role="alert" className={mapError ? "visible" : undefined}>
         MapLibre n’a pas pu être chargé.
       </div>
-      <WeatherRunCard model={weatherModel} />
-      <div className="map-dock" role="toolbar" aria-label="Actions de la carte" aria-orientation="vertical">
+      <input
+        ref={gpxInput}
+        type="file"
+        accept=".gpx,application/gpx+xml,application/xml,text/xml"
+        style={{ display: "none" }}
+        onChange={(event) => {
+          void onGpxFile(event.target.files?.[0] ?? null);
+          event.target.value = "";
+        }}
+      />
+      {weatherNotice && !calculating && (
+        <div className="gpx-toast weather-toast floating-card" role="status">
+          <MaterialIcon name="cloud_sync" />
+          <span>{weatherNotice}</span>
+          <button type="button" aria-label="Fermer" onClick={() => setWeatherNotice("")}>
+            <MaterialIcon name="close" />
+          </button>
+        </div>
+      )}
+      {gpxError && (
+        <div className="gpx-toast floating-card" role="alert">
+          <MaterialIcon name="warning" />
+          <span>{gpxError}</span>
+          <button type="button" aria-label="Fermer" onClick={() => setGpxError("")}>
+            <MaterialIcon name="close" />
+          </button>
+        </div>
+      )}
+      <div id="map-corner" className="map-corner">
+        {showWind && <WindCard base={windBase} hours={windHours} onHours={setWindHours} onClose={() => setShowWind(false)} />}
+        {legendOpen && (
+          <MapLegend
+            onClose={() => setLegendOpen(false)}
+          />
+        )}
+        <WeatherRunCard
+          model={weatherModel}
+          warning={horizonNote.warning}
+          nextRun={nextRun}
+          collapsed={weatherCollapsed}
+          onToggle={() => setWeatherCollapsed((value) => !value)}
+        />
+      </div>
+      <div ref={dock} className="map-dock" role="toolbar" aria-label="Actions de la carte" aria-orientation="vertical">
         <button
           id="calculate-route"
           className="map-dock-button map-dock-primary"
           type="button"
           aria-label="Calculer une route"
           data-tooltip="Calculer une route"
-          onClick={() => {
-            setZonesOpen(false);
-            setFormOpen(true);
-          }}
+          onClick={openForm}
         >
           <MaterialIcon name="alt_route" />
+        </button>
+        <hr />
+        <button
+          id="toggle-route-points"
+          className={showRoutePoints ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Afficher les points de la route"
+          aria-pressed={showRoutePoints}
+          data-tooltip="Points de la route"
+          onClick={() => setShowRoutePoints((value) => !value)}
+        >
+          <MaterialIcon name="scatter_plot" />
+        </button>
+        <button
+          id="toggle-wind"
+          className={showWind ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Afficher le vent"
+          aria-pressed={showWind}
+          data-tooltip="Vent (échelle de Beaufort)"
+          onClick={() => {
+            setShowWind((value) => !value);
+          }}
+        >
+          <MaterialIcon name="air" />
         </button>
         <hr />
         <button
@@ -528,6 +1050,7 @@ export function App() {
           data-tooltip={`Zones interdites${enabledZoneCount > 0 ? ` (${enabledZoneCount} active(s))` : ""}`}
           onClick={() => {
             setFormOpen(false);
+            setDetailsOpen(false);
             setZonesOpen((open) => !open);
           }}
         >
@@ -536,13 +1059,42 @@ export function App() {
         </button>
         <hr />
         <button
+          id="import-gpx"
+          className={gpx ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Importer une trace GPX"
+          aria-pressed={Boolean(gpx)}
+          data-tooltip={
+            gpx
+              ? `Trace GPX : ${gpx.name}\n${gpx.count} point(s) · cliquez pour remplacer`
+              : "Importer une trace GPX"
+          }
+          onClick={() => gpxInput.current?.click()}
+        >
+          <MaterialIcon name="timeline" />
+          {gpx && <span className="dock-badge dock-badge-gpx">GPX</span>}
+        </button>
+        {gpx && (
+          <button
+            id="clear-gpx"
+            className="map-dock-button"
+            type="button"
+            aria-label="Retirer la trace GPX"
+            data-tooltip="Retirer la trace GPX"
+            onClick={clearGpx}
+          >
+            <MaterialIcon name="close" />
+          </button>
+        )}
+        <hr />
+        <button
           id="refresh-weather"
-          className={refreshing ? "map-dock-button is-busy" : "map-dock-button"}
+          className={gribDownloading ? "map-dock-button is-busy" : "map-dock-button"}
           type="button"
           aria-label="Actualiser les GRIB"
           data-tooltip={
-            refreshing
-              ? "Téléchargement des GRIB…"
+            gribDownloading
+              ? gribProgressText || "Téléchargement des GRIB…"
               : weatherModel
                 ? `Actualiser les GRIB\nRun ${weatherModel.runText} · +${weatherModel.horizonHours} h`
                 : "Actualiser les GRIB"
@@ -551,6 +1103,19 @@ export function App() {
           onClick={() => void refreshWeather()}
         >
           <MaterialIcon name="cloud_download" />
+        </button>
+        <hr />
+        <button
+          id="toggle-legend"
+          className={legendOpen ? "map-dock-button is-active" : "map-dock-button"}
+          type="button"
+          aria-label="Légende de la carte"
+          aria-pressed={legendOpen}
+          aria-controls="map-legend"
+          data-tooltip="Légende et balisage"
+          onClick={() => setLegendOpen((open) => !open)}
+        >
+          <MaterialIcon name="info" />
         </button>
         <hr />
         <button
@@ -564,13 +1129,31 @@ export function App() {
           <MaterialIcon name="my_location" />
         </button>
       </div>
-      {hasRoute && (
-        <button id="show-route-details" className="route-details-button" type="button" aria-controls="route-details-panel" aria-expanded={detailsOpen} onClick={() => setDetailsOpen(true)}>
+      {hasRoute && !detailsOpen && !formOpen && !zonesOpen && (
+        <button
+          id="show-route-details"
+          className="route-details-button"
+          type="button"
+          aria-controls="route-details-panel"
+          aria-expanded={detailsOpen}
+          onClick={() => {
+            setFormOpen(false);
+            setZonesOpen(false);
+            setDetailsSummaryOnly(false);
+            setDetailsOpen(true);
+          }}
+        >
           <MaterialIcon name="route" />
-          Détails de la route
+          Route et ordres
         </button>
       )}
-      {detailsOpen && result && <RouteDetailsPanel result={result} onClose={closeDetails} />}
+      {detailsOpen && result && <RouteDetailsPanel
+          result={result}
+          selectedIndex={selectedRow?.index ?? null}
+          onSelect={(index, point) => setSelectedRow({ index, point })}
+          onClose={closeDetails}
+          initiallyCollapsed={detailsSummaryOnly}
+        />}
       {draft !== null && (
         <div className="draw-banner" role="status" aria-live="polite">
           <span>
@@ -593,16 +1176,14 @@ export function App() {
         <ZonesPanel
           zones={allZones}
           game={{ stateKnown: vrState !== undefined, count: gameZones.length, legShape: vrState?.legShape || [] }}
+          boat={endpoints.position}
+          focusedId={focusedZoneId}
           onDraw={startDrawing}
+          onFocus={focusZone}
+          onToggleAll={toggleGameZones}
           onToggle={(zone, enabled) => {
             if (zone.source === "game") {
-              setDisabledGameZones((previous) => {
-                const next = new Set(previous);
-                if (enabled) next.delete(zone.id);
-                else next.add(zone.id);
-                return next;
-              });
-              resetRoute();
+              toggleGameZones([zone], enabled);
             } else {
               updateZones((previous) => previous.map((item) => (item.id === zone.id ? { ...item, enabled } : item)));
             }
@@ -618,11 +1199,13 @@ export function App() {
           polars={polars}
           checkpoints={checkpoints}
           checkpointCache={checkpointCache.current}
+          gameArrivalName={vrState?.arrival ? (meaningfulName(vrState.arrival.name) ?? "arrivée du jeu") : null}
           polarNote={polarNote}
           horizonNote={horizonNote}
           vrStatus={vrStatus}
           weatherStatus={
             weatherStatus ||
+            gribProgressText ||
             (weatherModel
               ? `${weatherModel.title} · run ${weatherModel.runText} · +${weatherModel.horizonHours} h`
               : "Actualisez les GRIB avant de lancer le calcul.")

@@ -25,6 +25,18 @@ func TestParseVirtualRegattaPosition(t *testing.T) {
 			wantLatitude:  -33.86888888888889,
 			wantLongitude: -151.20916666666668,
 		},
+		{
+			name:          "hémisphère en fin de coordonnée",
+			value:         "13°07'16\"N - 121°35'12\"E",
+			wantLatitude:  13 + 7.0/60 + 16.0/3600,
+			wantLongitude: 121 + 35.0/60 + 12.0/3600,
+		},
+		{
+			name:          "secondes décimales, hémisphère en fin",
+			value:         "47°26'11.95\"N - 24°54'55.32\"W",
+			wantLatitude:  47 + 26.0/60 + 11.95/3600,
+			wantLongitude: -(24 + 54.0/60 + 55.32/3600),
+		},
 	}
 
 	for _, test := range tests {

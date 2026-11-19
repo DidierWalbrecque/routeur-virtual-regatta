@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"math"
 	"net/http"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/polar"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/routing"
 	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/simulation"
+	"github.com/DidierWalbrecque/routeur-virtual-regatta/backend/internal/weather"
 )
 
 type practicalHeadingsRequest struct {
@@ -31,9 +33,25 @@ type practicalHeadingsRequest struct {
 	MaxScenarioProgressLossNM float64                             `json:"maxScenarioProgressLossNM"`
 	RequireRobustScenarios    bool                                `json:"requireRobustScenarios"`
 	Mode                      string                              `json:"mode"`
-	UseVirtualRegattaState    bool                                `json:"useVirtualRegattaState"`
-	ExclusionZones            []exclusionZoneRequest              `json:"exclusionZones"`
+	// Réglages découplés de l'intégration Virtual Regatta. PositionSource et
+	// StaminaSource valent "vr" ou "manual" ; ManualStamina (0..100) sert quand
+	// StaminaSource vaut "manual".
+	PositionSource string   `json:"positionSource"`
+	StaminaSource  string   `json:"staminaSource"`
+	ManualStamina  *float64 `json:"manualStamina"`
+	UseCourseGates bool     `json:"useCourseGates"`
+	// UseVirtualRegattaState : alias hérité activant les trois réglages ci-dessus
+	// sur Virtual Regatta lorsqu'il est seul présent.
+	UseVirtualRegattaState bool                   `json:"useVirtualRegattaState"`
+	ExclusionZones         []exclusionZoneRequest `json:"exclusionZones"`
+	// CoastalMarginNM : marge minimale à la côte, en milles nautiques (0 à 10).
+	// Absente, elle vaut defaultCoastalMarginNM.
+	CoastalMarginNM *float64 `json:"coastalMarginNM"`
+	// ArrivalRadiusNM : rayon d'arrivée du jeu, en NM. Absent ou invalide : 1 NM.
+	ArrivalRadiusNM *float64 `json:"arrivalRadiusNM"`
 }
+
+const defaultCoastalMarginNM = 2.0
 
 type positionRequest struct {
 	Latitude       float64 `json:"latitude"`
@@ -49,6 +67,8 @@ type practicalHeadingsResponse struct {
 	Isochrones  []isochroneFrontierResponse  `json:"isochrones"`
 	Route       []routePointResponse         `json:"route"`
 	Performance performanceResponse          `json:"performance"`
+	// Weather signale un run récent encore partiel, complété par le précédent.
+	Weather *weatherBlendResponse `json:"weather,omitempty"`
 }
 
 type performanceResponse struct {
@@ -83,17 +103,17 @@ type calculationProfile struct {
 	CellSize          navigation.NauticalMiles
 	MaxCandidates     int
 	IncludeIsochrones bool
-	// MaxDuration borne l'horizon demandé : au-delà de quelques jours, les
-	// prévisions ne justifient plus un calcul précis.
+	// MaxDuration borne l'horizon demandé : 2 jours en précis, 10 jours en
+	// rapide (limite du GFS). Au-delà de ~7 jours la prévision devient incertaine.
 	MaxDuration time.Duration
 }
 
 func calculationProfileFor(mode string) (calculationProfile, error) {
 	switch strings.ToLower(strings.TrimSpace(mode)) {
 	case "", "precise":
-		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 15, CellSize: 0.5, MaxCandidates: 100, IncludeIsochrones: true, MaxDuration: 3 * 24 * time.Hour}, nil
+		return calculationProfile{IsochroneStep: 10 * time.Minute, HeadingSpacing: 6, CellSize: 0.5, MaxCandidates: 2400, IncludeIsochrones: true, MaxDuration: 4 * 24 * time.Hour}, nil
 	case "quick":
-		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 50, IncludeIsochrones: true, MaxDuration: 5 * 24 * time.Hour}, nil
+		return calculationProfile{IsochroneStep: 15 * time.Minute, HeadingSpacing: 30, CellSize: 1, MaxCandidates: 1200, IncludeIsochrones: true, MaxDuration: 10 * 24 * time.Hour}, nil
 	default:
 		return calculationProfile{}, fmt.Errorf("mode de calcul %q invalide: quick ou precise attendu", mode)
 	}
@@ -104,7 +124,12 @@ func adaptiveIsochroneDuration(distance navigation.NauticalMiles, requested time
 		return requested
 	}
 	const (
-		conservativeSpeedRatio = 0.6
+		// Fraction de la vitesse max réellement tenue vers la marque, moyenne
+		// sur une vraie route (près compris). 0,6 était trop optimiste et
+		// coupait la recherche avant l'arrivée ; 0,4 ne raccourcit que les
+		// cibles nettement plus proches que le plafond. La boucle s'arrête de
+		// toute façon dès l'arrivée, donc une estimation plus large est sûre.
+		conservativeSpeedRatio = 0.4
 		minimumBuffer          = 60 * time.Minute
 	)
 	estimated := time.Duration(float64(distance) / (float64(maxSpeed) * conservativeSpeedRatio) * float64(time.Hour))
@@ -159,6 +184,9 @@ type isochroneFrontierResponse struct {
 	Instant   time.Time         `json:"instant"`
 	Positions []positionRequest `json:"positions"`
 	Contour   []positionRequest `json:"contour"`
+	// ContourBreaks : indices i des côtés contour[i] -> contour[i+1] qui
+	// traversent une terre ou une zone interdite.
+	ContourBreaks []int `json:"contourBreaks"`
 }
 type routePointResponse struct {
 	Position positionRequest `json:"position"`
@@ -224,8 +252,19 @@ func routePointFromNode(
 	}
 	if node.SpeedPenalty != nil && node.SpeedPenalty.AppliedPenalty != nil {
 		point.SpeedCoefficient = floatPointer(float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio))
+		log.Printf("[ROUTE] pénalité vitesse : coeff=%.2f durée_pénalisée=%v voile_choisie=%d",
+			float64(node.SpeedPenalty.AppliedPenalty.SpeedRatio),
+			node.SpeedPenalty.PenalizedDuration,
+			node.Candidate.Step.BestSail.SailID,
+		)
 	}
 	if node.Maneuver != nil {
+		if node.Maneuver.Kind != simulation.ManeuverNone || node.Maneuver.SailChanged {
+			log.Printf("[ROUTE] manœuvre détectée : type=%v sailChanged=%t voile_choisie=%d",
+				node.Maneuver.Kind, node.Maneuver.SailChanged,
+				node.Candidate.Step.BestSail.SailID,
+			)
+		}
 		switch {
 		case node.Maneuver.Kind == simulation.ManeuverTack:
 			point.Maneuver = "tack"
@@ -252,14 +291,6 @@ type practicalCandidateResponse struct {
 	SpeedKnots             float64         `json:"speedKnots"`
 }
 
-func practicalHeadingsHandler(response http.ResponseWriter, request *http.Request) {
-	runPracticalHeadings(response, request, nil, nil)
-}
-
-func practicalHeadingsStreamHandler(response http.ResponseWriter, request *http.Request) {
-	runPracticalHeadings(response, request, &practicalHeadingsStream{}, nil)
-}
-
 func runPracticalHeadings(
 	response http.ResponseWriter,
 	request *http.Request,
@@ -282,9 +313,12 @@ func runPracticalHeadings(
 		return
 	}
 
+	useVRPosition, useVRStamina, useGates := resolveVRSettings(payload)
+	needVRState := useVRPosition || useVRStamina || useGates
+
 	var receivedVRState *vrState
 	var virtualRegattaGates []routing.CourseGate
-	if payload.UseVirtualRegattaState {
+	if needVRState {
 		if vrStateStore == nil {
 			writeJSONError(response, http.StatusBadRequest, "état Virtual Regatta indisponible pour ce gestionnaire")
 			return
@@ -295,17 +329,21 @@ func runPracticalHeadings(
 			return
 		}
 		receivedVRState = &state
-		gates, gatesErr := courseGatesFromVRState(state)
-		if gatesErr != nil {
-			writeJSONError(response, http.StatusBadRequest, "portes Virtual Regatta invalides: "+gatesErr.Error())
-			return
+		if useGates {
+			gates, gatesErr := courseGatesFromVRState(state)
+			if gatesErr != nil {
+				writeJSONError(response, http.StatusBadRequest, "portes Virtual Regatta invalides: "+gatesErr.Error())
+				return
+			}
+			virtualRegattaGates = gates
 		}
-		virtualRegattaGates = gates
-		payload.Position = positionRequest{
-			Latitude:  state.Position.Latitude,
-			Longitude: state.Position.Longitude,
+		if useVRPosition {
+			payload.Position = positionRequest{
+				Latitude:  state.Position.Latitude,
+				Longitude: state.Position.Longitude,
+			}
+			payload.Owned = ownedEquipmentFromVRState(state, payload.Owned)
 		}
-		payload.Owned = equipmentIDsFromVRState(state)
 	}
 
 	instant, err := time.Parse(time.RFC3339, payload.Instant)
@@ -338,13 +376,28 @@ func runPracticalHeadings(
 	for index, heading := range payload.Headings {
 		headings[index] = navigation.Heading(heading)
 	}
+	requestedDuration := time.Duration(payload.DurationMinutes * float64(time.Minute))
+	// Le run le plus récent sert même s'il est encore en téléchargement ; le run
+	// complet précédent prend le relais au-delà de ses échéances disponibles.
+	weatherStatus := gribWatcher.Status()
+	weatherFiles, weatherSwitch := blendLatestGRIB(payload.WeatherFiles, weatherStatus)
+	// Seules les échéances couvrant le calcul sont chargées : un run GFS complet
+	// (129 échéances) ne tient pas dans la mémoire d'un petit serveur. Le pas
+	// demandé s'ajoute à la fenêtre : la dernière couche peut le dépasser.
+	weatherWindow := requestedDuration
+	if requestedStep := time.Duration(payload.StepMinutes * float64(time.Minute)); requestedStep > 0 {
+		weatherWindow += requestedStep
+	}
+	weatherFiles = gribFilesForWindow(weatherFiles, instant, weatherWindow)
 	weatherStarted := time.Now()
-	weatherProvider, weatherStats, err := loadWeatherProviderForRequest(payload.WeatherFiles...)
+	weatherProvider, weatherStats, err := loadWeatherProviderForRequest(weatherFiles...)
 	weatherMilliseconds := elapsedMilliseconds(weatherStarted)
 	if err != nil {
+		log.Printf("[GRIB] chargement impossible (%d fichier(s)) : %v", len(weatherFiles), err)
 		writeJSONError(response, http.StatusBadRequest, "chargement météo impossible: "+err.Error())
 		return
 	}
+	logGRIBUsage(weatherFiles, instant, requestedDuration, weatherSwitch, runLabel(weatherStatus.Active.Run), weatherStats, weatherMilliseconds)
 	polarStarted := time.Now()
 	boatPolar, polarHit, err := loadPolarForRequest(payload.PolarPath)
 	polarMilliseconds := elapsedMilliseconds(polarStarted)
@@ -352,12 +405,27 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, "chargement polaire impossible: "+err.Error())
 		return
 	}
-	var transitionEvaluator *simulation.TransitionEvaluator
-	var combineSpeedPenalties simulation.ManeuverSpeedPenaltyCombiner
+	// La stamina est toujours simulée : la pénalité de manœuvre — et donc
+	// l'anti-zigzag — s'applique à tout calcul, que la position et la stamina
+	// viennent de Virtual Regatta ou d'une saisie manuelle.
+	transitionEvaluator, combineSpeedPenalties := staminaManeuverRuntime(boatPolar)
 	var initialNavigation *routing.InitialNavigationState
-	if receivedVRState != nil {
-		transitionEvaluator, combineSpeedPenalties = vrManeuverRuntime(boatPolar)
+	// Le cap et la voile courants ne sont cohérents qu'au départ réel du bateau VR.
+	if useVRPosition && receivedVRState != nil {
 		initialNavigation = initialNavigationFromVRState(receivedVRState)
+		if initialNavigation != nil {
+			log.Printf("[ROUTE] état initial VR : cap=%.1f° voile=%d (%s)",
+				float64(initialNavigation.Heading),
+				initialNavigation.SailID,
+				receivedVRState.CurrentSail.Name,
+			)
+		} else {
+			log.Printf("[ROUTE] état initial VR : cap ou voile indisponible (heading=%v currentSail=%v)",
+				receivedVRState.Heading, receivedVRState.CurrentSail)
+		}
+	} else {
+		log.Printf("[ROUTE] état initial : pas de VR (useVR=%t, statePresent=%t)",
+			useVRPosition, receivedVRState != nil)
 	}
 	position, err := parsePositionRequest(payload.Position)
 	if err != nil {
@@ -369,6 +437,22 @@ func runPracticalHeadings(
 		writeJSONError(response, http.StatusBadRequest, "destination invalide: "+err.Error())
 		return
 	}
+	positionSourceLabel := "manuelle"
+	if useVRPosition {
+		positionSourceLabel = "VR"
+	}
+	staminaSourceLabel := "manuelle"
+	if useVRStamina {
+		staminaSourceLabel = "VR"
+	}
+	log.Printf(
+		"[ROUTE] polaire=%q bateau=%q (cache=%t) · mode=%s · durée=%.0f min (%.1f j) · position=%s · stamina=%s · portes=%t · départ=%.4f,%.4f arrivée=%.4f,%.4f",
+		payload.PolarPath, boatPolar.Label, polarHit, payload.Mode,
+		payload.DurationMinutes, payload.DurationMinutes/1440,
+		positionSourceLabel, staminaSourceLabel, useGates,
+		float64(position.Latitude), float64(position.Longitude),
+		float64(destination.Latitude), float64(destination.Longitude),
+	)
 	landStarted := time.Now()
 	landConstraint, landHit, err := loadLandForRequest(landGeoJSONPath)
 	landMilliseconds := elapsedMilliseconds(landStarted)
@@ -377,7 +461,15 @@ func runPracticalHeadings(
 		return
 	}
 	arrivalLandConstraint := landConstraint
-	landConstraint, err = landConstraint.WithCoastalMargin(navigation.NauticalMiles(2))
+	coastalMarginNM := defaultCoastalMarginNM
+	if payload.CoastalMarginNM != nil {
+		coastalMarginNM = *payload.CoastalMarginNM
+	}
+	if !(coastalMarginNM >= 0 && coastalMarginNM <= 10) {
+		writeJSONError(response, http.StatusBadRequest, "marge côtière invalide: valeur entre 0 et 10 NM attendue")
+		return
+	}
+	landConstraint, err = landConstraint.WithCoastalMargin(navigation.NauticalMiles(coastalMarginNM))
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "marge côtière impossible: "+err.Error())
 		return
@@ -441,11 +533,12 @@ func runPracticalHeadings(
 		Isochrones:  make([]isochroneFrontierResponse, 0),
 		Route:       make([]routePointResponse, 0),
 	}
+	result.Weather = weatherSwitch.response(instant, requestedDuration)
 	result.Performance.VirtualRegattaStateUsed = receivedVRState != nil
 	result.Performance.VirtualRegattaGatesUsed = len(virtualRegattaGates)
-	initialStamina := initialStaminaForVRState(receivedVRState)
+	initialStamina, staminaFromVR := resolveInitialStamina(useVRStamina, receivedVRState, payload.ManualStamina)
 	result.Performance.InitialStamina = float64(initialStamina.Level)
-	result.Performance.StaminaFromVirtualRegatta = receivedVRState != nil && receivedVRState.Stamina != nil
+	result.Performance.StaminaFromVirtualRegatta = staminaFromVR
 	result.Performance.CacheHits = weatherStats.Hits
 	result.Performance.CacheMisses = weatherStats.Misses
 	if polarHit {
@@ -481,7 +574,6 @@ func runPracticalHeadings(
 		isochroneStep = time.Duration(payload.StepMinutes * float64(time.Minute))
 	}
 	isochroneStarted := time.Now()
-	requestedDuration := time.Duration(payload.DurationMinutes * float64(time.Minute))
 	distance, err := navigation.DistanceBetween(position, destination)
 	if err != nil {
 		writeJSONError(response, http.StatusBadRequest, "distance de destination impossible: "+err.Error())
@@ -511,6 +603,7 @@ func runPracticalHeadings(
 				Destination: result.Destination,
 				StartedAt:   instant,
 				TotalLayers: layerCount,
+				Weather:     result.Weather,
 			}); err != nil {
 				cancelCalculation()
 				return
@@ -520,7 +613,7 @@ func runPracticalHeadings(
 		frontierResponses := make(map[int]isochroneFrontierResponse, layerCount)
 		if stream != nil {
 			progressReporter = func(progress routing.IsochroneProgress) {
-				frontier, frontierErr := isochroneFrontierResponseFor(position, progress.Frontier)
+				frontier, frontierErr := isochroneFrontierResponseFor(calculationContext, position, progress.Frontier, arrivalConstraints)
 				if frontierErr != nil {
 					streamCallbackError = frontierErr
 					cancelCalculation()
@@ -531,6 +624,7 @@ func runPracticalHeadings(
 					Instant:            frontier.Instant.Format(time.RFC3339Nano),
 					Positions:          frontier.Positions,
 					Contour:            frontier.Contour,
+					ContourBreaks:      frontier.ContourBreaks,
 					CompletedLayers:    progress.CompletedLayers,
 					TotalLayers:        progress.TotalLayers,
 					Progress:           float64(progress.CompletedLayers) / float64(progress.TotalLayers),
@@ -541,13 +635,19 @@ func runPracticalHeadings(
 				}
 			}
 		}
+		arrivalRadius := navigation.NauticalMiles(1)
+		if payload.ArrivalRadiusNM != nil && *payload.ArrivalRadiusNM > 0 && *payload.ArrivalRadiusNM <= 20 {
+			arrivalRadius = navigation.NauticalMiles(*payload.ArrivalRadiusNM)
+		}
+		recoveryRules := staminaRecoveryRules()
 		search, err := buildIsochroneSearch(calculationContext, weatherProvider, boatPolar, routing.IsochroneSearchInput{
 			Position: position, Destination: destination, Instant: instant, StepDuration: isochroneStep, LayerCount: layerCount,
 			Owned: owned, HeadingSpacing: profile.HeadingSpacing, RefineHeadings: true, CellSize: profile.CellSize, MaxCandidates: profile.MaxCandidates,
-			ArrivalRadius: navigation.NauticalMiles(1), InitialStamina: initialStamina,
+			ArrivalRadius: arrivalRadius, InitialStamina: initialStamina,
 			InitialNavigation:     initialNavigation,
 			TransitionEvaluator:   transitionEvaluator,
 			CombineSpeedPenalties: combineSpeedPenalties,
+			StaminaRecoveryRules:  &recoveryRules,
 			Gates:                 virtualRegattaGates,
 			Constraints:           routeConstraints,
 			ArrivalConstraints:    arrivalConstraints,
@@ -569,7 +669,7 @@ func runPracticalHeadings(
 		for _, frontier := range search.Frontiers {
 			layer, exists := frontierResponses[frontier.Index]
 			if !exists {
-				layer, err = isochroneFrontierResponseFor(position, frontier)
+				layer, err = isochroneFrontierResponseFor(calculationContext, position, frontier, arrivalConstraints)
 				if err != nil {
 					if stream != nil {
 						stream.fail(response, "contour d’isochrone impossible: "+err.Error(), err)
@@ -651,7 +751,13 @@ func runPracticalHeadings(
 				if len(routeSteps) > 0 {
 					terminalStamina = routeSteps[len(routeSteps)-1].Node.State.Stamina.Level
 				}
-				result.Route = append(result.Route, routePointResponse{Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)}, Stamina: float64(terminalStamina), Instant: lastInstant.Add(profile.IsochroneStep), Terminal: true})
+				currentSail := polar.SailID(0)
+				if len(routeSteps) > 0 {
+					currentSail = routeSteps[len(routeSteps)-1].Node.State.SailID
+				}
+				terminal := finalLegPoint(calculationContext, weatherProvider, boatPolar, owned, lastPosition, destination, lastInstant, profile.IsochroneStep, currentSail)
+				terminal.Stamina = float64(terminalStamina)
+				result.Route = append(result.Route, terminal)
 			}
 		}
 		result.Performance.IsochroneMilliseconds = elapsedMilliseconds(isochroneStarted)
@@ -664,9 +770,66 @@ func runPracticalHeadings(
 	writeJSON(response, http.StatusOK, result)
 }
 
+// finalLegPoint construit le point d'arrivée et décrit le dernier bord, du
+// dernier point calculé jusqu'à la destination : cap direct, vent, allure,
+// voile et vitesse au départ de ce bord. Sans ces informations, l'avant-dernière
+// ligne du tableau (qui affiche le bord qui en part) restait vide. Si le bord
+// ne peut pas être simulé (météo absente, cap nul), le point reste nu.
+func finalLegPoint(
+	ctx context.Context,
+	weatherProvider weather.WeatherProvider,
+	boatPolar *polar.Polar,
+	owned equipment.EquipmentSet,
+	from navigation.Position,
+	destination navigation.Position,
+	instant time.Time,
+	stepDuration time.Duration,
+	currentSail polar.SailID,
+) routePointResponse {
+	point := routePointResponse{
+		Position: positionRequest{Latitude: float64(destination.Latitude), Longitude: float64(destination.Longitude)},
+		Instant:  instant.Add(stepDuration),
+		Terminal: true,
+	}
+	if from == destination || weatherProvider == nil || boatPolar == nil {
+		return point
+	}
+	heading, err := navigation.InitialHeading(from, destination)
+	if err != nil {
+		return point
+	}
+	step, err := simulation.EvaluateStep(ctx, weatherProvider, boatPolar, simulation.StepInput{
+		Position:            from,
+		Instant:             instant,
+		Heading:             heading,
+		Duration:            stepDuration,
+		Owned:               owned,
+		CurrentSailID:       currentSail,
+		SailChangeTolerance: boatPolar.AutoSailChangeTolerance,
+	})
+	if err != nil {
+		log.Printf("[ROUTE] dernier bord non simulé : %v", err)
+		return point
+	}
+	described := routePointFromNode(routing.IsochroneNode{
+		Candidate: routing.HeadingCandidate{Heading: heading, Step: step},
+	}, boatPolar, owned)
+	described.Position = point.Position
+	described.Instant = point.Instant
+	described.Terminal = true
+	return described
+}
+
+// isochroneFrontierResponseFor décrit un front pour l'affichage. Le contour est
+// une enveloppe convexe : ContourBreaks liste les côtés qui traversent une terre
+// ou une zone interdite, pour que l'interface ne trace pas de trait à travers.
+// Les autres côtés, même longs, sont de vrais bords du front : au près, le
+// bateau les atteint en louvoyant.
 func isochroneFrontierResponseFor(
+	ctx context.Context,
 	origin navigation.Position,
 	frontier routing.IsochroneFrontier,
+	constraints []routing.Constraint,
 ) (isochroneFrontierResponse, error) {
 	layer := isochroneFrontierResponse{
 		Instant:   frontier.Instant,
@@ -688,6 +851,28 @@ func isochroneFrontierResponseFor(
 			Latitude:  float64(contourPosition.Latitude),
 			Longitude: float64(contourPosition.Longitude),
 		})
+	}
+	layer.ContourBreaks = make([]int, 0)
+	for index := 0; index+1 < len(contour); index++ {
+		if contour[index] == contour[index+1] {
+			continue
+		}
+		edge := routing.RouteSegment{
+			From:       contour[index],
+			To:         contour[index+1],
+			StartedAt:  frontier.Instant,
+			FinishedAt: frontier.Instant.Add(time.Minute),
+		}
+		for _, constraint := range constraints {
+			allowed, err := constraint.Allows(ctx, edge)
+			if err != nil {
+				return isochroneFrontierResponse{}, fmt.Errorf("côté %d du contour impossible à vérifier: %w", index+1, err)
+			}
+			if !allowed {
+				layer.ContourBreaks = append(layer.ContourBreaks, index)
+				break
+			}
+		}
 	}
 	return layer, nil
 }
@@ -717,12 +902,37 @@ func reconstructBestAvailableRoute(search routing.IsochroneSearch) ([]availableR
 	return steps, nil
 }
 
-func initialStaminaForVRState(state *vrState) simulation.StaminaState {
-	initial := simulation.StaminaState{Level: 100}
-	if state != nil && state.Stamina != nil {
-		initial.Level = simulation.StaminaLevel(*state.Stamina)
+func resolveVRSettings(payload practicalHeadingsRequest) (useVRPosition, useVRStamina, useGates bool) {
+	// Compatibilité : un ancien client n'envoyant que useVirtualRegattaState
+	// active les trois réglages sur Virtual Regatta.
+	if payload.UseVirtualRegattaState {
+		return true, true, true
 	}
-	return initial
+	useVRPosition = strings.EqualFold(strings.TrimSpace(payload.PositionSource), "vr")
+	useVRStamina = strings.EqualFold(strings.TrimSpace(payload.StaminaSource), "vr")
+	useGates = payload.UseCourseGates
+	return useVRPosition, useVRStamina, useGates
+}
+
+// resolveInitialStamina choisit le niveau de stamina initial : la valeur reçue
+// de Virtual Regatta lorsqu'elle est demandée et disponible, sinon la valeur
+// saisie (bornée à 0..100), sinon 100 par défaut. Le second retour indique si
+// la valeur provient de Virtual Regatta.
+func resolveInitialStamina(useVR bool, state *vrState, manual *float64) (simulation.StaminaState, bool) {
+	if useVR && state != nil && state.Stamina != nil {
+		return simulation.StaminaState{Level: simulation.StaminaLevel(*state.Stamina)}, true
+	}
+	if manual != nil {
+		level := *manual
+		if level < 0 {
+			level = 0
+		}
+		if level > 100 {
+			level = 100
+		}
+		return simulation.StaminaState{Level: simulation.StaminaLevel(level)}, false
+	}
+	return simulation.StaminaState{Level: 100}, false
 }
 
 func routeStepPassesDestination(from, to, destination navigation.Position) (bool, error) {

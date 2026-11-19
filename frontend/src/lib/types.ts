@@ -1,3 +1,5 @@
+import type { WeatherSwitch } from "./weather_switch.ts";
+
 export type Point = { latitude: number; longitude: number };
 
 export type RoutePoint = {
@@ -21,11 +23,15 @@ export type Isochrone = {
   instant: string;
   positions?: Point[];
   contour: Point[];
+  /** Indices i des côtés contour[i] -> contour[i+1] qui traversent une terre ou une zone interdite. */
+  contourBreaks?: number[];
   completedLayers?: number;
   totalLayers?: number;
 };
 
 export type RouteResult = {
+  /** Run récent encore partiel, complété par le précédent. */
+  weather?: WeatherSwitch;
   position?: Point;
   destination?: Point;
   destinationReached?: boolean;
@@ -37,6 +43,8 @@ export type RouteStart = {
   position?: Point;
   destination?: Point;
   startedAt?: string;
+  totalLayers?: number;
+  weather?: WeatherSwitch;
 };
 
 export type Checkpoint = {
@@ -55,6 +63,17 @@ export type BoatHint = { path: string; value: string };
 
 export type VrState = {
   position?: Point;
+  arrival?: { latitude: number; longitude: number; radius?: number | null; name?: string } | null;
+  legStart?: { latitude: number; longitude: number; name?: string } | null;
+  state?: string;
+  /** Type de course du jeu (leg.race.type), par exemple « record ». */
+  raceType?: string;
+  /** Record dont le départ n'est pas pris : position = ligne de départ, options inconnues. */
+  preStart?: boolean;
+  /** Ouverture et fermeture du leg (leg.open.date, leg.close.date, millisecondes). */
+  startWindow?: { open: number | null; close: number | null } | null;
+  /** Date associée à l'arrivée du leg (leg.end.date, millisecondes). */
+  endDate?: number | null;
   stamina?: number | null;
   options?: string[];
   checkpoints?: Checkpoint[];

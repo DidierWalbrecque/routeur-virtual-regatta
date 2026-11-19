@@ -170,17 +170,17 @@ func TestPracticalHeadingsLimitsTheHorizonByMode(t *testing.T) {
 		}
 		return response.Body.String()
 	}
-	if message := post("precise", "4321"); !strings.Contains(message, "trop longue") || !strings.Contains(message, "3 jours") {
-		t.Fatalf("le mode précis doit refuser plus de 3 jours : %s", message)
+	if message := post("precise", "5761"); !strings.Contains(message, "trop longue") || !strings.Contains(message, "4 jours") {
+		t.Fatalf("le mode précis doit refuser plus de 4 jours : %s", message)
 	}
-	if message := post("quick", "7201"); !strings.Contains(message, "trop longue") || !strings.Contains(message, "5 jours") {
-		t.Fatalf("le mode rapide doit refuser plus de 5 jours : %s", message)
+	if message := post("quick", "14401"); !strings.Contains(message, "trop longue") || !strings.Contains(message, "10 jours") {
+		t.Fatalf("le mode rapide doit refuser plus de 10 jours : %s", message)
 	}
 	// À la limite, la durée est acceptée : l'erreur suivante est celle des fichiers manquants.
-	if message := post("precise", "4320"); strings.Contains(message, "trop longue") {
-		t.Fatalf("3 jours exactement doivent être acceptés en mode précis : %s", message)
+	if message := post("precise", "5760"); strings.Contains(message, "trop longue") {
+		t.Fatalf("4 jours exactement doivent être acceptés en mode précis : %s", message)
 	}
-	if message := post("quick", "7200"); strings.Contains(message, "trop longue") {
-		t.Fatalf("5 jours exactement doivent être acceptés en mode rapide : %s", message)
+	if message := post("quick", "14400"); strings.Contains(message, "trop longue") {
+		t.Fatalf("10 jours exactement doivent être acceptés en mode rapide : %s", message)
 	}
 }

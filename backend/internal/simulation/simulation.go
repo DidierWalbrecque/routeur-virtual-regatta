@@ -22,6 +22,11 @@ type StepInput struct {
 	Duration    time.Duration
 	Owned       equipment.EquipmentSet
 	FixedSailID polar.SailID
+	// CurrentSailID and SailChangeTolerance enable Virtual Regatta's sail-change
+	// hysteresis: the current sail is kept unless another beats it by more than
+	// the tolerance. Zero values disable it (greedy best-sail choice).
+	CurrentSailID       polar.SailID
+	SailChangeTolerance polar.SpeedRatio
 	// Effects contains equipment effects prepared by the caller. When nil,
 	// effects are resolved for backward compatibility with direct step calls.
 	Effects *equipment.Effects
@@ -144,6 +149,8 @@ func EvaluateStep(
 		polar.TrueWindAngle(windAngle),
 		effects.AvailableSails,
 		effects.SpeedOptions,
+		input.CurrentSailID,
+		input.SailChangeTolerance,
 	)
 	if err != nil {
 		return StepResult{}, fmt.Errorf(
@@ -197,6 +204,8 @@ func selectSail(
 	windAngle polar.TrueWindAngle,
 	availableSails []polar.SailID,
 	options polar.SpeedOptions,
+	currentSailID polar.SailID,
+	tolerance polar.SpeedRatio,
 ) (polar.SailPerformance, error) {
 	if fixedSailID < 0 {
 		return polar.SailPerformance{}, fmt.Errorf(
@@ -205,11 +214,13 @@ func selectSail(
 		)
 	}
 	if fixedSailID == 0 {
-		return boatPolar.BestEffectiveSailAt(
+		return boatPolar.PreferredEffectiveSailAt(
 			windSpeed,
 			windAngle,
 			availableSails,
 			options,
+			currentSailID,
+			tolerance,
 		)
 	}
 

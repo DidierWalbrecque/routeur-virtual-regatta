@@ -14,3 +14,20 @@ dt { color: #667085; font-weight: 600; }
 dd { margin: 0; overflow-wrap: anywhere; }
 button { width: 100%; padding: 8px; cursor: pointer; }
 button:disabled { cursor: default; opacity: .55; }
+
+#config { border-top: 1px solid #e3e8ef; margin-top: 12px; padding-top: 12px; }
+#config label { display: block; color: #667085; font-weight: 600; margin-bottom: 5px; }
+#endpoint {
+  width: 100%;
+  padding: 7px 8px;
+  border: 1px solid #cdd5df;
+  border-radius: 6px;
+  font: inherit;
+  color: inherit;
+}
+.row { display: flex; gap: 8px; margin-top: 8px; }
+.row button { flex: 1; width: auto; }
+button.secondary { background: #eef2f6; }
+#endpoint-status { margin: 8px 0 0; min-height: 1.1em; }
+#endpoint-status.ok { color: #067647; }
+#endpoint-status.error { color: #b42318; }

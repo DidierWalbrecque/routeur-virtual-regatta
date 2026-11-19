@@ -1,0 +1,5 @@
+*_test.go
+floorplan/
+CLAUDE.local.md
+frontend/tests/
+flaskapp/tests/

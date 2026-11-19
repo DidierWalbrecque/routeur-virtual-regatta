@@ -63,13 +63,19 @@ func evaluateParentHeadingCandidates(
 					results <- parentHeadingResult{index: index, err: err}
 					continue
 				}
+				currentSailID := polar.SailID(0)
+				if parents[index].HasBoatState {
+					currentSailID = parents[index].BoatState.SailID
+				}
 				input := HeadingCandidatesInput{
-					Position: parents[index].Position,
-					Instant:  instant,
-					Duration: duration,
-					Owned:    owned,
-					Effects:  effects,
-					Headings: headings,
+					Position:            parents[index].Position,
+					Instant:             instant,
+					Duration:            duration,
+					Owned:               owned,
+					Effects:             effects,
+					Headings:            headings,
+					CurrentSailID:       currentSailID,
+					SailChangeTolerance: boatPolar.AutoSailChangeTolerance,
 				}
 				provider := weatherProvider
 				if refine != nil {
@@ -83,11 +89,16 @@ func evaluateParentHeadingCandidates(
 				candidates, err := EvaluateHeadingCandidates(ctx, provider, boatPolar, input)
 				if err == nil && refine != nil {
 					nextGate := parents[index].CourseProgress.NextGateIndex
-					if nextGate >= 0 && nextGate < len(refine.targets) {
-						candidates, err = refineHeadingCandidates(
-							ctx, provider, boatPolar, input, candidates,
-							refine.targets[nextGate], refine.spacing,
-						)
+					if nextGate >= 0 && nextGate < len(refine.waypoints) {
+						target, targetErr := refine.waypoints[nextGate].nearestFrom(input.Position)
+						if targetErr != nil {
+							err = targetErr
+						} else {
+							candidates, err = refineHeadingCandidates(
+								ctx, provider, boatPolar, input, candidates,
+								target, refine.spacing,
+							)
+						}
 					}
 				}
 				results <- parentHeadingResult{index: index, candidates: candidates, err: err}

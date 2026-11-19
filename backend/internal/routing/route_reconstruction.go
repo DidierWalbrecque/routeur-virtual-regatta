@@ -105,7 +105,7 @@ func (search IsochroneSearch) ReconstructBestRoute() (IsochroneRoute, error) {
 	}
 
 	steps := make([]IsochroneRouteStep, len(search.Frontiers))
-	nodeIndex := 0
+	nodeIndex, _ := search.bestFinalIndex()
 	for frontierIndex := len(search.Frontiers) - 1; frontierIndex >= 0; frontierIndex-- {
 		frontier := search.Frontiers[frontierIndex]
 		if nodeIndex < 0 || nodeIndex >= len(frontier.Nodes) {

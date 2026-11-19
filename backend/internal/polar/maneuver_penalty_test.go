@@ -307,3 +307,35 @@ func testWinchProfile() WinchProfile {
 		},
 	}
 }
+
+func TestWinchProfileTackPenaltyUsesCosineInterpolation(t *testing.T) {
+	profile := testWinchProfile() // lws 10, hws 30 ; vent faible 180 s, vent fort 300 s
+
+	// Au milieu (20 kn), cosinus et linéaire coïncident.
+	mid, err := profile.TackPenaltyAt(20, false)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if mid.Duration != 4*time.Minute {
+		t.Errorf("durée à 20 kn = %s, attendue 4m (point milieu)", mid.Duration)
+	}
+
+	// Sous le milieu (15 kn), le cosinus reste plus proche du vent faible que
+	// l'interpolation linéaire (qui donnerait 210 s).
+	low, err := profile.TackPenaltyAt(15, false)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if !(low.Duration > 3*time.Minute && low.Duration < 210*time.Second) {
+		t.Errorf("durée à 15 kn = %s, attendue dans ]180s, 210s[ (cosinus < linéaire)", low.Duration)
+	}
+
+	// Au-dessus du milieu (25 kn), le cosinus dépasse le linéaire (270 s).
+	high, err := profile.TackPenaltyAt(25, false)
+	if err != nil {
+		t.Fatalf("calcul refusé: %v", err)
+	}
+	if !(high.Duration > 270*time.Second && high.Duration < 5*time.Minute) {
+		t.Errorf("durée à 25 kn = %s, attendue dans ]270s, 300s[ (cosinus > linéaire)", high.Duration)
+	}
+}

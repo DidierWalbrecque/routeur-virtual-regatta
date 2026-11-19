@@ -15,7 +15,21 @@ Elle récupère uniquement la dernière réponse `/getboatinfos` et expose :
   avec un résumé de la structure de la manche (`legShape`) pour le diagnostic ;
 - indices permettant d'identifier le bateau (`boatHints`) : valeurs de la réponse du
   jeu dont la clé contient `polar`, `boat`, `hull`, `yacht` ou `class`, utilisées par
-  l'interface pour choisir la polaire.
+  l'interface pour choisir la polaire ;
+- type de course (`raceType`, par exemple `record`), dates d'ouverture et de
+  fermeture du leg (`startWindow.open`/`close`, issues de `leg.open`/`leg.close`)
+  et date associée à l'arrivée (`endDate`, issue de `leg.end.date`), en
+  millisecondes. Leur sens exact pour un record reste à confirmer : dans la
+  capture du Trophée Jules Verne, `close` (1er avril 2027) tombe après `endDate`
+  (25 mars 2027).
+
+Épreuve à record avant le départ : le jeu ne renvoie pas d'état de bateau (`bs`
+est nul). L'extension publie quand même la manche avec `preStart: true` et la
+ligne de départ comme position. Stamina, cap, vitesse et voile sont nuls. Les
+options sont vides, car inconnues, et le routeur garde alors les équipements
+choisis dans le formulaire. Une course classique sans état de bateau ne publie
+rien. Au changement de course, les portes franchies, l'arrivée et les zones
+mémorisées de l'ancienne course sont oubliées.
 
 Si Flask est démarré sur `http://localhost:5000`, chaque état est envoyé à `POST http://localhost:5000/api/vr/state`, puis relayé vers l'API Go. Le dernier état est consultable avec `GET http://localhost:5000/api/vr/state`. Les logs Flask utilisent le préfixe `[VR STATE]`.
 

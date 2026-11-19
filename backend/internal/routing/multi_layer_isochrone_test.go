@@ -267,7 +267,7 @@ func TestBuildIsochroneSearchLimitsFrontierSizeAdaptively(t *testing.T) {
 		)
 	}
 
-	cellSizeIncreased := false
+	limitReached := false
 	for index, frontier := range search.Frontiers {
 		if len(frontier.Nodes) > maxCandidates {
 			t.Errorf(
@@ -277,19 +277,21 @@ func TestBuildIsochroneSearchLimitsFrontierSizeAdaptively(t *testing.T) {
 				maxCandidates,
 			)
 		}
-		if frontier.CellSize < 1 {
+		// La frontière est bornée par secteurs de cap : les cellules ne
+		// grossissent plus.
+		if frontier.CellSize != 1 {
 			t.Errorf(
-				"front %d : cellule %.3f NM inférieure au minimum",
+				"front %d : cellule %.3f NM, attendue 1 NM",
 				index+1,
 				frontier.CellSize,
 			)
 		}
-		if frontier.CellSize > 1 {
-			cellSizeIncreased = true
+		if len(frontier.Nodes) == maxCandidates {
+			limitReached = true
 		}
 	}
-	if !cellSizeIncreased {
-		t.Fatal("la taille des cellules n'a jamais été augmentée")
+	if !limitReached {
+		t.Fatal("la limite de candidats n'a jamais été atteinte")
 	}
 
 	maximumCalls := 1 + (layerCount-1)*maxCandidates

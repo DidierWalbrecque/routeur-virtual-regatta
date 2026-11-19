@@ -2,6 +2,7 @@ package routing
 
 import (
 	"context"
+	"math"
 	"testing"
 	"time"
 
@@ -9,7 +10,6 @@ import (
 )
 
 func TestBuildIsochroneSearchTargetsNextMandatoryGate(t *testing.T) {
-	gateTarget := navigation.Position{Latitude: 1}
 	search, err := BuildIsochroneSearch(
 		context.Background(),
 		&staticWeatherProvider{
@@ -48,11 +48,15 @@ func TestBuildIsochroneSearchTargetsNextMandatoryGate(t *testing.T) {
 			best.Candidate.Heading,
 		)
 	}
-	if best.CourseTarget != gateTarget {
+	// La cible est désormais le point le plus proche sur la ligne de porte
+	// (et non son milieu fixe) : il reste sur la latitude de la porte et dans
+	// l'étendue de ses marques.
+	if math.Abs(float64(best.CourseTarget.Latitude)-1) > 1e-6 ||
+		float64(best.CourseTarget.Longitude) < -0.5-1e-6 ||
+		float64(best.CourseTarget.Longitude) > 0.5+1e-6 {
 		t.Errorf(
-			"cible de parcours = %+v, attendue %+v",
+			"cible de parcours = %+v, attendue sur la ligne de porte (lat 1, lon dans [-0.5, 0.5])",
 			best.CourseTarget,
-			gateTarget,
 		)
 	}
 	if best.CourseProgress.NextGateIndex != 0 {
@@ -73,5 +77,30 @@ func TestBuildIsochroneSearchTargetsNextMandatoryGate(t *testing.T) {
 			best.TargetRemainingDistance,
 			best.TargetInitialDistance,
 		)
+	}
+}
+
+func TestCourseGateClosestPointStaysOnSegment(t *testing.T) {
+	gate := CourseGate{
+		Name:       "porte",
+		FirstMark:  navigation.Position{Latitude: 1, Longitude: -1},
+		SecondMark: navigation.Position{Latitude: 1, Longitude: 1},
+	}
+	// Un point sous la porte se projette au même endroit le long de la ligne.
+	inside, err := gate.ClosestPoint(navigation.Position{Latitude: 0, Longitude: 0.8})
+	if err != nil {
+		t.Fatalf("projection impossible: %v", err)
+	}
+	if math.Abs(float64(inside.Latitude)-1) > 1e-6 ||
+		math.Abs(float64(inside.Longitude)-0.8) > 1e-3 {
+		t.Errorf("point projeté = %+v, attendu proche de {1, 0.8}", inside)
+	}
+	// Au-delà de la seconde marque, la projection est bornée à cette marque.
+	clamped, err := gate.ClosestPoint(navigation.Position{Latitude: 0, Longitude: 5})
+	if err != nil {
+		t.Fatalf("projection impossible: %v", err)
+	}
+	if math.Abs(float64(clamped.Longitude)-1) > 1e-6 {
+		t.Errorf("point projeté = %+v, attendu la seconde marque (lon 1)", clamped)
 	}
 }

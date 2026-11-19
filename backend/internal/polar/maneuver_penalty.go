@@ -3,6 +3,7 @@ package polar
 import (
 	"errors"
 	"fmt"
+	"math"
 	"time"
 )
 
@@ -111,10 +112,13 @@ func (profile WinchProfile) penaltyAt(
 		return detailed.HighWind, nil
 	}
 
-	position := float64(
+	linearPosition := float64(
 		(windSpeed - profile.LowWindThreshold) /
 			(profile.HighWindThreshold - profile.LowWindThreshold),
 	)
+	// Virtual Regatta interpole le timer winch en cosinus (ease-in-out) entre
+	// les seuils de vent faible et fort, non linéairement.
+	position := 0.5 - math.Cos(linearPosition*math.Pi)*0.5
 	result := ManeuverPenalty{
 		SpeedRatio: SpeedRatio(
 			float64(detailed.LowWind.SpeedRatio) +

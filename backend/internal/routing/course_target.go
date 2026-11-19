@@ -81,3 +81,39 @@ func (progress CourseProgress) Target(
 	}
 	return target, nil
 }
+
+// courseWaypoint is the moving target used to measure course progress: the
+// nearest point on an uncrossed gate's line, or the fixed final destination
+// once every gate has been crossed. Aiming at the nearest point on the gate
+// line rather than its centre lets the router pick the fastest crossing point
+// instead of being pulled toward the middle of the gate.
+type courseWaypoint struct {
+	gate        *CourseGate
+	destination navigation.Position
+}
+
+// nearestFrom returns the position aimed at from the given position.
+func (waypoint courseWaypoint) nearestFrom(
+	position navigation.Position,
+) (navigation.Position, error) {
+	if waypoint.gate != nil {
+		return waypoint.gate.ClosestPoint(position)
+	}
+	return waypoint.destination, nil
+}
+
+// distanceFrom returns the distance to the waypoint from the given position,
+// together with the aimed-at position used for that distance.
+func (waypoint courseWaypoint) distanceFrom(
+	position navigation.Position,
+) (navigation.NauticalMiles, navigation.Position, error) {
+	target, err := waypoint.nearestFrom(position)
+	if err != nil {
+		return 0, navigation.Position{}, err
+	}
+	distance, err := navigation.DistanceBetween(position, target)
+	if err != nil {
+		return 0, navigation.Position{}, err
+	}
+	return distance, target, nil
+}
