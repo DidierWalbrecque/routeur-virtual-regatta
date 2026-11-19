@@ -408,10 +408,23 @@ export function App() {
   );
 
   // Les marqueurs suivent toujours le formulaire, y compris au chargement (valeurs mémorisées)
-  // et après une modification indirecte (point de porte, saisie).
+  // et après une modification indirecte (point de porte, saisie). Un départ
+  // recopié depuis la position du bateau dans le jeu déplace seulement le
+  // marqueur : la route affichée n'est effacée que sur action de l'utilisateur.
+  const vrStartText = useRef("");
+  useEffect(() => {
+    if (form.start && form.start === vrStartText.current) {
+      const position = parseVirtualRegattaPosition(form.start);
+      if (position) setEndpoints((previous) => ({ ...previous, position }));
+      return;
+    }
+    updateEndpoints(form.start, form.destination);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start, updateEndpoints]);
   useEffect(() => {
     updateEndpoints(form.start, form.destination);
-  }, [form.start, form.destination, updateEndpoints]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.destination, updateEndpoints]);
 
   // L'arrivée officielle du jeu remplace la destination dès qu'elle change (nouveau leg, première lecture).
   const gameArrivalKey = vrState?.arrival ? `${vrState.arrival.latitude},${vrState.arrival.longitude}` : "";
@@ -548,6 +561,7 @@ export function App() {
       });
       setVrState(state);
       const position = formatVirtualRegattaPosition(state.position);
+      if (position) vrStartText.current = position;
       // Mise à jour silencieuse : la route affichée n'est pas effacée.
       setForm((previous) =>
         previous.positionSource === "vr"
@@ -571,11 +585,27 @@ export function App() {
     void refreshVrState();
   }, [refreshVrState]);
 
+  // La position du bateau est relue en continu tant que l'onglet est visible,
+  // et tout de suite au retour sur l'onglet : un rafraîchissement fait dans le
+  // jeu met ainsi à jour le départ sans ouvrir le formulaire.
   useEffect(() => {
-    if (!formOpen && !zonesOpen) return;
-    void refreshVrState();
-    const timer = setInterval(() => void refreshVrState(), VR_POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (!document.hidden) void refreshVrState();
+    }, VR_POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (!document.hidden) void refreshVrState();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refreshVrState]);
+
+  useEffect(() => {
+    if (formOpen || zonesOpen) void refreshVrState();
   }, [formOpen, zonesOpen, refreshVrState]);
 
   useEffect(() => {
