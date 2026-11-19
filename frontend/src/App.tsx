@@ -10,7 +10,7 @@ import { ZonesPanel } from "./ZonesPanel.tsx";
 import { formatLocalDateTime, formatVirtualRegattaPosition, parseLocalDate, parseVirtualRegattaPosition } from "./lib/geo.ts";
 import { formatDuration, GRIB_FORECAST_HOURS, horizonAllowedIn, horizonMinutes, HORIZON_OPTIONS, MAX_MINUTES_BY_MODE } from "./lib/horizon.ts";
 import { readSSEStream } from "./lib/route_stream.ts";
-import { useDepartureWindow, type DepartureWindowHandlers } from "./DepartureWindow.tsx";
+import { DeparturePanel, useDepartureWindow, type DepartureWindowHandlers } from "./DeparturePanel.tsx";
 import type { DepartureOutcome, DepartureWindowStart } from "./lib/departure_window.ts";
 import type { CalculationProgress } from "./lib/calculation_progress.ts";
 import { weatherSwitchMessage, type WeatherSwitch } from "./lib/weather_switch.ts";
@@ -219,6 +219,7 @@ export function App() {
     }
   });
   const [zonesOpen, setZonesOpen] = useState(false);
+  const [departureOpen, setDepartureOpen] = useState(false);
   const [showWind, setShowWind] = useState(() => {
     try {
       return window.localStorage.getItem(WIND_STORAGE_KEY) === "true";
@@ -755,7 +756,13 @@ export function App() {
     });
   };
 
-  const departureWindow = useDepartureWindow(compareDepartures);
+  // À la fin de la comparaison (ou à son arrêt), le tableau des résultats s'ouvre.
+  const departureWindow = useDepartureWindow(compareDepartures, () => {
+    setFormOpen(false);
+    setZonesOpen(false);
+    setDetailsOpen(false);
+    setDepartureOpen(true);
+  });
 
   // --- Calcul de la route en flux ---
   const submit = async () => {
@@ -875,6 +882,7 @@ export function App() {
           setFrame({ result: complete, showRoute: true, fit: true, key: String(frameCounter.current) });
           if ((complete.route?.length ?? 0) > 0) {
             setDetailsSummaryOnly(true);
+            setDepartureOpen(false);
             setDetailsOpen(true);
           }
           return;
@@ -963,6 +971,7 @@ export function App() {
   const openForm = () => {
     setZonesOpen(false);
     setDetailsOpen(false);
+    setDepartureOpen(false);
     setFormOpen(true);
   };
   const [selectedRow, setSelectedRow] = useState<{ index: number; point: Point } | null>(null);
@@ -990,6 +999,20 @@ export function App() {
         insets={mapInsets}
         onError={() => setMapError(true)}
       />
+      {departureWindow.running && (
+        <CalculationStatus
+          id="departure-calculation-status"
+          title="Comparaison des départs"
+          unitLabel="Départ"
+          preparingText="Préparation : départs possibles, météo et portes…"
+          cancelLabel="Arrêter la comparaison"
+          progress={departureWindow.progress}
+          startedAt={departureWindow.startedAt}
+          onCancel={departureWindow.cancel}
+          cancelOnEscape={!calculating}
+          stacked={calculating}
+        />
+      )}
       {calculating && (
         <CalculationStatus
           progress={progress}
@@ -1056,6 +1079,24 @@ export function App() {
         >
           <MaterialIcon name="alt_route" />
         </button>
+        {vrState?.preStart && (
+          <button
+            id="toggle-departure"
+            className={departureOpen || departureWindow.running ? "map-dock-button is-active" : "map-dock-button"}
+            type="button"
+            aria-label="Meilleure heure de départ"
+            aria-pressed={departureOpen}
+            data-tooltip="Meilleure heure de départ du record"
+            onClick={() => {
+              setFormOpen(false);
+              setZonesOpen(false);
+              setDetailsOpen(false);
+              setDepartureOpen((open) => !open);
+            }}
+          >
+            <MaterialIcon name="schedule" />
+          </button>
+        )}
         <hr />
         <button
           id="toggle-route-points"
@@ -1092,6 +1133,7 @@ export function App() {
           onClick={() => {
             setFormOpen(false);
             setDetailsOpen(false);
+            setDepartureOpen(false);
             setZonesOpen((open) => !open);
           }}
         >
@@ -1170,7 +1212,7 @@ export function App() {
           <MaterialIcon name="my_location" />
         </button>
       </div>
-      {hasRoute && !detailsOpen && !formOpen && !zonesOpen && (
+      {hasRoute && !detailsOpen && !formOpen && !zonesOpen && !departureOpen && (
         <button
           id="show-route-details"
           className="route-details-button"
@@ -1180,6 +1222,7 @@ export function App() {
           onClick={() => {
             setFormOpen(false);
             setZonesOpen(false);
+            setDepartureOpen(false);
             setDetailsSummaryOnly(false);
             setDetailsOpen(true);
           }}
@@ -1187,6 +1230,18 @@ export function App() {
           <MaterialIcon name="route" />
           Route et ordres
         </button>
+      )}
+      {departureOpen && vrState?.preStart && (
+        <DeparturePanel
+          model={departureWindow}
+          gateNames={checkpoints.map(checkpointName)}
+          onClose={() => setDepartureOpen(false)}
+          onUse={(departure) => {
+            setField("instant", formatLocalDateTime(departure));
+            console.info(`[DÉPART] Départ retenu : ${departure.toISOString()}`);
+            openForm();
+          }}
+        />
       )}
       {detailsOpen && result && <RouteDetailsPanel
           result={result}
@@ -1261,15 +1316,6 @@ export function App() {
           onSubmit={() => void submit()}
           onClose={() => setFormOpen(false)}
           startInput={startInput}
-          departureWindow={
-            vrState?.preStart
-              ? {
-                  model: departureWindow,
-                  onPick: (departure) => setField("instant", formatLocalDateTime(departure)),
-                  gateNames: checkpoints.map(checkpointName),
-                }
-              : null
-          }
         />
       )}
     </>

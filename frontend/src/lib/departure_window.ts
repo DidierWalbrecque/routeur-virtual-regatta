@@ -59,10 +59,19 @@ export function bestDepartureIndex(outcomes: DepartureOutcome[]): number {
 export function departureSummary(outcome: DepartureOutcome, totalGates: number, gateNames: string[] = []): string {
   if (outcome.reached) return `arrivée en ${formatDuration(outcome.elapsedHours * 60)}`;
   const gates = `${outcome.gatesCrossed}/${totalGates} porte${totalGates > 1 ? "s" : ""}`;
-  let target = outcome.nextTarget;
-  if (outcome.gatesCrossed >= totalGates) target = "l'arrivée";
-  else if (gateNames[outcome.gatesCrossed]) target = `la porte ${outcome.gatesCrossed + 1} (${gateNames[outcome.gatesCrossed]})`;
-  return `${gates} · ${Math.round(outcome.distanceNM)} NM de ${target}`;
+  return `${gates} · ${Math.round(outcome.distanceNM)} NM de ${departureTarget(outcome, totalGates, gateNames, true)}`;
+}
+
+/**
+ * Cible visée au bout de la durée comparée : « porte 2 (tribord) »,
+ * « arrivée », ou le nom brut du serveur faute de mieux. withArticle donne la
+ * forme à placer après « de » (« la porte 2… », « l'arrivée »).
+ */
+export function departureTarget(outcome: DepartureOutcome, totalGates: number, gateNames: string[] = [], withArticle = false): string {
+  if (outcome.gatesCrossed >= totalGates) return withArticle ? "l'arrivée" : "arrivée";
+  const name = gateNames[outcome.gatesCrossed];
+  if (!name) return outcome.nextTarget;
+  return `${withArticle ? "la porte" : "porte"} ${outcome.gatesCrossed + 1} (${name})`;
 }
 
 /**

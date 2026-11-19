@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import { bestDepartureIndex, departureBetter, departureGapNM, departureSummary } from "../src/lib/departure_window.ts";
+import { bestDepartureIndex, departureBetter, departureGapNM, departureSummary, departureTarget } from "../src/lib/departure_window.ts";
 import { checkpointName } from "../src/lib/vr.ts";
 
 const outcome = (fields) => ({
@@ -62,4 +62,11 @@ test("les portes sans nom de la capture du Jules Verne sont nommées par leur se
     departureSummary(outcome({ gatesCrossed: 1, distanceNM: 235, nextTarget: "Checkpoint 2.8" }), names.length, names),
     "1/13 portes · 235 NM de la porte 2 (tribord)",
   );
+});
+
+test("la porte visée s'affiche par son numéro et son nom", () => {
+  const names = ["Biscay", "tribord"];
+  assert.equal(departureTarget(outcome({ gatesCrossed: 1, nextTarget: "Checkpoint 2.8" }), 13, names), "porte 2 (tribord)");
+  assert.equal(departureTarget(outcome({ gatesCrossed: 13, nextTarget: "arrivée" }), 13, names), "arrivée");
+  assert.equal(departureTarget(outcome({ gatesCrossed: 5, nextTarget: "Cape Agulhas" }), 13, names), "Cape Agulhas");
 });
