@@ -55,7 +55,9 @@ test("une porte nommée « none » par le jeu affiche son sens de passage", () =
   assert.equal(checkpointLabel({ group: 1, id: 1, name: "none", display: "Bouée de Marie-Galante", start: point, end: point }, 0), "P1.1 — Bouée de Marie-Galante");
   assert.equal(checkpointLabel({ group: 2, id: 1, name: "Cap Horn", rhumb: true, start: point, end: point }, 0), "P2.1 — Cap Horn");
 
-  const [label] = checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: "none", side: "stbd", start: point, end: point }] });
+  // Le jeu ne montre pas les portes nommées « none » : la carte non plus.
+  assert.deepEqual(checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: " None ", side: "stbd", start: point, end: point }] }), []);
+  const [label] = checkpointFeatures({ checkpoints: [{ group: 4, id: 4, name: "buoy", side: "stbd", start: point, end: point }] });
   assert.equal(label.properties.name, "tribord");
   assert.equal(label.properties.label, "P4.4 — tribord");
 
@@ -178,4 +180,14 @@ test("isochroneDisplayInterval espace les isochrones selon le zoom", () => {
   assert.equal(isochroneDisplayInterval(15, 0.3, 2), 30);
   // Vitesse inconnue : on garde le pas.
   assert.equal(isochroneDisplayInterval(10, 0, 0.5), 10);
+});
+
+test("minZoomForWidth garde le monde au moins aussi large que la carte", async () => {
+  const { minZoomForWidth } = await import("../src/lib/geo.ts");
+  // 512 px de monde au zoom 0 : 2312 px de carte demandent un zoom ≥ log2(2312/512) ≈ 2,18.
+  assert.ok(Math.abs(minZoomForWidth(2312) - Math.log2(2312 / 512)) < 1e-12);
+  assert.ok(512 * 2 ** minZoomForWidth(2312) >= 2312 - 1e-9);
+  // Petit écran : jamais sous le zoom 1 ; largeur inconnue : zoom 1.
+  assert.equal(minZoomForWidth(400), 1);
+  assert.equal(minZoomForWidth(0), 1);
 });

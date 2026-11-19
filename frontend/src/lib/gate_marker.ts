@@ -1,6 +1,6 @@
 /**
- * Repère d'une porte : un anneau autour de sa marque de départ, avec le numéro
- * d'ordre de passage au centre.
+ * Repère d'une porte : un anneau autour de chacune de ses deux marques, avec le
+ * numéro d'ordre de passage au centre.
  *
  * Une porte « tribord » se franchit de la gauche vers la droite de la ligne
  * orientée marque de départ → seconde marque : le bateau laisse la marque à
@@ -15,6 +15,17 @@ export function gateRounding(side: string | undefined, rhumb: boolean | undefine
   const value = String(side || "").toLowerCase();
   if (value === "stbd" || value === "starboard") return "clockwise";
   if (value === "port") return "counterclockwise";
+  return "free";
+}
+
+/**
+ * Sens de contournement de la seconde marque (arrivée) d'une porte. Le bateau
+ * passe entre les deux marques : celle de départ est laissée d'un bord, la
+ * seconde de l'autre, et se contourne donc dans le sens inverse.
+ */
+export function endMarkRounding(rounding: GateRounding): GateRounding {
+  if (rounding === "clockwise") return "counterclockwise";
+  if (rounding === "counterclockwise") return "clockwise";
   return "free";
 }
 

@@ -342,7 +342,7 @@ func runPracticalHeadings(
 				Latitude:  state.Position.Latitude,
 				Longitude: state.Position.Longitude,
 			}
-			payload.Owned = equipmentIDsFromVRState(state)
+			payload.Owned = ownedEquipmentFromVRState(state, payload.Owned)
 		}
 	}
 

@@ -29,7 +29,7 @@ import {
   zonesForRequest,
   type Zone,
 } from "./lib/zones.ts";
-import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, type Equipment } from "./lib/vr.ts";
+import { EQUIPMENT, equipmentFromVrOptions, checkpointKey, meaningfulName, usableCheckpoints, vrStatusText, type Equipment } from "./lib/vr.ts";
 
 const VR_POLL_INTERVAL_MS = 10_000;
 const WIND_STORAGE_KEY = "routeur.showWind";
@@ -101,6 +101,9 @@ function initialForm(): FormState {
 // Réglages du formulaire mémorisés d'une session à l'autre (sauf l'heure de
 // départ, toujours réinitialisée à « maintenant »).
 const FORM_STORAGE_KEY = "routeur-form";
+// Dernier départ de course appliqué au formulaire : un rechargement de la page
+// n'écrase pas un départ saisi à la main pendant la même course.
+const RACE_START_STORAGE_KEY = "routeur.lastRaceStart";
 
 function loadForm(): FormState {
   const base = initialForm();
@@ -408,10 +411,23 @@ export function App() {
   );
 
   // Les marqueurs suivent toujours le formulaire, y compris au chargement (valeurs mémorisées)
-  // et après une modification indirecte (point de porte, saisie).
+  // et après une modification indirecte (point de porte, saisie). Un départ
+  // recopié depuis la position du bateau dans le jeu déplace seulement le
+  // marqueur : la route affichée n'est effacée que sur action de l'utilisateur.
+  const vrStartText = useRef("");
+  useEffect(() => {
+    if (form.start && form.start === vrStartText.current) {
+      const position = parseVirtualRegattaPosition(form.start);
+      if (position) setEndpoints((previous) => ({ ...previous, position }));
+      return;
+    }
+    updateEndpoints(form.start, form.destination);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.start, updateEndpoints]);
   useEffect(() => {
     updateEndpoints(form.start, form.destination);
-  }, [form.start, form.destination, updateEndpoints]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.destination, updateEndpoints]);
 
   // L'arrivée officielle du jeu remplace la destination dès qu'elle change (nouveau leg, première lecture).
   const gameArrivalKey = vrState?.arrival ? `${vrState.arrival.latitude},${vrState.arrival.longitude}` : "";
@@ -422,6 +438,27 @@ export function App() {
     console.info(`[VR] Arrivée du jeu : ${vrState.arrival.name || "sans nom"}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameArrivalKey]);
+
+  // Le départ officiel du jeu remplace le départ saisi à la main quand la course
+  // change (nouveau départ). En mode Virtual Regatta, la position du bateau
+  // fait déjà foi.
+  const gameStartKey = vrState?.legStart ? `${vrState.legStart.latitude},${vrState.legStart.longitude}` : "";
+  useEffect(() => {
+    const legStart = vrState?.legStart;
+    if (!legStart || !gameStartKey) return;
+    let applied = "";
+    try {
+      applied = window.localStorage.getItem(RACE_START_STORAGE_KEY) ?? "";
+      window.localStorage.setItem(RACE_START_STORAGE_KEY, gameStartKey);
+    } catch {
+      // Stockage indisponible : le départ de la course s'applique à chaque lecture.
+    }
+    if (applied === gameStartKey) return;
+    const text = formatVirtualRegattaPosition({ latitude: legStart.latitude, longitude: legStart.longitude });
+    setForm((previous) => (previous.positionSource === "vr" || previous.start === text ? previous : { ...previous, start: text }));
+    console.info(`[VR] Départ de la course : ${legStart.name || "sans nom"}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameStartKey]);
 
   // En mode Virtual Regatta, le marqueur de calcul suit la position live du bateau.
   const boatLatitude = vrState?.position?.latitude;
@@ -548,17 +585,22 @@ export function App() {
       });
       setVrState(state);
       const position = formatVirtualRegattaPosition(state.position);
-      // Mise à jour silencieuse : la route affichée n'est pas effacée.
+      if (position) vrStartText.current = position;
+      // Mise à jour silencieuse : la route affichée n'est pas effacée. Avant le
+      // départ d'un record, les options du joueur sont inconnues : les
+      // équipements choisis dans le formulaire sont conservés.
       setForm((previous) =>
         previous.positionSource === "vr"
-          ? { ...previous, start: position || previous.start, equipment: equipmentFromVrOptions(state.options) }
+          ? {
+              ...previous,
+              start: position || previous.start,
+              equipment: state.preStart ? previous.equipment : equipmentFromVrOptions(state.options),
+            }
           : previous,
       );
-      const stamina = state.stamina == null ? "inconnue" : `${Number(state.stamina).toFixed(1)} %`;
-      const remaining = usableCheckpoints(state).length;
       setVrStatus({
         ok: true,
-        text: `Virtual Regatta connecté · stamina ${stamina} · ${remaining} porte(s) restante(s)`,
+        text: vrStatusText(state),
         title: state.updatedAt ? `Mise à jour ${new Date(Number(state.updatedAt)).toLocaleTimeString()}` : undefined,
       });
     } catch (error) {
@@ -571,11 +613,27 @@ export function App() {
     void refreshVrState();
   }, [refreshVrState]);
 
+  // La position du bateau est relue en continu tant que l'onglet est visible,
+  // et tout de suite au retour sur l'onglet : un rafraîchissement fait dans le
+  // jeu met ainsi à jour le départ sans ouvrir le formulaire.
   useEffect(() => {
-    if (!formOpen && !zonesOpen) return;
-    void refreshVrState();
-    const timer = setInterval(() => void refreshVrState(), VR_POLL_INTERVAL_MS);
-    return () => clearInterval(timer);
+    const timer = setInterval(() => {
+      if (!document.hidden) void refreshVrState();
+    }, VR_POLL_INTERVAL_MS);
+    const onVisible = () => {
+      if (!document.hidden) void refreshVrState();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
+  }, [refreshVrState]);
+
+  useEffect(() => {
+    if (formOpen || zonesOpen) void refreshVrState();
   }, [formOpen, zonesOpen, refreshVrState]);
 
   useEffect(() => {

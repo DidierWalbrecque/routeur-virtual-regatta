@@ -60,10 +60,25 @@ type vrStateArrival struct {
 	Name      string   `json:"name,omitempty"`
 }
 
+// vrStateStartWindow porte les dates d'ouverture et de fermeture du leg
+// (leg.open.date et leg.close.date, en millisecondes depuis l'époque Unix).
+type vrStateStartWindow struct {
+	Open  *int64 `json:"open"`
+	Close *int64 `json:"close"`
+}
+
 type vrState struct {
-	RaceID            string              `json:"raceId"`
-	LegNum            string              `json:"legNum"`
-	UserID            string              `json:"userId"`
+	RaceID string `json:"raceId"`
+	LegNum string `json:"legNum"`
+	UserID string `json:"userId"`
+	// RaceType est le type de course du jeu (leg.race.type), par exemple "record".
+	RaceType string `json:"raceType,omitempty"`
+	// PreStart indique un record dont le départ n'est pas encore pris : la
+	// position est la ligne de départ, les options du joueur sont inconnues.
+	PreStart    bool                `json:"preStart,omitempty"`
+	StartWindow *vrStateStartWindow `json:"startWindow,omitempty"`
+	// EndDate est la date associée à l'arrivée du leg (leg.end.date, millisecondes).
+	EndDate           *int64              `json:"endDate,omitempty"`
 	DisplayName       string              `json:"displayName"`
 	Position          vrStatePosition     `json:"position"`
 	Stamina           *float64            `json:"stamina"`
@@ -183,6 +198,10 @@ func (store *vrStateStore) snapshot() (vrState, bool) {
 		legStart := *store.current.LegStart
 		state.LegStart = &legStart
 	}
+	if store.current.StartWindow != nil {
+		startWindow := *store.current.StartWindow
+		state.StartWindow = &startWindow
+	}
 	return state, true
 }
 
@@ -244,6 +263,16 @@ func initialNavigationFromVRState(state *vrState) *routing.InitialNavigationStat
 		Heading: heading,
 		SailID:  polar.SailID(state.CurrentSail.ID),
 	}
+}
+
+// ownedEquipmentFromVRState retient les équipements du bateau VR. Avant le
+// départ d'un record, les options du joueur sont inconnues (le jeu ne renvoie
+// pas d'état de bateau) : les équipements demandés restent alors valables.
+func ownedEquipmentFromVRState(state vrState, requested []string) []string {
+	if state.PreStart {
+		return requested
+	}
+	return equipmentIDsFromVRState(state)
 }
 
 // equipmentIDsFromVRState converts the option identifiers exposed by the game
@@ -321,6 +350,9 @@ func validateVRState(state vrState) error {
 	}
 	if state.Stamina != nil && (*state.Stamina < 0 || *state.Stamina > 100) {
 		return fmt.Errorf("stamina hors limites: %.3f", *state.Stamina)
+	}
+	if window := state.StartWindow; window != nil && window.Open != nil && window.Close != nil && *window.Close < *window.Open {
+		return fmt.Errorf("dates du leg inversées: fermeture %d avant ouverture %d", *window.Close, *window.Open)
 	}
 	return nil
 }

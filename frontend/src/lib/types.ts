@@ -66,6 +66,14 @@ export type VrState = {
   arrival?: { latitude: number; longitude: number; radius?: number | null; name?: string } | null;
   legStart?: { latitude: number; longitude: number; name?: string } | null;
   state?: string;
+  /** Type de course du jeu (leg.race.type), par exemple « record ». */
+  raceType?: string;
+  /** Record dont le départ n'est pas pris : position = ligne de départ, options inconnues. */
+  preStart?: boolean;
+  /** Ouverture et fermeture du leg (leg.open.date, leg.close.date, millisecondes). */
+  startWindow?: { open: number | null; close: number | null } | null;
+  /** Date associée à l'arrivée du leg (leg.end.date, millisecondes). */
+  endDate?: number | null;
   stamina?: number | null;
   options?: string[];
   checkpoints?: Checkpoint[];

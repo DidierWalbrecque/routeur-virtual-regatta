@@ -1,10 +1,10 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from "react";
 import type { GeoJSONSource, ImageSource, LngLatBounds, Map as MapLibreMap, MapMouseEvent, Marker } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
-import { approximateDistanceNM, circlePolygon, cutContourAtBreaks, forwardContour, isochroneDisplayInterval, isochroneIntervals, medianAdvanceNM, splitContour, trimStalledContour } from "./lib/geo.ts";
+import { approximateDistanceNM, circlePolygon, cutContourAtBreaks, forwardContour, isochroneDisplayInterval, isochroneIntervals, medianAdvanceNM, minZoomForWidth, splitContour, trimStalledContour } from "./lib/geo.ts";
 import type { Isochrone, Point, RouteResult } from "./lib/types.ts";
-import { checkpointFeatures, checkpointKey, checkpointName, usableCheckpoints } from "./lib/vr.ts";
-import { gateRingSvg, gateRounding, gateRoundingLabel } from "./lib/gate_marker.ts";
+import { checkpointFeatures, gateMarks, usableCheckpoints } from "./lib/vr.ts";
+import { endMarkRounding, gateRingSvg, gateRounding, gateRoundingLabel } from "./lib/gate_marker.ts";
 import { draftFeatureCollection, zonesFeatureCollection, type Zone } from "./lib/zones.ts";
 import type { VrState } from "./lib/types.ts";
 import { windFieldPixels, type WindField } from "./lib/beaufort.ts";
@@ -486,13 +486,22 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         },
         center: [DEFAULT_DEPARTURE.longitude, DEFAULT_DEPARTURE.latitude],
         zoom: 10,
-        minZoom: 5,
+        // Dézoom jusqu'au globe entier (records autour du monde), borné ensuite
+        // par minZoomForWidth selon la largeur de la carte.
+        minZoom: 1,
         attributionControl: {},
         locale: MAP_LOCALE,
       });
       mapRef.current = map;
       // À gauche : les panneaux et le bouton des détails occupent la droite.
       map.addControl(new maplibregl.NavigationControl(), "top-left");
+      // Le monde reste au moins aussi large que la carte : deux copies d'un même
+      // point ne sont jamais visibles ensemble (pas de nom de porte en double),
+      // et les repères HTML, posés sur la copie la plus proche du centre,
+      // restent sur la même copie que les noms.
+      const fitMinZoom = () => map?.setMinZoom(minZoomForWidth(map.getContainer().clientWidth));
+      fitMinZoom();
+      map.on("resize", fitMinZoom);
 
       map.on("load", () => {
         if (!map) return;
@@ -534,8 +543,8 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
           },
         });
 
-        // Portes : un repère HTML animé sur la marque de départ (voir plus bas) ;
-        // la carte n'affiche que leur nom, à côté du repère.
+        // Portes : un repère HTML animé sur chaque marque (voir plus bas) ; la
+        // carte n'affiche que leur nom, à côté du repère de la marque de départ.
         map.addSource("vr-checkpoints", { type: "geojson", data: EMPTY as never });
         map.addLayer({
           id: "vr-checkpoint-labels",
@@ -905,25 +914,27 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     const map = mapRef.current;
     const api = apiRef.current;
     if (!ready || !map || !api) return;
-    // Noms des portes (couche de texte) et repères animés sur leur marque de départ.
+    // Noms des portes (couche de texte) et repères animés sur leurs deux marques.
     const features = checkpointFeatures(vrState).filter((feature) => feature.properties.kind === "label");
     setData(map, "vr-checkpoints", { type: "FeatureCollection", features });
     gateMarkers.current.forEach((marker) => marker.remove());
-    gateMarkers.current = usableCheckpoints(vrState).flatMap((checkpoint, index) => {
-      const start = checkpoint.start;
-      if (!start || !Number.isFinite(Number(start.latitude)) || !Number.isFinite(Number(start.longitude))) return [];
-      const rounding = gateRounding(checkpoint.side, checkpoint.rhumb);
+    // Chaque porte a un repère sur sa marque de départ et un sur sa marque
+    // d'arrivée, contournée dans le sens inverse.
+    gateMarkers.current = gateMarks(vrState).map((mark) => {
+      const startRounding = gateRounding(mark.side, mark.rhumb);
+      const rounding = mark.end ? endMarkRounding(startRounding) : startRounding;
       const element = document.createElement("div");
       element.className = `gate-marker is-${rounding}`;
-      const name = `Porte ${index + 1} (P${checkpointKey(checkpoint, index)} — ${checkpointName(checkpoint)}) : ${gateRoundingLabel(rounding)}`;
+      const which = mark.end ? "marque d'arrivée" : "marque de départ";
+      const name = `Porte ${mark.order} (P${mark.checkpoint} — ${mark.name}), ${which} : ${gateRoundingLabel(rounding)}`;
       element.title = name;
       element.setAttribute("role", "img");
       element.setAttribute("aria-label", name);
-      element.innerHTML = `<span class="gate-ring">${gateRingSvg(rounding)}</span><span class="gate-order">${index + 1}</span>`;
-      return [new api.Marker({ element }).setLngLat([Number(start.longitude), Number(start.latitude)]).addTo(map)];
+      element.innerHTML = `<span class="gate-ring">${gateRingSvg(rounding)}</span><span class="gate-order">${mark.order}</span>`;
+      return new api.Marker({ element }).setLngLat([mark.position.longitude, mark.position.latitude]).addTo(map);
     });
-    // Cadrage sur les marques de départ : les secondes extrémités, souvent
-    // lointaines, ne sont plus dessinées.
+    // Cadrage sur les marques de départ seulement : les marques d'arrivée,
+    // souvent lointaines (jusqu'en Antarctique), éloigneraient trop la vue.
     const coordinates = features.map((feature) => feature.geometry.coordinates as number[]);
     const nextKey = JSON.stringify(coordinates);
     if (nextKey !== checkpointKeyRef.current && coordinates.length > 0) {

@@ -281,3 +281,12 @@ export function circlePolygon(center: Point, radiusNM: number, steps = 64): Poin
   }
   return points;
 }
+
+/** Largeur du monde au zoom 0 dans MapLibre, en pixels CSS (512 · 2^zoom). */
+const WORLD_WIDTH_AT_ZOOM_0 = 512;
+
+/** Zoom minimal pour que le monde soit au moins aussi large que la carte (jamais sous 1). */
+export function minZoomForWidth(width: number): number {
+  if (!Number.isFinite(width) || width <= 0) return 1;
+  return Math.max(1, Math.log2(width / WORLD_WIDTH_AT_ZOOM_0));
+}

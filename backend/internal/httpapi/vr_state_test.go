@@ -196,3 +196,58 @@ func TestCourseGatesFromVRStateIgnoresPassedAndLandGates(t *testing.T) {
 		t.Fatalf("portes retenues = %v, attendu [bouée sans indication]", names)
 	}
 }
+
+func TestVRStateKeepsRecordPreStartFields(t *testing.T) {
+	store := newVRStateStore()
+	body := `{"raceId":"817","legNum":"1","preStart":true,"raceType":"record",` +
+		`"position":{"latitude":48.52034,"longitude":-5.143132},"stamina":null,"options":[],` +
+		`"startWindow":{"open":1794142804188,"close":1806620340000},"endDate":1806015540000,` +
+		`"legStart":{"latitude":48.52034,"longitude":-5.143132,"name":"Ouessant"}}`
+	recorder := httptest.NewRecorder()
+	store.post(recorder, httptest.NewRequest(http.MethodPost, "/api/vr/state", strings.NewReader(body)))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("statut %d : %s", recorder.Code, recorder.Body.String())
+	}
+
+	read := httptest.NewRecorder()
+	store.get(read, httptest.NewRequest(http.MethodGet, "/api/vr/state", nil))
+	var state vrState
+	if err := json.Unmarshal(read.Body.Bytes(), &state); err != nil {
+		t.Fatal(err)
+	}
+	if !state.PreStart || state.RaceType != "record" {
+		t.Fatalf("record avant départ perdu : preStart=%t raceType=%q", state.PreStart, state.RaceType)
+	}
+	if state.StartWindow == nil || state.StartWindow.Open == nil || *state.StartWindow.Open != 1794142804188 ||
+		state.StartWindow.Close == nil || *state.StartWindow.Close != 1806620340000 {
+		t.Fatalf("fenêtre de départ perdue : %+v", state.StartWindow)
+	}
+	if state.EndDate == nil || *state.EndDate != 1806015540000 {
+		t.Fatalf("date d'arrivée du leg perdue : %v", state.EndDate)
+	}
+	if state.Position.Latitude != 48.52034 || state.Stamina != nil {
+		t.Fatalf("position ou stamina inattendue : %+v %v", state.Position, state.Stamina)
+	}
+}
+
+func TestVRStateRejectsInvertedStartWindow(t *testing.T) {
+	store := newVRStateStore()
+	body := `{"position":{"latitude":48,"longitude":-5},"startWindow":{"open":2000,"close":1000}}`
+	recorder := httptest.NewRecorder()
+	store.post(recorder, httptest.NewRequest(http.MethodPost, "/api/vr/state", strings.NewReader(body)))
+	if recorder.Code != http.StatusBadRequest {
+		t.Fatalf("statut %d, attendu 400 : %s", recorder.Code, recorder.Body.String())
+	}
+}
+
+func TestOwnedEquipmentFromVRStateKeepsRequestedBeforeRecordStart(t *testing.T) {
+	requested := []string{"foils", "light"}
+	got := ownedEquipmentFromVRState(vrState{PreStart: true}, requested)
+	if strings.Join(got, ",") != "foils,light" {
+		t.Fatalf("avant départ : équipements = %v, attendus %v", got, requested)
+	}
+	got = ownedEquipmentFromVRState(vrState{Options: []string{"heavy"}}, requested)
+	if strings.Join(got, ",") != "heavy" {
+		t.Fatalf("après départ : équipements = %v, attendus [heavy]", got)
+	}
+}
