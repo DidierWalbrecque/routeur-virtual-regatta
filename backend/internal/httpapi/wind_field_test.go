@@ -67,3 +67,39 @@ func TestSampleWindFieldSpacesRowsLikeTheMap(t *testing.T) {
 		t.Fatalf("ligne du milieu : %v nœuds, attendu %v (latitude %.1f)", speeds[4], want, middle)
 	}
 }
+
+// longitudeWind ne connaît que les longitudes de [-180, 180], comme la grille
+// GFS, et souffle à autant de mètres par seconde que la longitude.
+type longitudeWind struct{}
+
+func (longitudeWind) WindAt(_ context.Context, position navigation.Position, _ time.Time) (navigation.Wind, error) {
+	if position.Longitude < -180 || position.Longitude >= 180 {
+		return navigation.Wind{}, fmt.Errorf("longitude %v hors grille", position.Longitude)
+	}
+	return navigation.Wind{Speed: navigation.MetersPerSecond(math.Abs(float64(position.Longitude)))}, nil
+}
+
+func TestSampleWindFieldCoversAViewAcrossTheAntimeridian(t *testing.T) {
+	// Vue du Pacifique en dézoom complet : de 150° E à 110° W, notée 250.
+	bounds := windFieldBounds{South: -10, North: 10, West: 150, East: 250}
+	speeds, err := sampleWindField(context.Background(), longitudeWind{}, time.Now(), bounds, 3, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	knots := func(longitude float64) float64 { return math.Round(longitude*3600/1852*10) / 10 }
+	// Colonnes à 150°, 200° (= -160°) et 250° (= -110°).
+	want := []float64{knots(150), knots(160), knots(110)}
+	for col, expected := range want {
+		if speeds[col] != expected {
+			t.Fatalf("colonne %d : %v nœuds, attendu %v (champ %v)", col, speeds[col], expected, speeds)
+		}
+	}
+}
+
+func TestWrapLongitude(t *testing.T) {
+	for _, tc := range []struct{ in, want float64 }{{0, 0}, {180, -180}, {250, -110}, {-190, 170}, {540, -180}, {-540, -180}, {725, 5}} {
+		if got := wrapLongitude(tc.in); math.Abs(got-tc.want) > 1e-9 {
+			t.Fatalf("wrapLongitude(%v) = %v, attendu %v", tc.in, got, tc.want)
+		}
+	}
+}

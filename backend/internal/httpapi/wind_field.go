@@ -68,8 +68,10 @@ func windFieldHandler(response http.ResponseWriter, request *http.Request) {
 	}
 	bounds.South = math.Max(bounds.South, -85)
 	bounds.North = math.Min(bounds.North, 85)
-	bounds.West = math.Max(bounds.West, -180)
-	bounds.East = math.Min(bounds.East, 180)
+	// Longitudes non ramenées à [-180, 180] : une vue qui franchit
+	// l'antiméridien (dézoom complet, Pacifique) demande par exemple 150 à 250.
+	// La zone ne couvre jamais plus d'un tour du globe.
+	bounds.East = math.Min(bounds.East, bounds.West+360)
 	if bounds.South >= bounds.North || bounds.West >= bounds.East {
 		writeJSONError(response, http.StatusBadRequest, "zone vide ou inversée")
 		return
@@ -177,6 +179,15 @@ func loadWindFieldProvider(paths []string) (weather.WeatherProvider, error) {
 	return weather.NewGRIB2WeatherProvider(grids...)
 }
 
+// wrapLongitude ramène une longitude dans [-180, 180).
+func wrapLongitude(longitude float64) float64 {
+	wrapped := math.Mod(longitude+180, 360)
+	if wrapped < 0 {
+		wrapped += 360
+	}
+	return wrapped - 180
+}
+
 func mercatorY(latitude float64) float64 {
 	return math.Log(math.Tan(math.Pi/4 + latitude*math.Pi/360))
 }
@@ -202,7 +213,7 @@ func sampleWindField(
 		}
 		latitude := latitudeFromMercatorY(top + (bottom-top)*float64(row)/float64(rows-1))
 		for col := range cols {
-			longitude := bounds.West + (bounds.East-bounds.West)*float64(col)/float64(cols-1)
+			longitude := wrapLongitude(bounds.West + (bounds.East-bounds.West)*float64(col)/float64(cols-1))
 			wind, err := provider.WindAt(ctx, navigation.Position{
 				Latitude:  navigation.Latitude(latitude),
 				Longitude: navigation.Longitude(longitude),
