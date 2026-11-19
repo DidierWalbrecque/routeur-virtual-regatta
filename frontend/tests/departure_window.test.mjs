@@ -119,3 +119,17 @@ test("le retard hors milles se dit en portes, ou en arrivée manquée", async ()
   assert.equal(departureLagLabel(outcome({ gatesCrossed: 3, distanceNM: 150 }), best), null);
   assert.equal(departureLagLabel(outcome({ gatesCrossed: 13 }), outcome({ reached: true, elapsedHours: 60 })), "n'arrive pas");
 });
+
+test("deux départs identiques sont tous deux meilleurs", async () => {
+  const { bestDepartureIndices, departuresTied } = await import("../src/lib/departure_window.ts");
+  const list = [
+    outcome({ departure: "2026-11-20T00:00:00Z", gatesCrossed: 1, distanceNM: 300 }),
+    outcome({ departure: "2026-11-20T12:00:00Z", gatesCrossed: 1, distanceNM: 235.2 }),
+    outcome({ departure: "2026-11-21T00:00:00Z", gatesCrossed: 1, distanceNM: 234.8 }),
+    outcome({ departure: "2026-11-21T12:00:00Z", gatesCrossed: 1, distanceNM: 236 }),
+  ];
+  assert.deepEqual(bestDepartureIndices(list), [1, 2]);
+  assert.deepEqual(bestDepartureIndices([]), []);
+  assert.equal(departuresTied(outcome({ gatesCrossed: 2, distanceNM: 100 }), outcome({ gatesCrossed: 1, distanceNM: 100 })), false);
+  assert.equal(departuresTied(outcome({ reached: true, elapsedHours: 50 }), outcome({ reached: true, elapsedHours: 50.001 })), true);
+});

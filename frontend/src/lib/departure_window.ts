@@ -51,6 +51,25 @@ export function bestDepartureIndex(outcomes: DepartureOutcome[]): number {
 }
 
 /**
+ * Deux départs à égalité, tels que le tableau les affiche : même arrivée et
+ * même durée à la minute près, ou mêmes portes franchies et même distance au
+ * mille près. Le calcul se fait sur une grille de 5 NM : un écart de moins
+ * d'un mille ne départage pas deux départs.
+ */
+export function departuresTied(a: DepartureOutcome, b: DepartureOutcome): boolean {
+  if (a.reached !== b.reached) return false;
+  if (a.reached) return Math.round(a.elapsedHours * 60) === Math.round(b.elapsedHours * 60);
+  return a.gatesCrossed === b.gatesCrossed && Math.round(a.distanceNM) === Math.round(b.distanceNM);
+}
+
+/** Indices de tous les meilleurs départs : le meilleur et ceux à égalité avec lui. */
+export function bestDepartureIndices(outcomes: DepartureOutcome[]): number[] {
+  const best = bestDepartureIndex(outcomes);
+  if (best < 0) return [];
+  return outcomes.flatMap((outcome, index) => (departuresTied(outcome, outcomes[best]) ? [index] : []));
+}
+
+/**
  * Où en est la route de ce départ au bout de la durée comparée. gateNames
  * donne le nom affiché de chaque porte restante, dans l'ordre de passage : le
  * serveur ne connaît que le nom brut (« Checkpoint 2.8 » pour une porte sans

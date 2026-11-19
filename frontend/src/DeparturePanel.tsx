@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   bestDepartureIndex,
+  bestDepartureIndices,
   clampPage,
   COMPARISON_HOURS,
   DEPARTURES_PER_PAGE,
@@ -128,6 +129,9 @@ type Props = {
 export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
   const { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked } = model;
   const best = bestDepartureIndex(outcomes);
+  // Les départs à égalité avec le meilleur sont tous affichés comme meilleurs.
+  const bestSet = new Set(bestDepartureIndices(outcomes));
+  const isBest = (index: number) => bestSet.has(index);
   const total = start?.departures.length ?? 0;
   const totalGates = start?.totalGates ?? 0;
   const hours = start?.comparisonHours ?? comparisonHours;
@@ -153,6 +157,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
   const first = currentPage * DEPARTURES_PER_PAGE;
   const visible = listed.slice(first, first + DEPARTURES_PER_PAGE);
   const bestPage = pageOf(positionOf(best));
+  const bestPages = new Set([...bestSet].map((index) => pageOf(positionOf(index))));
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -178,8 +183,12 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
   const verdict = (() => {
     if (!selected || best < 0) return null;
     const date = formatLongDate(selected.departure);
-    if (selectedIndex === best) {
-      return running ? `En tête pour l'instant : le départ du ${date} ${where(selected)}.` : `Le départ du ${date} est le meilleur : il ${where(selected)}.`;
+    if (isBest(selectedIndex)) {
+      const others = [...bestSet].filter((index) => index !== selectedIndex).map((index) => `du ${formatLongDate(outcomes[index].departure)}`);
+      const tie = others.length > 0 ? `, à égalité avec le départ ${others.join(" et celui ")}` : "";
+      return running
+        ? `En tête pour l'instant${tie ? ` à égalité` : ""} : le départ du ${date} ${where(selected)}.`
+        : `Le départ du ${date} est le meilleur${tie} : il ${where(selected)}.`;
     }
     const gap = departureGapNM(selected, outcomes[best]);
     const behind =
@@ -267,7 +276,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                   "departure-bar",
                   !done ? "is-pending" : "",
                   bar && !bar.comparable ? "is-off" : "",
-                  done && slot.outcomeIndex === best ? "is-best" : "",
+                  done && isBest(slot.outcomeIndex) ? "is-best" : "",
                   done && slot.outcomeIndex === selectedIndex ? "is-selected" : "",
                 ].filter(Boolean);
                 const lagLabel = outcome && best >= 0 ? departureLagLabel(outcome, outcomes[best]) : null;
@@ -329,7 +338,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                 {visible.map(({ outcome, index }) => {
                   const gap = best >= 0 && index !== best ? departureGapNM(outcome, outcomes[best]) : null;
                   const lag =
-                    index === best || best < 0
+                    isBest(index) || best < 0
                       ? "—"
                       : gap !== null
                         ? `${Math.round(gap)} NM`
@@ -337,7 +346,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                           ? formatDuration((outcome.elapsedHours - outcomes[best].elapsedHours) * 60)
                           : "—";
                   const isSelected = index === selectedIndex;
-                  const classes = ["route-report-row", index === best ? "departure-best" : "", isSelected ? "route-report-selected" : ""].filter(Boolean);
+                  const classes = ["route-report-row", isBest(index) ? "departure-best" : "", isSelected ? "route-report-selected" : ""].filter(Boolean);
                   return (
                     <tr
                       key={outcome.departure}
@@ -354,7 +363,12 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                     >
                       <td>
                         {formatDate(outcome.departure)}
-                        {index === best && <span className="departure-badge">{running ? "en tête" : "meilleur"}</span>}
+                        {isBest(index) && (
+                          <span className="departure-badge">
+                            {running ? "en tête" : "meilleur"}
+                            {bestSet.size > 1 ? " ex aequo" : ""}
+                          </span>
+                        )}
                       </td>
                       <td>{outcome.reached ? "arrivée" : `${outcome.gatesCrossed}/${totalGates}`}</td>
                       <td>{outcome.reached ? `en ${formatDuration(outcome.elapsedHours * 60)}` : departureTarget(outcome, totalGates, gateNames)}</td>
@@ -398,12 +412,12 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                   key={index}
                   type="button"
                   className={index === currentPage ? "departure-page-button is-current" : "departure-page-button"}
-                  aria-label={`Page ${index + 1}${index === bestPage && best >= 0 ? ", meilleur départ" : ""}`}
+                  aria-label={`Page ${index + 1}${bestPages.has(index) ? ", meilleur départ" : ""}`}
                   aria-current={index === currentPage ? "page" : undefined}
                   onClick={() => setPage(index)}
                 >
                   {index + 1}
-                  {index === bestPage && best >= 0 && <span className="departure-page-best" aria-hidden="true" />}
+                  {bestPages.has(index) && <span className="departure-page-best" aria-hidden="true" />}
                 </button>
               ))}
               <button
@@ -418,7 +432,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                 </span>
               </button>
             </div>
-            {best >= 0 && bestPage !== currentPage && (
+            {best >= 0 && !bestPages.has(currentPage) && (
               <button type="button" className="departure-pager-best" onClick={() => setPage(bestPage)}>
                 Voir le meilleur départ
               </button>
