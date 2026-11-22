@@ -24,19 +24,22 @@ type windFieldBounds struct {
 	South, North, West, East float64
 }
 
-// windFieldResponse donne la vitesse du vent (nœuds) aux nœuds d'une grille
-// régulière en Mercator : les lignes vont du nord au sud, également espacées
-// en ordonnée Mercator (comme les pixels de la carte), les colonnes d'ouest en
-// est. Une valeur négative signale un point sans vent connu.
+// windFieldResponse donne la vitesse du vent (nœuds) et sa direction aux nœuds
+// d'une grille régulière en Mercator : les lignes vont du nord au sud,
+// également espacées en ordonnée Mercator (comme les pixels de la carte), les
+// colonnes d'ouest en est. La direction est celle d'où vient le vent, en degrés
+// depuis le nord dans le sens horaire. Une valeur négative signale un point
+// sans vent connu.
 type windFieldResponse struct {
-	Time   string    `json:"time"`
-	South  float64   `json:"south"`
-	North  float64   `json:"north"`
-	West   float64   `json:"west"`
-	East   float64   `json:"east"`
-	Cols   int       `json:"cols"`
-	Rows   int       `json:"rows"`
-	Speeds []float64 `json:"speeds"`
+	Time       string    `json:"time"`
+	South      float64   `json:"south"`
+	North      float64   `json:"north"`
+	West       float64   `json:"west"`
+	East       float64   `json:"east"`
+	Cols       int       `json:"cols"`
+	Rows       int       `json:"rows"`
+	Speeds     []float64 `json:"speeds"`
+	Directions []float64 `json:"directions"`
 }
 
 // Les grilles du champ de vent ont leur propre cache : passer par celui des
@@ -95,7 +98,7 @@ func windFieldHandler(response http.ResponseWriter, request *http.Request) {
 		writeJSONError(response, http.StatusInternalServerError, err.Error())
 		return
 	}
-	speeds, err := sampleWindField(request.Context(), provider, used, bounds, cols, rows)
+	speeds, directions, err := sampleWindField(request.Context(), provider, used, bounds, cols, rows)
 	if err != nil {
 		writeJSONError(response, http.StatusInternalServerError, err.Error())
 		return
@@ -103,7 +106,7 @@ func windFieldHandler(response http.ResponseWriter, request *http.Request) {
 	writeJSON(response, http.StatusOK, windFieldResponse{
 		Time:  used.UTC().Format(time.RFC3339),
 		South: bounds.South, North: bounds.North, West: bounds.West, East: bounds.East,
-		Cols: cols, Rows: rows, Speeds: speeds,
+		Cols: cols, Rows: rows, Speeds: speeds, Directions: directions,
 	})
 }
 
@@ -196,20 +199,22 @@ func latitudeFromMercatorY(y float64) float64 {
 	return (2*math.Atan(math.Exp(y)) - math.Pi/2) * 180 / math.Pi
 }
 
-// sampleWindField calcule la vitesse du vent en nœuds, arrondie au dixième,
-// aux nœuds de la grille décrite par windFieldResponse.
+// sampleWindField calcule la vitesse du vent en nœuds, arrondie au dixième, et
+// sa direction, arrondie au degré, aux nœuds de la grille décrite par
+// windFieldResponse.
 func sampleWindField(
 	ctx context.Context,
 	provider weather.WeatherProvider,
 	instant time.Time,
 	bounds windFieldBounds,
 	cols, rows int,
-) ([]float64, error) {
+) ([]float64, []float64, error) {
 	speeds := make([]float64, 0, cols*rows)
+	directions := make([]float64, 0, cols*rows)
 	top, bottom := mercatorY(bounds.North), mercatorY(bounds.South)
 	for row := range rows {
 		if err := ctx.Err(); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		latitude := latitudeFromMercatorY(top + (bottom-top)*float64(row)/float64(rows-1))
 		for col := range cols {
@@ -220,15 +225,18 @@ func sampleWindField(
 			}, instant)
 			if err != nil {
 				speeds = append(speeds, -1)
+				directions = append(directions, -1)
 				continue
 			}
 			knots, err := navigation.KnotsFromMetersPerSecond(wind.Speed)
 			if err != nil {
 				speeds = append(speeds, -1)
+				directions = append(directions, -1)
 				continue
 			}
 			speeds = append(speeds, math.Round(float64(knots)*10)/10)
+			directions = append(directions, math.Mod(math.Round(float64(wind.Direction)), 360))
 		}
 	}
-	return speeds, nil
+	return speeds, directions, nil
 }

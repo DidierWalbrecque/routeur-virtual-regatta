@@ -35,6 +35,8 @@ export type WindField = {
   rows: number;
   /** Nœuds, ligne par ligne du nord au sud ; négatif = inconnu. */
   speeds: number[];
+  /** Direction d'où vient le vent, en degrés, au même indice que speeds ; négatif = inconnu. Absente d'un ancien backend. */
+  directions?: number[];
 };
 
 const RGB = BEAUFORT.map((level) => [1, 3, 5].map((index) => parseInt(level.color.slice(index, index + 2), 16)));

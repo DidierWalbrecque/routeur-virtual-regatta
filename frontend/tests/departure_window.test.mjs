@@ -71,17 +71,17 @@ test("la porte visée s'affiche par son numéro et son nom", () => {
   assert.equal(departureTarget(outcome({ gatesCrossed: 5, nextTarget: "Cape Agulhas" }), 13, names), "Cape Agulhas");
 });
 
-test("les départs se répartissent par pages de 10", async () => {
+test("les départs se répartissent par pages de 7", async () => {
   const { pageCount, pageOf, clampPage } = await import("../src/lib/departure_window.ts");
   assert.equal(pageCount(0), 1);
-  assert.equal(pageCount(10), 1);
-  assert.equal(pageCount(11), 2);
-  assert.equal(pageCount(25), 3);
+  assert.equal(pageCount(7), 1);
+  assert.equal(pageCount(8), 2);
+  assert.equal(pageCount(25), 4);
   assert.equal(pageOf(0), 0);
-  assert.equal(pageOf(9), 0);
-  assert.equal(pageOf(10), 1);
+  assert.equal(pageOf(6), 0);
+  assert.equal(pageOf(7), 1);
   assert.equal(pageOf(-1), 0);
-  assert.equal(clampPage(5, 25), 2);
+  assert.equal(clampPage(5, 25), 3);
   assert.equal(clampPage(-1, 25), 0);
 });
 
@@ -132,4 +132,14 @@ test("deux départs identiques sont tous deux meilleurs", async () => {
   assert.deepEqual(bestDepartureIndices([]), []);
   assert.equal(departuresTied(outcome({ gatesCrossed: 2, distanceNM: 100 }), outcome({ gatesCrossed: 1, distanceNM: 100 })), false);
   assert.equal(departuresTied(outcome({ reached: true, elapsedHours: 50 }), outcome({ reached: true, elapsedHours: 50.001 })), true);
+});
+
+test("la phrase des réglages nomme la polaire et les options utilisées", async () => {
+  const { departureSettingsText } = await import("../src/lib/departure_window.ts");
+  assert.equal(
+    departureSettingsText({ polar: "Ultim BP 11", options: ["Light", "Heavy", "Foils"] }),
+    "Calculé avec la polaire Ultim BP 11 et les options Light, Heavy et Foils.",
+  );
+  assert.equal(departureSettingsText({ polar: "Imoca 60 Foils", options: ["Code 0"] }), "Calculé avec la polaire Imoca 60 Foils et l'option Code 0.");
+  assert.equal(departureSettingsText({ polar: "Class 40", options: [] }), "Calculé avec la polaire Class 40, sans option.");
 });

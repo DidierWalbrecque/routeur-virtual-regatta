@@ -9,13 +9,16 @@ import {
   departureBars,
   departureGapNM,
   departureLagLabel,
+  departureSettingsText,
   departureTarget,
   pageCount,
   pageOf,
   type DepartureOutcome,
+  type DepartureSettings,
   type DepartureWindowStart,
 } from "./lib/departure_window.ts";
 import { formatDuration } from "./lib/horizon.ts";
+import { EQUIPMENT, EQUIPMENT_LABELS, type Equipment } from "./lib/vr.ts";
 
 export type DepartureWindowHandlers = {
   onStart: (start: DepartureWindowStart) => void;
@@ -25,18 +28,36 @@ export type DepartureWindowHandlers = {
 export type DepartureWindowRun = (
   comparisonHours: number,
   stepHours: number,
+  owned: Equipment[],
   handlers: DepartureWindowHandlers,
   signal: AbortSignal,
 ) => Promise<void>;
 
 export type DepartureWindowModel = ReturnType<typeof useDepartureWindow>;
 
+/** Options qui ajoutent des voiles au foc et au spi de base. */
+const SAIL_OPTIONS: Equipment[] = ["light", "heavy", "code0"];
+/** Options qui jouent sur la vitesse et les manœuvres. */
+const BOAT_OPTIONS: Equipment[] = ["foils", "hull_polish", "pro_winches"];
+
 /**
  * État de la comparaison des départs. Il vit dans App : le panneau peut être
  * fermé pendant le calcul (plusieurs minutes), qui continue avec sa fenêtre
  * d'avancement et garde ses résultats.
+ *
+ * Les options du bateau sont propres à ce panneau : avant le départ d'un
+ * record, celles du formulaire viennent de la course précédente. Par défaut,
+ * aucune option : le bateau n'a que ses voiles de base, foc et spi.
  */
-export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => void) {
+export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => void, polar: string) {
+  const [equipment, setEquipment] = useState<Set<Equipment>>(() => new Set());
+  const toggleEquipment = (item: Equipment, checked: boolean) =>
+    setEquipment((previous) => {
+      const next = new Set(previous);
+      if (checked) next.add(item);
+      else next.delete(item);
+      return next;
+    });
   const [comparisonHours, setComparisonHours] = useState(72);
   // Un départ toutes les 12 h : environ 25 départs sur 16 jours de prévisions,
   // à une dizaine de secondes chacun.
@@ -47,6 +68,10 @@ export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => 
   const [startedAt, setStartedAt] = useState(0);
   const [error, setError] = useState("");
   const [picked, setPicked] = useState("");
+  // Polaire et options au lancement : les résultats affichés restent liés à
+  // ces réglages même s'ils changent ensuite.
+  const [usedSettings, setUsedSettings] = useState<DepartureSettings | null>(null);
+  const [usedEquipment, setUsedEquipment] = useState<Equipment[]>([]);
   const controller = useRef<AbortController | null>(null);
 
   useEffect(() => () => controller.current?.abort(), []);
@@ -59,12 +84,16 @@ export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => 
     setOutcomes([]);
     setError("");
     setPicked("");
+    const owned = EQUIPMENT.filter((item) => equipment.has(item));
+    setUsedSettings({ polar, options: owned.map((item) => EQUIPMENT_LABELS[item]) });
+    setUsedEquipment(owned);
     setStartedAt(Date.now());
     setRunning(true);
     try {
       await onRun(
         comparisonHours,
         stepHours,
+        owned,
         {
           onStart: setStart,
           onOutcome: (outcome) => setOutcomes((previous) => [...previous, outcome]),
@@ -88,7 +117,26 @@ export function useDepartureWindow(onRun: DepartureWindowRun, onFinished: () => 
   };
 
   const progress = start ? { completed: outcomes.length, total: start.departures.length } : null;
-  return { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, startedAt, progress, error, picked, setPicked, run, cancel };
+  return {
+    equipment,
+    toggleEquipment,
+    comparisonHours,
+    setComparisonHours,
+    stepHours,
+    setStepHours,
+    start,
+    outcomes,
+    running,
+    startedAt,
+    progress,
+    error,
+    picked,
+    setPicked,
+    usedSettings,
+    usedEquipment,
+    run,
+    cancel,
+  };
 }
 
 const dateFormat: Intl.DateTimeFormatOptions = { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" };
@@ -116,8 +164,10 @@ type Props = {
   model: DepartureWindowModel;
   /** Noms affichés des portes restantes, dans l'ordre de passage. */
   gateNames: string[];
-  /** Reporte l'heure de départ dans le formulaire et l'ouvre. */
-  onUse: (departure: Date) => void;
+  /** Nom affiché de la polaire du formulaire, utilisée par la comparaison. */
+  polar: string;
+  /** Reporte l'heure de départ et les options dans le formulaire, puis l'ouvre. */
+  onUse: (departure: Date, owned: Equipment[]) => void;
   onClose: () => void;
 };
 
@@ -126,8 +176,9 @@ type Props = {
  * la fenêtre de départ (un trait par départ, d'autant plus haut qu'il prend
  * d'avance), puis tableau paginé des départs comparés.
  */
-export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
-  const { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked } = model;
+export function DeparturePanel({ model, gateNames, polar, onUse, onClose }: Props) {
+  const { comparisonHours, setComparisonHours, stepHours, setStepHours, start, outcomes, running, error, picked, setPicked, usedSettings, usedEquipment } =
+    model;
   const best = bestDepartureIndex(outcomes);
   // Les départs à égalité avec le meilleur sont tous affichés comme meilleurs.
   const bestSet = new Set(bestDepartureIndices(outcomes));
@@ -224,6 +275,36 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
       </div>
 
       <div className="departure-body">
+        <fieldset className="departure-boat" disabled={running}>
+          <legend>Bateau : {polar}</legend>
+          <div className="departure-boat-group">
+            <span className="departure-boat-label" id="departure-sails">
+              Voiles en plus du foc et du spi
+            </span>
+            <div className="chips" role="group" aria-labelledby="departure-sails">
+              {SAIL_OPTIONS.map((item) => (
+                <label className={model.equipment.has(item) ? "chip on" : "chip"} key={item}>
+                  <input type="checkbox" checked={model.equipment.has(item)} onChange={(event) => model.toggleEquipment(item, event.target.checked)} />
+                  {EQUIPMENT_LABELS[item]}
+                </label>
+              ))}
+            </div>
+          </div>
+          <div className="departure-boat-group">
+            <span className="departure-boat-label" id="departure-options">
+              Options
+            </span>
+            <div className="chips" role="group" aria-labelledby="departure-options">
+              {BOAT_OPTIONS.map((item) => (
+                <label className={model.equipment.has(item) ? "chip on" : "chip"} key={item}>
+                  <input type="checkbox" checked={model.equipment.has(item)} onChange={(event) => model.toggleEquipment(item, event.target.checked)} />
+                  {EQUIPMENT_LABELS[item]}
+                </label>
+              ))}
+            </div>
+          </div>
+        </fieldset>
+
         <div className="departure-settings">
           <div className="field">
             <label htmlFor="departure-comparison">Durée comparée</label>
@@ -260,7 +341,8 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
 
         {!start && !error && (
           <p className="departure-empty">
-            Choisissez la durée comparée et l'écart entre deux départs, puis lancez la comparaison. Comptez une dizaine de secondes par départ.
+            Cochez les voiles et options que vous prendrez dans le jeu : sans rien de coché, le bateau n'a que le foc et le spi. Choisissez
+            ensuite la durée comparée et l'écart entre deux départs, puis lancez la comparaison. Comptez une dizaine de secondes par départ.
           </p>
         )}
 
@@ -314,6 +396,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
                 {total} départ{total > 1 ? "s" : ""} sur {hours} h de route. Prévisions jusqu'au {formatDate(start.coveredUntil)}
                 {start.windowClose ? `, fermeture du leg le ${formatDate(start.windowClose)}` : ""}.
               </p>
+              {usedSettings && <p className="departure-context departure-settings-used">{departureSettingsText(usedSettings)}</p>}
             </figcaption>
           </figure>
         )}
@@ -443,7 +526,7 @@ export function DeparturePanel({ model, gateNames, onUse, onClose }: Props) {
 
       {selected && !running && (
         <footer className="departure-footer">
-          <button type="button" className="form-submit" onClick={() => onUse(new Date(selected.departure))}>
+          <button type="button" className="form-submit" onClick={() => onUse(new Date(selected.departure), usedEquipment)}>
             <span className="material-symbols-outlined" aria-hidden="true">
               alt_route
             </span>

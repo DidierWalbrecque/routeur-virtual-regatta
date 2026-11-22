@@ -52,3 +52,53 @@ export function shortRunLabel(run: string): string {
   const parsed = parseRun(run);
   return parsed ? `${parsed.hour}Z du ${parsed.day}/${parsed.month}` : run;
 }
+
+/**
+ * Délais de publication habituels d'un run GFS 0.25 sur NOMADS, depuis l'heure
+ * du run : les premières échéances vers +3 h 30, le run complet vers +4 h 45.
+ */
+export const RUN_FIRST_FILES_HOURS = 3.5;
+export const RUN_COMPLETE_HOURS = 4.75;
+const RUN_INTERVAL_HOURS = 6;
+
+/** Run suivant le run actif et ses heures de publication attendues (ms). */
+export type NextRunEta = { hour: string; label: string; firstAt: number; completeAt: number };
+
+export function nextRunEta(run: string): NextRunEta | null {
+  const parsed = parseRun(run);
+  if (!parsed) return null;
+  const instant = parsed.instant + RUN_INTERVAL_HOURS * 3_600_000;
+  const date = new Date(instant);
+  const hour = String(date.getUTCHours()).padStart(2, "0");
+  const day = String(date.getUTCDate()).padStart(2, "0");
+  const month = String(date.getUTCMonth() + 1).padStart(2, "0");
+  return {
+    hour,
+    label: `${hour}Z du ${day}/${month}`,
+    firstAt: instant + RUN_FIRST_FILES_HOURS * 3_600_000,
+    completeAt: instant + RUN_COMPLETE_HOURS * 3_600_000,
+  };
+}
+
+/** « 16 h 30 » en heure locale. */
+export function formatHourMinute(time: number): string {
+  const date = new Date(time);
+  return `${date.getHours()} h ${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
+/** « 15 h 30 UTC ». */
+export function formatUtcHourMinute(time: number): string {
+  const date = new Date(time);
+  return `${date.getUTCHours()} h ${String(date.getUTCMinutes()).padStart(2, "0")} UTC`;
+}
+
+/**
+ * Texte court de la puce du prochain run : « 12Z vers 15 h 30 UTC » avant la
+ * publication (heure des premières échéances), « 12Z imminent » une fois l'heure passée, « 12Z en retard »
+ * quand il aurait dû être complet depuis plus d'une heure.
+ */
+export function nextRunText(eta: NextRunEta, now: number): string {
+  if (now < eta.firstAt) return `${eta.hour}Z vers ${formatUtcHourMinute(eta.firstAt)}`;
+  if (now < eta.completeAt + 3_600_000) return `${eta.hour}Z imminent`;
+  return `${eta.hour}Z en retard`;
+}

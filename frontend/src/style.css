@@ -1,7 +1,12 @@
 :root {
-  /* Les panneaux de droite s'arrêtent avant la barre d'outils (24 px du bord + 52 px de large). */
-  --panel-right: 88px;
-  --panel-top: 20px;
+  /* Hauteurs du cockpit : barre du haut et frise de temps. */
+  --bar-height: 56px;
+  --timeline-height: 62px;
+  --rail-width: 68px;
+  /* Bouton d'action principal : vert, texte bleu nuit (8:1). */
+  --action-green: #46c07e;
+  --action-green-hover: #5fd38d;
+  --action-text: #0b1220;
   /* Apparence commune de toutes les fenêtres flottantes (cartes sombres). */
   --card-background: #1d2433e6;
   --card-background-solid: #1d2433;
@@ -43,6 +48,12 @@ body {
 }
 
 /* Attribution du fond de carte, accordée à la carte de nuit. */
+/* Au-dessus de la frise flottante. */
+#map .maplibregl-ctrl-bottom-right,
+#map .maplibregl-ctrl-bottom-left {
+  bottom: calc(var(--timeline-height) + 20px);
+}
+
 #map .maplibregl-ctrl-attrib {
   background: #0b1a2bcc;
   color: var(--card-muted);
@@ -81,7 +92,7 @@ body {
 }
 
 .route-calculation-status {
-  position: fixed;
+  position: absolute;
   top: 20px;
   left: 50%;
   z-index: 5;
@@ -238,38 +249,20 @@ body {
   }
 }
 
-/* Panneaux de droite : même position et même cadre, sans jamais couvrir la
-   barre d'outils ni les commandes de la carte (placées à gauche). */
+/* Panneaux du cockpit : posés dans la colonne de droite, à côté de la carte. */
 .route-form-panel,
 .route-details-panel,
 .zones-panel {
-  position: fixed;
-  top: var(--panel-top);
-  right: var(--panel-right);
-  left: auto;
   display: flex;
   flex-direction: column;
-  max-height: calc(100% - 2 * var(--panel-top));
+  flex: 1;
+  min-height: 0;
   overflow: hidden;
   padding: 0;
-  border: 1px solid var(--card-border);
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
   background: var(--card-background-solid);
-}
-
-.route-form-panel {
-  z-index: 4;
-  width: min(440px, calc(100% - var(--panel-right) - 20px));
-}
-
-.route-details-panel {
-  z-index: 4;
-  width: min(900px, calc(100% - var(--panel-right) - 20px));
-}
-
-/* Résumé seul, ou liste des ordres : un panneau étroit suffit. */
-.route-details-panel.is-collapsed,
-.route-details-panel.is-orders {
-  width: min(520px, calc(100% - var(--panel-right) - 20px));
 }
 
 .route-details-header > div:first-child {
@@ -299,53 +292,9 @@ body {
   font-size: 12px;
 }
 
-.route-details-button {
-  position: fixed;
-  top: 20px;
-  right: 24px;
-  z-index: 3;
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  border: 0;
-  border-radius: var(--card-radius);
-  color: var(--card-text);
-  background: var(--card-background-solid);
-  box-shadow: var(--card-shadow);
-  font: 600 13px system-ui, sans-serif;
-  cursor: pointer;
-}
-
-.route-details-button:hover {
-  background: var(--card-field);
-}
-
-.route-details-button:focus-visible {
-  outline: 2px solid var(--accent-yellow);
-  outline-offset: 2px;
-}
-
-.route-details-button .material-symbols-outlined {
-  font-size: 20px;
-}
-
-.route-details-status,
 .route-details-summary {
   margin: 4px 0 0;
   font-size: 12px;
-}
-
-.route-details-status {
-  font-weight: 700;
-}
-
-.route-details-status.reached {
-  color: #5fd38d;
-}
-
-.route-details-status.partial {
-  color: var(--accent-yellow);
 }
 
 .route-details-summary {
@@ -721,13 +670,15 @@ body {
   padding: 2px 0 6px;
 }
 
-.route-form-panel .chips {
+.route-form-panel .chips,
+.departure-panel .chips {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
 }
 
-.route-form-panel .chip {
+.route-form-panel .chip,
+.departure-panel .chip {
   position: relative;
   padding: 6px 12px;
   border: 1px solid var(--card-border);
@@ -739,23 +690,27 @@ body {
   transition: all 0.15s ease;
 }
 
-.route-form-panel .chip:hover {
+.route-form-panel .chip:hover,
+.departure-panel .chip:hover {
   color: var(--card-text);
 }
 
-.route-form-panel .chip.on {
+.route-form-panel .chip.on,
+.departure-panel .chip.on {
   border-color: #2e9b5f99;
   color: var(--card-text);
   background: #2e9b5f26;
 }
 
-.route-form-panel .chip input {
+.route-form-panel .chip input,
+.departure-panel .chip input {
   position: absolute;
   opacity: 0;
   pointer-events: none;
 }
 
-.route-form-panel .chip:has(input:focus-visible) {
+.route-form-panel .chip:has(input:focus-visible),
+.departure-panel .chip:has(input:focus-visible) {
   outline: 2px solid var(--accent-yellow);
   outline-offset: 1px;
 }
@@ -853,9 +808,8 @@ body {
   height: 44px;
   border: 0;
   border-radius: 11px;
-  color: #ffffff;
-  background: linear-gradient(180deg, #27804e, #1f7043);
-  box-shadow: 0 2px 8px #2e9b5f40, inset 0 1px 0 #ffffff26;
+  color: var(--action-text);
+  background: var(--action-green);
   font: inherit;
   font-size: 14px;
   font-weight: 650;
@@ -868,8 +822,8 @@ body {
   font-size: 20px;
 }
 
-.form-submit:hover {
-  filter: brightness(1.08);
+.form-submit:hover:not(:disabled) {
+  background: var(--action-green-hover);
 }
 
 .form-submit:active {
@@ -915,151 +869,6 @@ body {
   }
 }
 
-.map-dock {
-  position: fixed;
-  right: 24px;
-  bottom: 44px;
-  z-index: 5;
-  display: flex;
-  flex-direction: column;
-  padding: 4px;
-  color: var(--card-text);
-  background: var(--card-background-solid);
-  border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
-  font: var(--card-font);
-}
-
-.map-dock-button.is-active {
-  background: var(--card-field);
-  color: var(--accent-yellow);
-}
-
-.dock-badge {
-  position: absolute;
-  top: 3px;
-  right: 3px;
-  min-width: 16px;
-  padding: 0 4px;
-  border-radius: 8px;
-  color: #ffffff;
-  background: #e03131;
-  font-size: 10px;
-  line-height: 16px;
-  text-align: center;
-}
-
-.map-dock hr {
-  margin: 2px 6px;
-  border: 0;
-  border-top: 1px solid var(--card-border);
-}
-
-.map-dock-button {
-  position: relative;
-  display: grid;
-  width: 44px;
-  height: 44px;
-  place-items: center;
-  padding: 0;
-  border: 0;
-  border-radius: 8px;
-  color: var(--card-text);
-  background: transparent;
-  cursor: pointer;
-  transition: background-color 120ms ease;
-}
-
-.map-dock-button:hover,
-.map-dock-button:focus-visible {
-  background: var(--card-field);
-}
-
-.map-dock-button:focus-visible {
-  outline: 2px solid var(--accent-yellow);
-  outline-offset: -2px;
-}
-
-.map-dock-primary {
-  color: var(--accent-yellow);
-}
-
-.map-dock-button:disabled {
-  cursor: wait;
-}
-
-.map-dock-button .material-symbols-outlined {
-  font-size: 24px;
-}
-
-.map-dock-button.is-busy .material-symbols-outlined {
-  color: var(--accent-yellow);
-  animation: route-calculation-spin 1.2s linear infinite;
-}
-
-/* Infobulle : même carte sombre que les fenêtres, à gauche du bouton. */
-.map-dock-button::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  top: 50%;
-  right: calc(100% + 12px);
-  padding: 7px 10px;
-  border-radius: var(--card-radius);
-  color: var(--card-text);
-  background: var(--card-background-solid);
-  box-shadow: var(--card-shadow);
-  font: var(--card-font);
-  line-height: 1.4;
-  text-align: left;
-  white-space: pre;
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(4px, -50%);
-  transition: opacity 120ms ease, transform 120ms ease;
-}
-
-.map-dock-button:hover::after,
-.map-dock-button:focus-visible::after {
-  opacity: 1;
-  transform: translate(0, -50%);
-}
-
-@media (max-width: 600px) {
-  .map-dock {
-    right: 16px;
-    bottom: 40px;
-  }
-
-  /* Sur téléphone, un panneau ouvert occupe l'écran : on le ferme pour revenir à la carte. */
-  .route-form-panel,
-  .route-details-panel,
-  .route-details-panel.is-collapsed,
-  .route-details-panel.is-orders,
-  .zones-panel {
-    top: 10px;
-    right: 10px;
-    left: 10px;
-    z-index: 6;
-    width: auto;
-    max-height: calc(100% - 20px);
-  }
-
-  .route-details-panel.is-collapsed {
-    top: auto;
-    bottom: 10px;
-  }
-
-  .route-details-button {
-    top: 16px;
-    right: 16px;
-  }
-
-  .map-corner {
-    bottom: 12px;
-    left: 10px;
-  }
-}
-
 .route-report-table td.route-report-heading {
   color: var(--accent-blue);
   font-weight: 700;
@@ -1100,15 +909,16 @@ body {
 
 /* Coin bas gauche : légende au-dessus de l'encart météo. */
 .map-corner {
-  position: fixed;
-  bottom: 24px;
-  left: 16px;
+  position: absolute;
+  bottom: calc(var(--timeline-height) + 24px);
+  left: 64px;
   z-index: 3;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
   gap: 8px;
-  width: min(300px, calc(100% - 100px));
+  width: min(300px, calc(100% - 74px));
+  max-height: calc(100% - var(--timeline-height) - 34px);
   pointer-events: none;
 }
 
@@ -1121,44 +931,9 @@ body {
   padding: 10px 14px;
 }
 
-/* Encart replié : une ligne qui s'ouvre au clic. */
-.weather-run-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  width: auto;
-  padding: 7px 12px;
-  border: 0;
-  cursor: pointer;
-  font-variant-numeric: tabular-nums;
-}
-
-.weather-run-chip .material-symbols-outlined {
-  color: var(--accent-blue);
-  font-size: 18px;
-}
-
-.weather-run-chip:hover {
-  background: var(--card-background-solid);
-}
-
-.weather-run-chip:focus-visible,
 .weather-run-collapse:focus-visible {
   outline: 2px solid var(--accent-yellow);
   outline-offset: 2px;
-}
-
-.weather-run-chip-hours {
-  color: var(--accent-green-text);
-  font-weight: 600;
-}
-
-.weather-run-chip-hours.is-warning {
-  color: var(--accent-yellow);
-}
-
-.weather-run-chip-next {
-  color: var(--card-muted);
 }
 
 .weather-run-collapse {
@@ -1419,11 +1194,7 @@ body {
 }
 
 .zones-panel {
-  z-index: 4;
-  width: min(440px, calc(100% - var(--panel-right) - 20px));
   color: var(--card-text);
-  border-radius: var(--card-radius);
-  box-shadow: var(--card-shadow);
   font: var(--card-font);
   color-scheme: dark;
 }
@@ -1531,7 +1302,7 @@ body {
 }
 
 .draw-banner {
-  position: fixed;
+  position: absolute;
   top: 20px;
   left: 50%;
   z-index: 5;
@@ -1621,18 +1392,25 @@ body {
   padding-left: 16px;
 }
 
-/* Badge du bouton d'import GPX : rose, assorti à la trace sur la carte. */
-.dock-badge-gpx {
-  right: 1px;
-  font-weight: 600;
-  /* Texte blanc dessus : 4,6:1. */
-  background: #d6336c;
+/* Pastille de compteur (onglet Zones). */
+.dock-badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  min-width: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  color: #ffffff;
+  background: #e03131;
+  font-size: 10px;
+  line-height: 16px;
+  text-align: center;
 }
 
 /* Message d'erreur d'import GPX. */
 .gpx-toast {
-  position: fixed;
-  top: 64px;
+  position: absolute;
+  top: 16px;
   left: 50%;
   z-index: 6;
   display: flex;
@@ -1762,49 +1540,6 @@ body {
   color: var(--accent-yellow);
 }
 
-/* Appui long sur écran tactile : l'infobulle s'affiche, sans menu du navigateur. */
-.map-dock-button {
-  -webkit-touch-callout: none;
-  user-select: none;
-}
-
-.map-dock-button.show-tip::after {
-  opacity: 1;
-  transform: translate(0, -50%);
-}
-
-/* --- Résultat du calcul : chiffres clés, toujours visibles ----------------- */
-.route-summary {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 1px;
-  margin: 0;
-  border-bottom: 1px solid var(--card-border);
-  background: var(--card-border);
-}
-
-.route-summary > div {
-  padding: 10px 12px;
-  background: var(--card-background-solid);
-}
-
-.route-summary dt {
-  color: var(--card-muted);
-  font-size: 11px;
-}
-
-.route-summary dd {
-  margin: 2px 0 0;
-  font-size: 15px;
-  font-weight: 650;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
-}
-
-.route-details-panel.is-collapsed .route-summary {
-  border-bottom: 0;
-}
-
 /* --- Onglets Ordres / Pas à pas -------------------------------------------- */
 .route-tabs {
   display: flex;
@@ -1854,117 +1589,6 @@ body {
   display: flex;
   flex-direction: column;
   min-height: 0;
-}
-
-/* --- Ordres à donner dans le jeu ------------------------------------------- */
-.route-orders {
-  display: grid;
-  gap: 6px;
-  min-height: 0;
-  margin: 12px 0 0;
-  padding: 0;
-  overflow-y: auto;
-  list-style: none;
-  scrollbar-width: thin;
-  scrollbar-color: var(--card-border) transparent;
-}
-
-.route-order {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  width: 100%;
-  padding: 9px 12px;
-  border: 1px solid var(--card-border);
-  border-radius: 10px;
-  color: var(--card-text);
-  background: var(--card-field);
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-  font-variant-numeric: tabular-nums;
-}
-
-.route-order:hover {
-  border-color: #4a5470;
-}
-
-.route-order.is-maneuver {
-  border-color: #f5c51866;
-  background: #f5c5181f;
-}
-
-.route-order.is-selected {
-  border-color: var(--accent-blue);
-  background: #145cff40;
-}
-
-.route-order:focus-visible {
-  outline: 2px solid var(--accent-yellow);
-  outline-offset: 2px;
-}
-
-.route-order-time {
-  display: grid;
-  flex: none;
-  min-width: 48px;
-}
-
-.route-order-time strong {
-  font-size: 15px;
-}
-
-.route-order-time small {
-  color: var(--card-muted);
-  font-size: 11px;
-}
-
-.route-order-main {
-  display: grid;
-  gap: 2px;
-  min-width: 0;
-}
-
-.route-order-setting {
-  color: var(--accent-blue);
-  font-size: 16px;
-  font-weight: 700;
-}
-
-.route-order-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px 10px;
-  color: var(--card-muted);
-  font-size: 12px;
-}
-
-.route-order-meta .route-report-sail {
-  color: var(--accent-yellow);
-  font-weight: 600;
-}
-
-.route-order .route-card-maneuver {
-  flex: none;
-}
-
-@media (max-width: 600px) {
-  .route-summary {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-
-  .route-summary > div {
-    padding: 8px 10px;
-  }
-
-  .route-summary dd {
-    font-size: 14px;
-  }
-
-  /* Cinq chiffres sur trois colonnes : le dernier occupe la fin de la ligne. */
-  .route-summary > div:last-child {
-    grid-column: span 2;
-  }
 }
 
 /* --- Épingles de la carte : lettre ou icône au centre ---------------------- */
@@ -2097,42 +1721,6 @@ body {
   font-size: 7px;
 }
 
-.wind-card {
-  display: grid;
-  gap: 8px;
-  width: 100%;
-  padding: 10px 14px 12px;
-  font-size: 12px;
-}
-
-.wind-card h2 {
-  margin: 0;
-  color: var(--card-muted);
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.wind-time {
-  display: grid;
-  gap: 2px;
-}
-
-.wind-time > span {
-  display: flex;
-  justify-content: space-between;
-  gap: 8px;
-}
-
-.wind-time-offset {
-  color: var(--card-muted);
-}
-
-.wind-time input {
-  width: 100%;
-}
-
 .beaufort-scale {
   display: grid;
   grid-template-columns: repeat(13, 1fr);
@@ -2158,9 +1746,6 @@ body {
 }
 
 /* Meilleure heure de départ d'un record : panneau et tableau des départs */
-.departure-panel {
-  width: min(720px, calc(100% - var(--panel-right) - 20px));
-}
 
 .departure-body {
   display: flex;
@@ -2256,6 +1841,37 @@ body {
   margin: 14px 0 0;
   color: var(--card-muted);
   line-height: 1.5;
+}
+
+/* Bateau de la comparaison : voiles et options, sans option par défaut. */
+.departure-boat {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 14px;
+  padding: 0;
+  border: 0;
+}
+
+.departure-boat legend {
+  margin-bottom: 8px;
+  padding: 0;
+  color: var(--card-text);
+  font-weight: 600;
+}
+
+.departure-boat-group {
+  display: grid;
+  gap: 6px;
+}
+
+.departure-boat-label {
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
+.departure-boat:disabled .chip {
+  cursor: default;
+  opacity: 0.6;
 }
 
 /* Fenêtre de départ : un trait vertical par départ, sur l'axe du temps, comme
@@ -2397,7 +2013,7 @@ body {
   border-top: 1px solid var(--card-border);
 }
 
-/* Pagination du tableau des départs : 10 par page. Le point vert signale la
+/* Pagination du tableau des départs : 7 par page. Le point vert signale la
    page du meilleur départ. */
 .departure-pager {
   display: flex;
@@ -2494,5 +2110,1786 @@ body {
   .departure-run {
     grid-column: 1 / -1;
     width: 100%;
+  }
+}
+
+/* --- Cockpit : barre du haut, carte et panneau, frise de temps ------------- */
+.cockpit {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  grid-template-rows: var(--bar-height) minmax(0, 1fr);
+  color: var(--card-text);
+  background: #0b1a2b;
+  font: var(--card-font);
+  color-scheme: dark;
+}
+
+.cockpit button:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.cockpit-bar {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+  padding: 0 16px;
+  overflow: hidden;
+  background: #0e1626;
+  border-bottom: 1px solid var(--card-border);
+  white-space: nowrap;
+}
+
+.cockpit-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--accent-yellow);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.cockpit-brand span {
+  color: var(--card-text);
+}
+
+.cockpit-boat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: var(--card-field);
+}
+
+.cockpit-boat strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cockpit-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--card-muted);
+}
+
+.cockpit-boat.is-live .cockpit-dot {
+  background: var(--accent-green-text);
+}
+
+.cockpit-muted {
+  color: var(--card-muted);
+}
+
+.cockpit-number {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.cockpit-stamina {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cockpit-gauge {
+  display: block;
+  width: 96px;
+  height: 8px;
+  overflow: hidden;
+  border-radius: 4px;
+  background: var(--card-field);
+}
+
+.cockpit-gauge > span {
+  display: block;
+  height: 100%;
+  background: var(--accent-green-text);
+}
+
+.cockpit-weather {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cockpit-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cockpit-chip:hover:not(:disabled),
+.cockpit-chip[aria-expanded="true"] {
+  background: var(--card-field);
+}
+
+.cockpit-chip:disabled {
+  cursor: default;
+}
+
+.cockpit-chip .material-symbols-outlined {
+  color: var(--accent-blue);
+  font-size: 18px;
+}
+
+.cockpit-chip.is-warning {
+  border-color: var(--accent-yellow);
+}
+
+.cockpit-next-run {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--accent-yellow);
+  background: #2a2410;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.cockpit-next-run .material-symbols-outlined {
+  font-size: 14px;
+}
+
+.cockpit-icon-button {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.cockpit-icon-button:hover {
+  background: var(--card-field);
+}
+
+.cockpit-icon-button:disabled {
+  cursor: wait;
+}
+
+.cockpit-icon-button.is-busy .material-symbols-outlined {
+  color: var(--accent-yellow);
+  animation: route-calculation-spin 1.2s linear infinite;
+}
+
+.cockpit-spacer {
+  flex: 1;
+}
+
+.cockpit-primary {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: 8px;
+  height: 40px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--action-text);
+  background: var(--action-green);
+  font: 700 14px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.cockpit-primary:hover:not(:disabled) {
+  background: var(--action-green-hover);
+}
+
+/* Formulaire ouvert : le bouton reste vert, souligné comme un onglet actif. */
+.cockpit-primary.is-active {
+  box-shadow: inset 0 -3px 0 var(--action-text);
+}
+
+.cockpit-primary .material-symbols-outlined {
+  font-size: 20px;
+}
+
+.cockpit-weather-popover {
+  position: fixed;
+  top: calc(var(--bar-height) + 8px);
+  left: 16px;
+  z-index: 7;
+  width: min(320px, calc(100% - 32px));
+}
+
+.cockpit-weather-popover .weather-run-card {
+  border: 1px solid var(--card-border);
+}
+
+.cockpit-main {
+  position: relative;
+  display: flex;
+  min-height: 0;
+}
+
+.cockpit-map {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.cockpit-side {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 440px;
+  min-height: 0;
+  background: var(--card-background-solid);
+  border-left: 1px solid var(--card-border);
+}
+
+/* Tableau pas à pas et comparaison des départs : il leur faut de la largeur. */
+.cockpit-side:has(.route-details-panel:not(.is-orders):not(.is-collapsed):not(.departure-panel)) {
+  width: min(900px, 62vw);
+}
+
+.cockpit-side:has(.departure-panel) {
+  width: min(720px, 55vw);
+}
+
+.cockpit-side:has(.route-details-panel.is-orders),
+.cockpit-side:has(.route-details-panel.is-collapsed) {
+  width: 520px;
+}
+
+.cockpit-rail {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  gap: 4px;
+  width: var(--rail-width);
+  padding: 8px 6px;
+  background: #0e1626;
+  border-left: 1px solid var(--card-border);
+}
+
+.cockpit-tab {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  min-height: 56px;
+  padding: 8px 2px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--card-muted);
+  background: transparent;
+  font: 600 11px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.cockpit-tab .material-symbols-outlined {
+  font-size: 22px;
+}
+
+.cockpit-tab:hover:not(:disabled) {
+  color: var(--card-text);
+  background: var(--card-field);
+}
+
+.cockpit-tab.is-active {
+  color: var(--card-text);
+  background: var(--card-field);
+  box-shadow: inset 0 -3px 0 var(--accent-yellow);
+}
+
+.cockpit-tab.is-active .material-symbols-outlined {
+  color: var(--accent-yellow);
+}
+
+.cockpit-tab:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.cockpit-tab .dock-badge {
+  top: 4px;
+  right: 8px;
+}
+
+/* Frise de temps, en ligne fine : une barre flottante centrée en bas de la carte. */
+.timeline {
+  position: absolute;
+  bottom: 12px;
+  left: 50%;
+  z-index: 4;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(960px, calc(100% - 24px));
+  height: var(--timeline-height);
+  padding: 6px 14px 6px 8px;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  background: #0e1626eb;
+  box-shadow: var(--card-shadow);
+  transform: translateX(-50%);
+  backdrop-filter: blur(6px);
+}
+
+.timeline.is-disabled .timeline-track,
+.timeline.is-disabled .timeline-readout {
+  opacity: 0.5;
+}
+
+.timeline-play {
+  display: grid;
+  flex: none;
+  width: 38px;
+  height: 38px;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  color: var(--action-text);
+  background: var(--action-green);
+  cursor: pointer;
+}
+
+.timeline-play:hover:not(:disabled) {
+  background: var(--action-green-hover);
+}
+
+.timeline-play:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.timeline-play .material-symbols-outlined {
+  font-size: 24px;
+}
+
+.timeline-track {
+  position: relative;
+  flex: 1;
+  height: 40px;
+  min-width: 0;
+  border-radius: 8px;
+}
+
+.timeline-track:has(.timeline-range:focus-visible) {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+/* Rail aux couleurs du vent ; l'avenir est assombri. */
+.timeline-rail,
+.timeline-future {
+  position: absolute;
+  top: 6px;
+  height: 6px;
+  border-radius: 3px;
+  pointer-events: none;
+}
+
+.timeline-rail {
+  right: 0;
+  left: 0;
+  background-color: var(--card-field);
+}
+
+.timeline-future {
+  right: 0;
+  border-radius: 0 3px 3px 0;
+  background: #0e1626b0;
+}
+
+.timeline-midnight {
+  position: absolute;
+  top: 2px;
+  width: 1px;
+  height: 16px;
+  background: #ffffff40;
+  font-style: normal;
+  pointer-events: none;
+}
+
+.timeline-midnight b {
+  position: absolute;
+  top: 19px;
+  left: 0;
+  color: var(--card-text);
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transform: translateX(-50%);
+}
+
+.timeline-hint {
+  position: absolute;
+  top: 9px;
+  left: 50%;
+  z-index: 2;
+  padding: 2px 10px;
+  border-radius: 999px;
+  color: var(--card-muted);
+  background: #0e1626;
+  font-size: 12px;
+  white-space: nowrap;
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+}
+
+.timeline-hint .link-button {
+  pointer-events: auto;
+}
+
+/* Le curseur natif reste invisible au-dessus de la piste : il garde le
+   glisser et le clavier, le rond blanc montre l'heure. */
+.timeline-range {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.timeline-range:disabled {
+  cursor: default;
+}
+
+.timeline-mark {
+  position: absolute;
+  top: 5px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  margin-left: -4px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--accent-yellow);
+  box-shadow: 0 0 0 2px #0e1626;
+  cursor: pointer;
+}
+
+.timeline-mark:hover {
+  background: #ffe066;
+}
+
+.timeline-cursor {
+  position: absolute;
+  top: 2px;
+  z-index: 3;
+  width: 14px;
+  height: 14px;
+  margin-left: -7px;
+  border: 3px solid #ffffff;
+  border-radius: 50%;
+  background: #0e1626;
+  pointer-events: none;
+}
+
+.link-button {
+  padding: 0;
+  border: 0;
+  color: var(--accent-yellow);
+  background: none;
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.timeline-readout {
+  display: grid;
+  flex: none;
+  gap: 1px;
+  width: 230px;
+  padding-left: 14px;
+  border-left: 1px solid var(--card-border);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.timeline-readout strong {
+  font-size: 13px;
+}
+
+.timeline-readout em {
+  margin-left: 8px;
+  color: var(--accent-yellow);
+  font-style: normal;
+  font-weight: 600;
+}
+
+.timeline-state {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  overflow: hidden;
+  color: var(--card-muted);
+  white-space: nowrap;
+}
+
+.timeline-force {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+/* Repère du bateau de la frise, dans la légende. */
+.legend-boat {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  border: 3px solid #0b1a2b;
+  border-radius: 50%;
+  background: #ffd43b;
+  box-shadow: 0 0 0 3px #ffd43b40;
+}
+
+.map-legend #map-legend-wind {
+  margin: 4px 0 6px;
+}
+
+/* Lecture des barbules : six exemples, du calme à 65 kn. */
+.map-legend #map-legend-barbs {
+  margin: 12px 0 4px;
+}
+
+.barb-key {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.map-legend .barb-key li {
+  display: grid;
+  justify-items: center;
+  gap: 0;
+  color: var(--card-text);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.legend-barb {
+  width: 32px;
+  height: 28px;
+}
+
+.barb-note {
+  margin: 6px 0 0;
+}
+
+@media (max-width: 900px) {
+  .cockpit-brand span,
+  .cockpit-stamina .cockpit-muted,
+  .cockpit-chip .cockpit-muted {
+    display: none;
+  }
+
+  .cockpit-side {
+    width: 380px;
+  }
+}
+
+/* Téléphone : onglets en bas de la carte, panneau par-dessus la carte. */
+@media (max-width: 600px) {
+  .cockpit-bar {
+    gap: 8px;
+    padding: 0 10px;
+  }
+
+  .cockpit-brand,
+  .cockpit-boat strong,
+  .cockpit-boat .cockpit-muted,
+  .cockpit-gauge,
+  .cockpit-next-run,
+  .cockpit-primary span:not(.material-symbols-outlined) {
+    display: none;
+  }
+
+  .cockpit-boat {
+    padding: 6px 10px;
+  }
+
+  .cockpit-chip {
+    padding: 0 10px;
+  }
+
+  .cockpit-primary {
+    padding: 0 12px;
+  }
+
+  .cockpit-main {
+    flex-direction: column;
+  }
+
+  .cockpit-rail {
+    flex-direction: row;
+    width: auto;
+    padding: 4px 6px;
+    border-top: 1px solid var(--card-border);
+    border-left: 0;
+  }
+
+  .cockpit-tab {
+    flex: 1;
+    min-height: 48px;
+    padding: 4px 2px;
+  }
+
+  .cockpit-side,
+  .cockpit-side:has(.departure-panel),
+  .cockpit-side:has(.route-details-panel.is-orders),
+  .cockpit-side:has(.route-details-panel.is-collapsed),
+  .cockpit-side:has(.route-details-panel:not(.is-orders):not(.is-collapsed):not(.departure-panel)) {
+    position: fixed;
+    top: 8px;
+    right: 8px;
+    bottom: 8px;
+    left: 8px;
+    z-index: 6;
+    width: auto;
+    overflow: hidden;
+    border: 1px solid var(--card-border);
+    border-radius: var(--card-radius);
+    box-shadow: var(--card-shadow);
+  }
+
+  /* Route réduite au résumé : une carte en bas, au-dessus des onglets. */
+  .cockpit-side:has(.route-details-panel.is-collapsed) {
+    top: auto;
+    bottom: calc(var(--timeline-height) + 76px);
+  }
+
+  .cockpit-side:has(.route-details-panel.is-collapsed) .route-details-panel {
+    flex: none;
+  }
+
+  .timeline {
+    bottom: 8px;
+    gap: 10px;
+    width: calc(100% - 16px);
+    padding: 6px 14px 6px 6px;
+  }
+
+  .timeline-readout {
+    width: auto;
+    padding-left: 10px;
+  }
+
+  .timeline-readout strong,
+  .timeline-state,
+  .timeline-hint {
+    display: none;
+  }
+
+  .timeline-readout em {
+    margin: 0;
+  }
+}
+
+/* --- Mode jeu : les ordres d'abord ---------------------------------------- */
+.cockpit-rail[hidden] {
+  display: none;
+}
+
+.cockpit-dot.is-on {
+  background: var(--accent-green-text);
+}
+
+.game-panel {
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  width: 500px;
+  min-height: 0;
+  overflow: hidden;
+  background: var(--card-background-solid);
+  border-right: 1px solid var(--card-border);
+}
+
+.game-panel-waiting {
+  justify-content: center;
+  padding: 24px;
+  color: var(--card-muted);
+  text-align: center;
+}
+
+.game-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 14px 20px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.game-panel-head h2 {
+  margin: 0;
+  font-size: 16px;
+}
+
+.game-panel-head p {
+  margin: 2px 0 0;
+  color: var(--card-muted);
+}
+
+.game-exit {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 12px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--card-text);
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+}
+
+.game-exit:hover {
+  background: var(--card-field);
+}
+
+.game-exit .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.game-next {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.game-label {
+  margin: 0;
+  color: var(--card-muted);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.game-countdown {
+  margin: 0;
+  color: var(--accent-yellow);
+  font: 600 56px/1 ui-monospace, "Cascadia Mono", Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-order-card {
+  display: grid;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #f5c51866;
+  border-radius: 12px;
+  background: #2a2410;
+}
+
+.game-order-title {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.game-order-title strong {
+  font-variant-numeric: tabular-nums;
+}
+
+.game-order-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+}
+
+.game-order-grid dt {
+  color: #c9be95;
+  font-size: 12px;
+}
+
+.game-order-grid dd {
+  margin: 2px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.game-order-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.game-button-primary,
+.game-button-outline {
+  display: inline-flex;
+  flex: 1 1 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 0 14px;
+  border-radius: 8px;
+  font: 600 14px system-ui, sans-serif;
+  cursor: pointer;
+}
+
+.game-button-primary {
+  border: 0;
+  color: var(--action-text);
+  background: var(--action-green);
+}
+
+.game-button-primary:hover {
+  background: var(--action-green-hover);
+}
+
+.game-button-outline {
+  border: 1px solid #46c07e88;
+  color: var(--action-green);
+  background: transparent;
+}
+
+.game-button-outline:hover:not(:disabled),
+.game-button-outline[aria-pressed="true"] {
+  background: #46c07e1f;
+}
+
+.game-button-outline:disabled {
+  border-color: var(--card-border);
+  color: var(--card-muted);
+  cursor: not-allowed;
+}
+
+.game-button-primary .material-symbols-outlined,
+.game-button-outline .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.game-status {
+  margin: 0;
+  color: var(--accent-green-text);
+  font-size: 12px;
+}
+
+.game-reminder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(--accent-yellow);
+  background: #2a2410;
+}
+
+.game-reminder span:not(.material-symbols-outlined) {
+  flex: 1;
+}
+
+.game-reminder button {
+  display: grid;
+  place-items: center;
+  border: 0;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+}
+
+.game-sheet {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  padding: 14px 20px 12px;
+}
+
+.game-sheet-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding-bottom: 8px;
+}
+
+.game-sheet-head h3 {
+  flex: 1;
+  margin: 0;
+  font-size: 14px;
+}
+
+.game-orders {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+}
+
+.game-order {
+  display: grid;
+  grid-template-columns: 22px 48px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 44px;
+  padding: 8px 6px;
+  border: 0;
+  border-bottom: 1px solid #ffffff12;
+  color: var(--card-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.game-order:hover {
+  background: #ffffff0d;
+}
+
+.game-order-mark {
+  display: grid;
+  width: 14px;
+  height: 14px;
+  place-items: center;
+  margin-left: 4px;
+  border: 2px solid #4a5872;
+  border-radius: 50%;
+}
+
+.game-order-time {
+  font-variant-numeric: tabular-nums;
+}
+
+.game-order-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.game-order-when {
+  color: var(--card-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.game-order.is-past {
+  color: var(--card-muted);
+}
+
+.game-order.is-past .game-order-mark {
+  border: 0;
+  color: var(--accent-green-text);
+}
+
+.game-order.is-past .game-order-mark .material-symbols-outlined {
+  font-size: 18px;
+}
+
+.game-order.is-current .game-order-mark,
+.game-order.is-next .game-order-mark {
+  border: 0;
+  background: var(--accent-yellow);
+}
+
+.game-order.is-current .game-order-mark {
+  background: var(--accent-green-text);
+}
+
+.game-order.is-next .game-order-time,
+.game-order.is-next .game-order-when {
+  color: var(--accent-yellow);
+  font-weight: 600;
+}
+
+.game-order.is-current .game-order-when {
+  color: var(--accent-green-text);
+  font-weight: 600;
+}
+
+.game-note {
+  margin: 8px 0 0;
+  color: var(--card-muted);
+  font-size: 11px;
+}
+
+/* Bateau du jeu comparé à la route, en haut de la carte. */
+.live-card {
+  position: absolute;
+  top: 10px;
+  left: 64px;
+  z-index: 3;
+  display: grid;
+  gap: 12px;
+  width: min(360px, calc(100% - 72px));
+  padding: 14px 16px;
+  border: 1px solid var(--card-border);
+}
+
+.live-card-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  font-size: 14px;
+}
+
+.live-card-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin: 0;
+}
+
+.live-card-grid dt {
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
+.live-card-grid dd {
+  margin: 2px 0 0;
+  font-size: 16px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.live-card-grid dd.is-warning {
+  color: #ff9f43;
+}
+
+.live-card p {
+  margin: 0;
+}
+
+.live-card-legend {
+  display: flex;
+  gap: 16px;
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
+.live-card-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.live-legend-route,
+.live-legend-track {
+  display: inline-block;
+  width: 18px;
+}
+
+.live-legend-route {
+  height: 3px;
+  background: #f59f00;
+}
+
+.live-legend-track {
+  height: 0;
+  border-top: 3px dashed #ff9f43;
+}
+
+@media (max-width: 900px) {
+  .game-panel {
+    width: 400px;
+  }
+}
+
+/* Téléphone : la feuille de route au-dessus, la carte en dessous. */
+@media (max-width: 600px) {
+  .game-panel {
+    width: auto;
+    max-height: 58%;
+    border-right: 0;
+    border-bottom: 1px solid var(--card-border);
+  }
+
+  .game-panel-head {
+    padding: 10px 14px;
+  }
+
+  .game-panel-head p {
+    display: none;
+  }
+
+  .game-next {
+    gap: 8px;
+    padding: 12px 14px;
+  }
+
+  .game-countdown {
+    font-size: 36px;
+  }
+
+  .game-sheet {
+    padding: 10px 14px;
+  }
+
+  .game-note {
+    display: none;
+  }
+
+  /* La feuille de route défile avec le reste du panneau. */
+  .game-panel {
+    overflow-y: auto;
+  }
+
+  .game-sheet {
+    flex: none;
+  }
+
+  .game-orders {
+    overflow: visible;
+  }
+
+  .live-card {
+    right: 10px;
+    left: 64px;
+    gap: 8px;
+    width: auto;
+    padding: 10px 12px;
+  }
+
+  .live-card-grid dd {
+    font-size: 14px;
+  }
+
+  .live-card .game-button-outline {
+    min-height: 36px;
+  }
+
+  .live-card-legend,
+  .live-label-long {
+    display: none;
+  }
+}
+
+.live-label-short {
+  display: none;
+}
+
+@media (max-width: 600px) {
+  .live-label-short {
+    display: inline;
+  }
+}
+
+/* --- Route calculée : carnet de bord ---------------------------------------- */
+.route-brief {
+  display: grid;
+  gap: 4px;
+  padding: 0 20px 14px;
+}
+
+.route-brief p {
+  margin: 0;
+}
+
+.route-brief-status {
+  justify-self: start;
+  margin-bottom: 6px;
+  padding: 3px 10px;
+  border-radius: 999px;
+  color: var(--accent-yellow);
+  background: #2a2410;
+  font-size: 12px;
+}
+
+.route-brief-status.is-reached {
+  color: var(--accent-green-text);
+  background: #12301f;
+}
+
+.route-brief-label {
+  color: var(--card-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.route-brief-time {
+  font-size: 28px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-brief-line {
+  color: var(--card-muted);
+}
+
+.route-stamina {
+  display: grid;
+  gap: 6px;
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--card-field);
+}
+
+.route-stamina-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-stamina-start {
+  color: var(--card-muted);
+}
+
+.route-stamina-end {
+  color: var(--accent-green-text);
+  font-weight: 600;
+}
+
+.route-stamina-chart {
+  position: relative;
+  height: 66px;
+  border-bottom: 1px solid var(--card-border);
+}
+
+.route-stamina-chart svg {
+  display: block;
+  width: 100%;
+  height: 56px;
+}
+
+.route-stamina-mark {
+  position: absolute;
+  bottom: 0;
+  width: 6px;
+  height: 10px;
+  margin-left: -3px;
+  border-radius: 2px;
+  background: var(--accent-yellow);
+}
+
+.route-stamina-axis {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--card-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ordres sur une ligne de temps, groupés par jour. */
+.route-orders {
+  min-height: 0;
+  margin: 4px 0 0;
+  padding: 0;
+  overflow-y: auto;
+  list-style: none;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+}
+
+.route-order-day h3 {
+  margin: 0;
+  padding: 10px 0 4px;
+  color: var(--card-muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.route-order-day ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.route-order {
+  display: grid;
+  grid-template-columns: 44px 16px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--card-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-variant-numeric: tabular-nums;
+}
+
+.route-order:hover {
+  background: #ffffff0d;
+}
+
+.route-order.is-selected {
+  background: #145cff26;
+  box-shadow: inset 0 0 0 1px #4dabf766;
+}
+
+.route-order:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: -2px;
+}
+
+.route-order-time {
+  padding-top: 1px;
+  color: var(--card-muted);
+}
+
+.route-order.is-selected .route-order-time {
+  color: var(--card-text);
+}
+
+/* Ligne de temps : un rond par ordre, un carré jaune pour une manœuvre. */
+.route-order-rail {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  align-self: stretch;
+}
+
+.route-order-rail::after {
+  flex: 1;
+  width: 2px;
+  margin-top: 2px;
+  background: var(--card-border);
+  content: "";
+}
+
+.route-order-rail i {
+  width: 10px;
+  height: 10px;
+  margin-top: 4px;
+  border: 2px solid #4a5872;
+  border-radius: 50%;
+}
+
+.route-order.is-maneuver .route-order-rail i {
+  width: 12px;
+  height: 12px;
+  border: 0;
+  border-radius: 3px;
+  background: var(--accent-yellow);
+}
+
+.route-order.is-selected .route-order-rail i {
+  border: 0;
+  background: var(--accent-blue);
+}
+
+.route-order-main {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.route-order-setting {
+  color: var(--accent-blue);
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.route-order-meta {
+  overflow: hidden;
+  color: var(--card-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.route-order-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: var(--accent-yellow);
+  background: #2a2410;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.route-order-now {
+  padding-top: 2px;
+  color: var(--accent-blue);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+/* Pied du panneau : passer en mode jeu, exporter la route. */
+.route-details-footer {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--card-border);
+}
+
+.route-details-footer .form-submit {
+  flex: 1;
+  width: auto;
+}
+
+.route-outline-button {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 44px;
+  padding: 0 16px;
+  border: 1px solid #46c07e88;
+  border-radius: 11px;
+  color: var(--action-green);
+  background: transparent;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.route-outline-button:hover {
+  background: #46c07e1f;
+}
+
+.route-outline-button:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: 2px;
+}
+
+.route-outline-button .material-symbols-outlined {
+  font-size: 20px;
+}
+
+@media (max-width: 600px) {
+  .route-brief-time {
+    font-size: 22px;
+  }
+
+  .route-stamina-axis span:nth-child(2) {
+    display: none;
+  }
+}
+
+/* --- Contrôles de la carte : une colonne en haut à gauche ------------------- */
+/* Zoom et boussole de MapLibre, au style sombre de la maquette. */
+#map .maplibregl-ctrl-top-left .maplibregl-ctrl-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 10px 0 0 10px;
+  background: transparent;
+  border-radius: 0;
+  box-shadow: none;
+}
+
+#map .maplibregl-ctrl-group button {
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  background-color: var(--card-background-solid);
+  box-shadow: var(--card-shadow);
+}
+
+#map .maplibregl-ctrl-group button + button {
+  border-top: 1px solid var(--card-border);
+}
+
+#map .maplibregl-ctrl-group button:not(:disabled):hover {
+  background-color: var(--card-field);
+}
+
+#map .maplibregl-ctrl-group button:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: -2px;
+  box-shadow: none;
+}
+
+/* Icônes noires de MapLibre passées en clair ; la pointe nord reste rouge. */
+#map .maplibregl-ctrl-group .maplibregl-ctrl-icon {
+  filter: invert(1) hue-rotate(180deg);
+}
+
+/* Sous le zoom et la boussole (3 × 44 px, 8 px d'écart). */
+.map-tools {
+  position: absolute;
+  top: 166px;
+  left: 10px;
+  z-index: 5;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.map-tool-button {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--card-border);
+  border-radius: 8px;
+  color: var(--card-text);
+  background: var(--card-background-solid);
+  box-shadow: var(--card-shadow);
+  cursor: pointer;
+  -webkit-touch-callout: none;
+  user-select: none;
+}
+
+.map-tool-button:hover {
+  background: var(--card-field);
+}
+
+.map-tool-button.is-active {
+  color: var(--accent-yellow);
+  background: var(--card-field);
+}
+
+.map-tool-button:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: -2px;
+}
+
+.map-tool-button .material-symbols-outlined {
+  font-size: 22px;
+}
+
+/* Infobulle à droite du bouton (appui long sur écran tactile). */
+.map-tool-button::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 10px);
+  padding: 7px 10px;
+  border-radius: var(--card-radius);
+  color: var(--card-text);
+  background: var(--card-background-solid);
+  box-shadow: var(--card-shadow);
+  font: var(--card-font);
+  white-space: pre;
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(-4px, -50%);
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.map-tool-button[data-tooltip=""]::after {
+  display: none;
+}
+
+.map-tool-button:hover::after,
+.map-tool-button:focus-visible::after,
+.map-tool-button.show-tip::after {
+  opacity: 1;
+  transform: translate(0, -50%);
+}
+
+/* Menu « Calques », ouvert à droite de la colonne. */
+.map-layers-menu {
+  position: absolute;
+  top: 0;
+  left: calc(100% + 8px);
+  display: grid;
+  gap: 2px;
+  width: 270px;
+  padding: 8px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  color: var(--card-text);
+  background: var(--card-background-solid);
+  box-shadow: var(--card-shadow);
+  font: var(--card-font);
+}
+
+.map-layers-title {
+  margin: 2px 8px 6px;
+  color: var(--card-muted);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.map-layers-menu hr {
+  width: 100%;
+  margin: 4px 0;
+  border: 0;
+  border-top: 1px solid var(--card-border);
+}
+
+.map-layer-row {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: var(--card-text);
+  background: transparent;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.map-layer-row:hover {
+  background: var(--card-field);
+}
+
+.map-layer-row:focus-visible {
+  outline: 2px solid var(--accent-yellow);
+  outline-offset: -2px;
+}
+
+.map-layer-row .material-symbols-outlined {
+  color: var(--card-muted);
+  font-size: 20px;
+}
+
+.map-layer-row[aria-pressed="true"] .material-symbols-outlined {
+  color: var(--accent-yellow);
+}
+
+.map-layer-row span:not(.material-symbols-outlined) {
+  display: grid;
+  min-width: 0;
+}
+
+.map-layer-row small {
+  overflow: hidden;
+  color: var(--card-muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Interrupteur : vert quand le calque est affiché. */
+.map-layer-switch {
+  position: relative;
+  width: 34px;
+  height: 20px;
+  border-radius: 999px;
+  background: #2b3850;
+  transition: background-color 120ms ease;
+}
+
+.map-layer-switch::after {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #c9d2e0;
+  content: "";
+  transition: transform 120ms ease;
+}
+
+.map-layer-row[aria-pressed="true"] .map-layer-switch {
+  background: var(--action-green);
+}
+
+.map-layer-row[aria-pressed="true"] .map-layer-switch::after {
+  background: var(--action-text);
+  transform: translateX(14px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .map-layer-switch,
+  .map-layer-switch::after,
+  .map-tool-button::after {
+    transition: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .map-layers-menu {
+    width: min(270px, calc(100vw - 84px));
+  }
+}
+
+/* Trace GPX : onglet sous Zones et son menu, ouvert à gauche du rail. */
+.cockpit-tab-anchor {
+  position: relative;
+  display: grid;
+}
+
+.cockpit-tab-dot {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f06595;
+}
+
+.gpx-menu {
+  position: absolute;
+  top: 0;
+  right: calc(100% + 10px);
+  z-index: 7;
+  display: grid;
+  gap: 2px;
+  width: 250px;
+  padding: 8px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  color: var(--card-text);
+  background: var(--card-background-solid);
+  box-shadow: var(--card-shadow);
+  font: var(--card-font);
+}
+
+.gpx-menu-name {
+  display: grid;
+  margin: 2px 8px 6px;
+  min-width: 0;
+}
+
+.gpx-menu-name strong {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gpx-menu-name small {
+  color: var(--card-muted);
+  font-size: 12px;
+}
+
+@media (max-width: 600px) {
+  .cockpit-tab-anchor {
+    flex: 1;
+  }
+
+  .gpx-menu {
+    top: auto;
+    right: 0;
+    bottom: calc(100% + 8px);
   }
 }
