@@ -8,6 +8,8 @@
   "host_permissions": [
     "http://localhost/*",
     "http://192.168.1.5/*",
+    "http://100.83.59.61/*",
+    "http://*.ts.net/*",
     "https://*.virtualregatta.com/*",
     "https://*.offshore.virtualregatta.com/*",
     "https://prod.vro.sparks.virtualregatta.com/*",

@@ -1,4 +1,9 @@
-const DEFAULT_STATE_ENDPOINT = "http://localhost:5000/api/vr/state";
+// Mêmes routeurs par défaut que background.js, essayés dans cet ordre.
+const DEFAULT_STATE_ENDPOINTS = [
+  "http://localhost:5000/api/vr/state",
+  "http://100.83.59.61:5173/api/vr/state",
+];
+const AUTOMATIC_TEXT = "Automatique : ce PC (localhost), sinon le PC fixe par Tailscale.";
 
 let latestState;
 
@@ -78,7 +83,7 @@ function setEndpointStatus(message, kind) {
 }
 
 // normalizeEndpoint valide l'URL saisie : seuls http(s) sont acceptés. Vide
-// signifie « revenir au défaut ». Retourne null si l'URL est invalide.
+// signifie « revenir à l'envoi automatique ». Retourne null si l'URL est invalide.
 function normalizeEndpoint(raw) {
   const value = raw.trim();
   if (value === "") return "";
@@ -92,12 +97,21 @@ function normalizeEndpoint(raw) {
   return parsed.toString();
 }
 
+// deliveryText décrit le dernier envoi : à quel routeur, ou aucun joignable.
+function deliveryText(delivery) {
+  if (!delivery) return "";
+  const time = new Date(delivery.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  if (!delivery.ok) return ` Dernier envoi à ${time} : aucun routeur joignable.`;
+  const where = delivery.endpoint === DEFAULT_STATE_ENDPOINTS[1] ? "PC fixe par Tailscale" : delivery.endpoint.startsWith("http://localhost") ? "ce PC" : delivery.endpoint;
+  return ` Dernier envoi à ${time} : ${where}.`;
+}
+
 async function loadEndpoint() {
   try {
-    const { stateEndpoint } = await chrome.storage.local.get("stateEndpoint");
+    const { stateEndpoint, lastDelivery } = await chrome.storage.local.get(["stateEndpoint", "lastDelivery"]);
     const value = typeof stateEndpoint === "string" ? stateEndpoint.trim() : "";
     byId("endpoint").value = value;
-    setEndpointStatus(`Actif : ${value || DEFAULT_STATE_ENDPOINT}`, "muted");
+    setEndpointStatus(`${value ? `Imposé : ${value}.` : AUTOMATIC_TEXT}${deliveryText(lastDelivery)}`, lastDelivery && !lastDelivery.ok ? "error" : "muted");
   } catch {
     setEndpointStatus("Lecture de la configuration impossible.", "error");
   }
@@ -113,7 +127,7 @@ async function saveEndpoint(value) {
     if (normalized === "") {
       await chrome.storage.local.remove("stateEndpoint");
       byId("endpoint").value = "";
-      setEndpointStatus(`Défaut rétabli : ${DEFAULT_STATE_ENDPOINT}`, "ok");
+      setEndpointStatus(`Rétabli. ${AUTOMATIC_TEXT}`, "ok");
       return;
     }
     await chrome.storage.local.set({ stateEndpoint: normalized });
