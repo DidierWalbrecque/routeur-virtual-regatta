@@ -42,6 +42,20 @@ Si Flask est démarré sur `http://localhost:5000`, chaque état est envoyé à 
 5. Recharger la page Virtual Regatta.
 6. Ouvrir la popup de l'extension.
 
+## Jouer depuis un autre ordinateur (Tailscale)
+
+Le routeur tourne sur le PC fixe ; le jeu peut être ouvert sur un portable du
+même réseau Tailscale. Le relais Flask n'écoute que sur le PC lui-même :
+l'extension du portable envoie donc directement à l'API Go, par le proxy de
+l'interface (port 5173, ouvert au réseau Tailscale par le pare-feu du PC).
+
+1. Dans la popup de l'extension du portable, renseigner l'endpoint
+   `http://didier-pc.tail2e09f2.ts.net:5173/api/vr/state` (ou l'adresse
+   Tailscale du PC, `http://100.83.59.61:5173/api/vr/state`), puis
+   **Enregistrer**.
+2. Le manifeste autorise ces deux adresses (`host_permissions`). Pour un autre
+   PC ou une autre adresse, l'ajouter au manifeste puis recharger l'extension.
+
 ## Vérifier ce que reçoit l'application
 
 Après avoir rechargé l'extension et la page du jeu, ouvrir
