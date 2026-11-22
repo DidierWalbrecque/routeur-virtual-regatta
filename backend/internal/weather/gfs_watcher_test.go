@@ -224,3 +224,91 @@ func TestGFSWatcherStatusDoesNotWaitForDownload(t *testing.T) {
 		t.Fatal("statut toujours occupé après le passage")
 	}
 }
+
+// Dossier vide et cycle visé pas encore publié : le watcher se rabat sur le
+// cycle précédent, complet, au lieu de rester sans run utilisable.
+func TestGFSWatcherFallsBackToPreviousCycleWhenDirectoryIsEmpty(t *testing.T) {
+	directory := t.TempDir()
+	hours := []int{0, 3, 6}
+	downloader := &progressiveDownloader{published: map[int]int{0: 6}}
+	now := time.Date(2026, 11, 21, 9, 19, 0, 0, time.UTC)
+	watcher := NewGFSWatcher(downloader, directory, hours, func() time.Time { return now })
+
+	status, _, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Active.Run.Cycle != 0 || len(status.Active.Files) != len(hours) {
+		t.Fatalf("run actif attendu 00Z complet, obtenu %+v", status.Active)
+	}
+	if status.Target.Run.Cycle != 6 || status.Waiting == "" || status.LastError != "" {
+		t.Fatalf("cible 06Z en attente attendue, obtenu %+v", status)
+	}
+}
+
+// Cycle visé en cours de publication sans run actif : le cycle précédent est
+// téléchargé en entier et la progression du cycle récent reste affichée.
+func TestGFSWatcherFallsBackWhenNewestCycleIsPartialAndNothingIsActive(t *testing.T) {
+	directory := t.TempDir()
+	hours := []int{0, 3, 6}
+	downloader := &progressiveDownloader{published: map[int]int{0: 6, 6: 3}}
+	now := time.Date(2026, 11, 21, 9, 40, 0, 0, time.UTC)
+	watcher := NewGFSWatcher(downloader, directory, hours, func() time.Time { return now })
+
+	status, _, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Active.Run.Cycle != 0 {
+		t.Fatalf("run actif attendu 00Z, obtenu %+v", status.Active)
+	}
+	if status.Target.Run.Cycle != 6 || status.Target.Downloaded != 2 {
+		t.Fatalf("progression 06Z attendue, obtenu %+v", status.Target)
+	}
+}
+
+// Dossier vidé à la main pendant que le serveur tourne : le run actif en
+// mémoire est oublié et retéléchargé.
+func TestGFSWatcherRedownloadsWhenActiveFilesWereDeleted(t *testing.T) {
+	directory := t.TempDir()
+	hours := []int{0, 3}
+	downloader := &progressiveDownloader{published: map[int]int{6: 3}}
+	now := time.Date(2026, 11, 21, 10, 0, 0, 0, time.UTC)
+	watcher := NewGFSWatcher(downloader, directory, hours, func() time.Time { return now })
+	if _, _, err := watcher.Tick(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"gfs.2026112106.f000.grb2", "gfs.2026112106.f003.grb2"} {
+		if err := os.Remove(filepath.Join(directory, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	status, _, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.Active.Run.Cycle != 6 || len(status.Active.Files) != len(hours) {
+		t.Fatalf("run 06Z attendu de nouveau actif, obtenu %+v", status.Active)
+	}
+	for _, path := range status.Active.Files {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("fichier %s non retéléchargé: %v", path, err)
+		}
+	}
+}
+
+// Rien n'est disponible : l'erreur est remontée pour que l'interface ne dise pas « OK ».
+func TestGFSWatcherReportsErrorWhenNoRunIsAvailable(t *testing.T) {
+	directory := t.TempDir()
+	watcher := NewGFSWatcher(&progressiveDownloader{published: map[int]int{}}, directory, []int{0}, func() time.Time {
+		return time.Date(2026, 11, 21, 9, 19, 0, 0, time.UTC)
+	})
+	status, _, err := watcher.Tick(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status.LastError == "" {
+		t.Fatal("erreur attendue quand aucun run n'est disponible")
+	}
+}

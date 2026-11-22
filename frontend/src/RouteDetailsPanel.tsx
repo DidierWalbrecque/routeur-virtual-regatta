@@ -20,6 +20,9 @@ import {
   type GameOrder,
   type OrderMode,
 } from "./lib/game_orders.ts";
+import { maneuverCost } from "./lib/game_mode.ts";
+import { formatDuration, formatLongInstant, groupOrdersByDay, maneuverFractions, routeHeadline, staminaPath, staminaSeries } from "./lib/route_brief.ts";
+import { activeAt } from "./lib/timeline.ts";
 import type { Point, RouteResult } from "./lib/types.ts";
 
 type Props = {
@@ -30,6 +33,10 @@ type Props = {
   onClose: () => void;
   /** Ouvert réduit au résumé (juste après un calcul), sans prendre le focus. */
   initiallyCollapsed?: boolean;
+  /** « 06Z du 22/11 » : run GRIB utilisé par la route. */
+  runLabel?: string;
+  /** Passe en mode jeu, ou absent quand ce n'est pas possible. */
+  onPlay?: () => void;
 };
 
 type Tab = "orders" | "steps";
@@ -55,9 +62,9 @@ function formatSpan(minutes: number | null): string {
   return rest ? `${hours} h ${String(rest).padStart(2, "0")}` : `${hours} h`;
 }
 
-/** Un ordre à donner dans le jeu. */
-function OrderItem(props: { order: GameOrder; mode: OrderMode; selected: boolean; onSelect: () => void }) {
-  const { order, mode } = props;
+/** Un ordre à donner dans le jeu, sur la ligne de temps du jour. */
+function OrderItem(props: { order: GameOrder; mode: OrderMode; selected: boolean; cost: number | null; onSelect: () => void }) {
+  const { order, mode, cost } = props;
   const classes = ["route-order", order.maneuver ? "is-maneuver" : "", props.selected ? "is-selected" : ""].filter(Boolean).join(" ");
   const secondary =
     mode === "twa"
@@ -70,19 +77,21 @@ function OrderItem(props: { order: GameOrder; mode: OrderMode; selected: boolean
   return (
     <li>
       <button type="button" className={classes} data-index={order.index} aria-pressed={props.selected} onClick={props.onSelect}>
-        <span className="route-order-time">
-          <strong>{formatInstant(order.instant).slice(-5)}</strong>
-          <small>{formatElapsed(order.elapsedMinutes)}</small>
+        <span className="route-order-time">{formatInstant(order.instant).slice(-5)}</span>
+        <span className="route-order-rail" aria-hidden="true">
+          <i />
         </span>
         <span className="route-order-main">
           <span className="route-order-setting">{orderSetting(order, mode)}</span>
           <span className="route-order-meta">
-            <span className="route-report-sail">{order.sail}</span>
-            {secondary && <span>{secondary}</span>}
-            <span>{`pendant ${formatSpan(order.durationMinutes)}`}</span>
+            {[order.sail === "—" ? "" : order.sail, secondary, formatSpan(order.durationMinutes)].filter(Boolean).join(" · ")}
           </span>
         </span>
-        {order.maneuver && <span className="route-card-maneuver">{maneuverLabel(order.maneuver)}</span>}
+        {order.maneuver ? (
+          <span className="route-order-badge">{`${maneuverLabel(order.maneuver)}${cost === null ? "" : ` −${formatNumber(cost, 0)}`}`}</span>
+        ) : props.selected ? (
+          <span className="route-order-now">à l'heure de la frise</span>
+        ) : null}
       </button>
     </li>
   );
@@ -201,7 +210,7 @@ function Icon({ name }: { name: string }) {
   );
 }
 
-export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, initiallyCollapsed = false }: Props) {
+export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, initiallyCollapsed = false, runLabel = "", onPlay }: Props) {
   const model = useMemo(() => buildRouteDetailsModel(result), [result]);
   const hidden = useMemo(() => constantColumns(model.rows), [model]);
   const columns = COLUMNS.filter((column) => !hidden.has(column.key as "foils" | "coeff"));
@@ -212,6 +221,12 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
   const [prefs, setPrefs] = useState(loadPanelPrefs);
   const orders = useMemo(() => buildGameOrders(model.rows, prefs.mode), [model, prefs.mode]);
   const summary = useMemo(() => summarizeRoute(model.rows, model.maneuverCount, model.durationMinutes), [model]);
+  const days = useMemo(() => groupOrdersByDay(orders), [orders]);
+  const stamina = useMemo(() => staminaSeries(model.rows), [model]);
+  const staminaCurve = useMemo(() => staminaPath(stamina, 400, 56), [stamina]);
+  const maneuvers = useMemo(() => maneuverFractions(model.rows), [model]);
+  // Ordre en cours à la ligne choisie (ou à l'heure de la frise).
+  const activeOrderIndex = selectedIndex === null ? null : (activeAt(orders, selectedIndex)?.index ?? null);
 
   useEffect(() => {
     try {
@@ -236,10 +251,12 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
 
   // Une ligne choisie défile jusqu'à être visible (clic sur la carte ou au clavier).
   const body = useRef<HTMLElement>(null);
+  // Dans la liste des ordres, c'est l'ordre en cours qui défile jusqu'à être visible.
+  const scrollTarget = prefs.tab === "orders" ? activeOrderIndex : selectedIndex;
   useEffect(() => {
-    if (selectedIndex === null) return;
-    body.current?.querySelector<HTMLElement>(`[data-index="${selectedIndex}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [selectedIndex, prefs.tab]);
+    if (scrollTarget === null) return;
+    body.current?.querySelector<HTMLElement>(`[data-index="${scrollTarget}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [scrollTarget, prefs.tab]);
 
   const startedAt = result.route?.[0]?.instant;
   const select = (index: number, latitude: number | null, longitude: number | null) => {
@@ -269,22 +286,8 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
       aria-labelledby="route-details-title"
     >
       <div className="route-form-header route-details-header">
-        <div>
-          <h2 id="route-details-title">Route calculée</h2>
-          <p className={model.destinationReached ? "route-details-status reached" : "route-details-status partial"}>
-            {model.destinationReached ? "Destination atteinte" : "Destination non atteinte dans l'horizon : meilleure route affichée"}
-          </p>
-        </div>
+        <h2 id="route-details-title">Route calculée</h2>
         <div className="route-details-actions">
-          <button
-            type="button"
-            className="close-button"
-            title="Exporter en GPX"
-            aria-label="Exporter en GPX"
-            onClick={() => download(routeToGpx(result), "application/gpx+xml", exportFileName(startedAt, "gpx"))}
-          >
-            <Icon name="download" />
-          </button>
           <button
             type="button"
             className="close-button"
@@ -321,34 +324,52 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
           </button>
         </div>
       </div>
-      <dl className="route-summary" aria-label="Résultat du calcul">
-        <div>
-          <dt>{model.destinationReached ? "Arrivée" : "Fin de l'horizon"}</dt>
-          <dd>{summary.endInstant ? formatInstant(summary.endInstant) : "—"}</dd>
-        </div>
-        <div>
-          <dt>Durée</dt>
-          <dd>{formatSpan(summary.durationMinutes)}</dd>
-        </div>
-        <div>
-          <dt>Distance</dt>
-          <dd>{`${formatNumber(summary.distanceNM, summary.distanceNM < 100 ? 1 : 0)} NM`}</dd>
-        </div>
-        <div>
-          <dt>Manœuvres</dt>
-          <dd>{summary.maneuverCount}</dd>
-        </div>
-        <div>
-          <dt>Stamina finale</dt>
-          <dd>{summary.finalStamina === null ? "—" : `${formatNumber(summary.finalStamina, 0)} %`}</dd>
-        </div>
-      </dl>
+      <section className="route-brief" aria-label="Résultat du calcul">
+        <span className={model.destinationReached ? "route-brief-status is-reached" : "route-brief-status"}>
+          {model.destinationReached
+            ? "Destination atteinte"
+            : `Destination non atteinte dans l'horizon de ${formatDuration(summary.durationMinutes)} : meilleure route affichée`}
+        </span>
+        <p className="route-brief-label">{model.destinationReached ? "Arrivée" : "Fin de l'horizon"}</p>
+        <p className="route-brief-time">{formatLongInstant(summary.endInstant)}</p>
+        <p className="route-brief-line">{routeHeadline(summary, runLabel)}</p>
+      </section>
       {copyStatus && (
         <p className="route-details-copy" role="status">
           {copyStatus}
         </p>
       )}
       <div id="route-details-content" hidden={collapsed}>
+        {stamina.length > 1 && (
+          <section className="route-stamina" aria-label="Stamina le long de la route">
+            <div className="route-stamina-head">
+              <strong>Stamina</strong>
+              <span>
+                <span className="route-stamina-start">{`${formatNumber(stamina[0].value, 0)} %`}</span>
+                {" → "}
+                <span className="route-stamina-end">{`${formatNumber(stamina[stamina.length - 1].value, 0)} %`}</span>
+              </span>
+            </div>
+            <div className="route-stamina-chart">
+              <svg
+                viewBox="0 0 400 56"
+                preserveAspectRatio="none"
+                role="img"
+                aria-label={`Stamina de ${formatNumber(stamina[0].value, 0)} % au départ à ${formatNumber(stamina[stamina.length - 1].value, 0)} % à la fin ; bas du graphique à ${staminaCurve.floor} %`}
+              >
+                <path d={staminaCurve.path} fill="none" stroke="#46c07e" strokeWidth="2" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+              </svg>
+              {maneuvers.map((fraction, index) => (
+                <i key={index} className="route-stamina-mark" style={{ left: `${fraction * 100}%` }} />
+              ))}
+            </div>
+            <div className="route-stamina-axis">
+              <span>{formatLongInstant(result.route?.[0]?.instant ?? "")}</span>
+              <span>repères jaunes : manœuvres</span>
+              <span>{formatLongInstant(summary.endInstant)}</span>
+            </div>
+          </section>
+        )}
         <div className="route-tabs">
           <div role="tablist" aria-label="Contenu de la route" className="route-tablist">
             <button
@@ -358,6 +379,7 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
               aria-selected={prefs.tab === "orders"}
               aria-controls="route-tab-panel"
               className={prefs.tab === "orders" ? "route-tab is-active" : "route-tab"}
+              title={`Un ordre par manœuvre, changement de voile ou écart de ${prefs.mode === "twa" ? "TWA" : "cap"} d'au moins 5° tenu au moins 30 min`}
               onClick={() => setPrefs((value) => ({ ...value, tab: "orders" }))}
             >
               {`Ordres (${orders.length})`}
@@ -399,14 +421,22 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
         >
         {prefs.tab === "orders" ? (
           <ol className="route-orders" ref={body as React.RefObject<HTMLOListElement>}>
-            {orders.map((order) => (
-              <OrderItem
-                key={order.index}
-                order={order}
-                mode={prefs.mode}
-                selected={order.index === selectedIndex}
-                onSelect={() => select(order.index, order.latitude, order.longitude)}
-              />
+            {days.map((day) => (
+              <li key={day.key} className="route-order-day">
+                <h3>{day.label}</h3>
+                <ol>
+                  {day.orders.map((order) => (
+                    <OrderItem
+                      key={order.index}
+                      order={order}
+                      mode={prefs.mode}
+                      selected={order.index === activeOrderIndex}
+                      cost={order.maneuver ? maneuverCost(model.rows, order.index) : null}
+                      onSelect={() => select(order.index, order.latitude, order.longitude)}
+                    />
+                  ))}
+                </ol>
+              </li>
             ))}
           </ol>
         ) : narrow ? (
@@ -478,14 +508,30 @@ export function RouteDetailsPanel({ result, selectedIndex, onSelect, onClose, in
         </div>
         )}
         </div>
-        <p className="route-report-legend">
-          {prefs.tab === "orders"
-            ? `Un ordre par manœuvre, changement de voile ou écart de ${prefs.mode === "twa" ? "TWA" : "cap"} d'au moins 5° tenu au moins 30 min. ${narrow ? "Touchez" : "Cliquez sur"} un ordre pour voir où le donner.`
-            : narrow
+        {prefs.tab === "steps" && (
+          <p className="route-report-legend">
+            {narrow
               ? "Étape en jaune : manœuvre (virement, empannage ou changement de voile). Touchez une étape pour la voir sur la carte."
               : "Ligne surlignée en jaune : manœuvre (virement, empannage ou changement de voile) sur ce pas. Cliquez sur une ligne pour afficher sa position sur la route."}
-          {prefs.tab === "steps" && !narrow && hidden.size > 0 && ` Colonnes sans variation masquées : ${[...hidden].map((key) => (key === "foils" ? "Foils" : "Coeff")).join(", ")}.`}
-        </p>
+            {!narrow && hidden.size > 0 && ` Colonnes sans variation masquées : ${[...hidden].map((key) => (key === "foils" ? "Foils" : "Coeff")).join(", ")}.`}
+          </p>
+        )}
+        <footer className="route-details-footer">
+          {onPlay && (
+            <button type="button" className="form-submit" onClick={onPlay}>
+              <Icon name="sports_esports" />
+              Passer en mode jeu
+            </button>
+          )}
+          <button
+            type="button"
+            className="route-outline-button"
+            onClick={() => download(routeToGpx(result), "application/gpx+xml", exportFileName(startedAt, "gpx"))}
+          >
+            <Icon name="download" />
+            Exporter GPX
+          </button>
+        </footer>
       </div>
     </aside>
   );

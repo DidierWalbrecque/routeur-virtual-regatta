@@ -75,6 +75,13 @@ export type VrState = {
   /** Date associée à l'arrivée du leg (leg.end.date, millisecondes). */
   endDate?: number | null;
   stamina?: number | null;
+  /** Nom du bateau dans le jeu. */
+  displayName?: string;
+  /** Cap (degrés) et vitesse (nœuds) du bateau dans le jeu. */
+  heading?: number | null;
+  speed?: number | null;
+  /** Voile en cours dans le jeu ; `automatic` quand le jeu la choisit seul. */
+  currentSail?: { id: number; name: string; automatic?: boolean } | null;
   options?: string[];
   checkpoints?: Checkpoint[];
   gateGroupCounters?: boolean[];

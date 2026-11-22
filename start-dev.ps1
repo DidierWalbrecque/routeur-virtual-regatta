@@ -190,6 +190,16 @@ foreach ($service in $Services) {
 
 Write-Host ''
 Write-Host '  Interface : http://localhost:5173' -ForegroundColor Cyan
+# Adresse joignable depuis les autres appareils du réseau Tailscale, si installé.
+$tailscaleExe = (Get-Command tailscale -ErrorAction SilentlyContinue).Source
+if (-not $tailscaleExe -and (Test-Path "$env:ProgramFiles\Tailscale\tailscale.exe")) {
+    $tailscaleExe = "$env:ProgramFiles\Tailscale\tailscale.exe"
+}
+if ($tailscaleExe) {
+    $tailscaleIp = (& $tailscaleExe ip -4 2>$null | Select-Object -First 1)
+    if ($tailscaleIp) { Write-Host "  Distance  : http://$($tailscaleIp.Trim()):5173   (via Tailscale)" -ForegroundColor Cyan }
+    else { Write-Warn 'Tailscale installé mais déconnecté : pas d''accès à distance.' }
+}
 Write-Host '  Extension : état envoyé à http://localhost:5000 (relais) puis à l''API Go'
 Write-Host '  Arrêt     : .\start-dev.ps1 -Stop   (ou fermez les trois fenêtres)'
 Write-Host ''

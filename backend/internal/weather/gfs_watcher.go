@@ -21,6 +21,9 @@ const (
 	// peu tôt, trouve f000 absent, s'arrête sans erreur et réessaie au passage
 	// suivant, le run précédent restant actif.
 	gfsPublicationLag = 3 * time.Hour
+	// gfsMaxFallbackCycles : nombre de cycles antérieurs essayés (24 h) quand le
+	// cycle visé n'est pas encore disponible et qu'aucun run complet n'est actif.
+	gfsMaxFallbackCycles = 4
 )
 
 // DefaultGFSForecastHours retourne la cadence native du GFS 0,25° : f000 à f384 toutes les 3 heures.
@@ -148,39 +151,104 @@ func (watcher *GFSWatcher) Tick(ctx context.Context) (GFSWatcherStatus, []string
 // passage télécharge sans tenir mu, puis met à jour l'état sous mu.
 func (watcher *GFSWatcher) passage(ctx context.Context, hours []int) ([]string, error) {
 	now := watcher.now().UTC()
-	// Le run ciblé est le dernier cycle publié, pas le dernier cycle commencé.
-	cycleTime := now.Add(-gfsPublicationLag).Truncate(6 * time.Hour)
-	candidate, err := NewGFSForecastRequest(cycleTime.Format(gfsDateLayout), cycleTime.Hour(), 0)
-	if err != nil {
-		return nil, err
-	}
+	watcher.dropActiveIfMissing(hours)
 
-	progress, files, downloadErr := downloadRunPrefix(ctx, watcher.downloader, candidate, hours, watcher.directory)
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, ctxErr
+	watcher.mu.Lock()
+	activeKey := gfsRunKeyOf(watcher.active.Run)
+	watcher.mu.Unlock()
+
+	// Le run ciblé est le dernier cycle publié, pas le dernier cycle commencé.
+	// S'il n'est pas encore publié (ou seulement en partie sans run actif), on
+	// se rabat sur les cycles précédents pour disposer d'un run complet.
+	newestCycle := now.Add(-gfsPublicationLag).Truncate(6 * time.Hour)
+	var (
+		target       GFSRunProgress
+		hasTarget    bool
+		waiting      string
+		completed    GFSRunProgress
+		completeRun  []string
+		hasCompleted bool
+	)
+	for step := 0; step <= gfsMaxFallbackCycles; step++ {
+		cycleTime := newestCycle.Add(-time.Duration(step) * 6 * time.Hour)
+		candidate, err := NewGFSForecastRequest(cycleTime.Format(gfsDateLayout), cycleTime.Hour(), 0)
+		if err != nil {
+			return nil, err
+		}
+		if step > 0 && gfsRunKeyOf(candidate) <= activeKey {
+			break
+		}
+
+		progress, files, downloadErr := downloadRunPrefix(ctx, watcher.downloader, candidate, hours, watcher.directory)
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
+		// La cible affichée reste le cycle le plus récent, même s'il n'a encore rien publié.
+		if step == 0 {
+			target, hasTarget = progress, true
+			if downloadErr != nil {
+				waiting = downloadErr.Error()
+			}
+		}
+		if progress.Complete() {
+			completed, completeRun, hasCompleted = progress, files, true
+			break
+		}
+		// Un run en cours de publication suffit tant qu'un run actif reste utilisable.
+		if progress.Downloaded > 0 && activeKey != "" {
+			break
+		}
 	}
 
 	watcher.mu.Lock()
 	defer watcher.mu.Unlock()
 	watcher.updated = now
-	watcher.target = progress
-	watcher.hasTarget = true
-	watcher.waiting = ""
-	if downloadErr != nil {
-		watcher.waiting = downloadErr.Error()
-	}
+	watcher.target = target
+	watcher.hasTarget = hasTarget
+	watcher.waiting = waiting
 	watcher.lastError = ""
+	if !hasCompleted && watcher.active.Run.Date.IsZero() {
+		watcher.lastError = "aucun run GFS complet disponible sur NOAA ni sur disque"
+		if waiting != "" {
+			watcher.lastError += " (" + waiting + ")"
+		}
+	}
 
-	if !progress.Complete() || gfsRunKeyOf(candidate) <= gfsRunKeyOf(watcher.active.Run) {
+	if !hasCompleted || gfsRunKeyOf(completed.Run) <= gfsRunKeyOf(watcher.active.Run) {
 		return nil, nil
 	}
-	removed, err := RemoveOldGFSFiles(watcher.directory, candidate)
+	removed, err := RemoveOldGFSFiles(watcher.directory, completed.Run)
 	if err != nil {
 		watcher.lastError = err.Error()
 		return removed, err
 	}
-	watcher.active = GFSRefreshResult{Run: candidate, Files: files, RemovedFiles: removed}
+	watcher.active = GFSRefreshResult{Run: completed.Run, Files: completeRun, RemovedFiles: removed}
 	return removed, nil
+}
+
+// dropActiveIfMissing oublie le run actif si un de ses fichiers a disparu du
+// disque (dossier vidé à la main) et réadopte le run complet restant, s'il y en a un.
+func (watcher *GFSWatcher) dropActiveIfMissing(hours []int) {
+	watcher.mu.Lock()
+	files := append([]string(nil), watcher.active.Files...)
+	watcher.mu.Unlock()
+	missing := false
+	for _, path := range files {
+		if _, err := os.Stat(path); err != nil {
+			missing = true
+			break
+		}
+	}
+	if !missing {
+		return
+	}
+	active, err := CompleteGFSRun(watcher.directory, hours)
+	watcher.mu.Lock()
+	defer watcher.mu.Unlock()
+	watcher.active = active
+	if err != nil {
+		watcher.lastError = err.Error()
+	}
 }
 
 // Run exécute Tick immédiatement, puis à chaque intervalle, jusqu'à l'annulation du contexte.

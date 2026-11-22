@@ -8,6 +8,7 @@ import { endMarkRounding, gateRingSvg, gateRounding, gateRoundingLabel } from ".
 import { draftFeatureCollection, zonesFeatureCollection, type Zone } from "./lib/zones.ts";
 import type { VrState } from "./lib/types.ts";
 import { windFieldPixels, type WindField } from "./lib/beaufort.ts";
+import { barbFeathers, barbPoints, barbShape } from "./lib/wind_barbs.ts";
 
 export const DEFAULT_DEPARTURE: Point = { latitude: 13.121111, longitude: 121.586667 };
 export const DEFAULT_DESTINATION: Point = { latitude: 13.171111, longitude: 121.336667 };
@@ -161,6 +162,100 @@ function drawWindField(map: MapLibreMap, field: WindField, viewWidth: number, vi
   map.setLayoutProperty(WIND_LAYER, "visibility", "visible");
 }
 
+const BARB_LAYER = "wind-barbs";
+// Une barbule toutes les 5 cellules de vent (60 px) en hauteur, en quinconce.
+const BARB_ROW_STEP = 5;
+const BARB_LENGTH_PX = 24;
+const BARB_IMAGE_PX = 64;
+
+/** Nom de l'image d'une barbule : force arrondie aux 5 kn et hémisphère. */
+function barbIconName(knots: number, south: boolean): string {
+  return `barb-${barbFeathers(knots).knots}-${south ? "s" : "n"}`;
+}
+
+/** Image d'une barbule blanche à halo sombre, hampe vers le haut (vent du nord). */
+function barbImage(knots: number, south: boolean): ImageData | null {
+  const ratio = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = BARB_IMAGE_PX * ratio;
+  canvas.height = BARB_IMAGE_PX * ratio;
+  const context = canvas.getContext("2d");
+  if (!context) return null;
+  context.scale(ratio, ratio);
+  const center = BARB_IMAGE_PX / 2;
+  const shape = barbShape(knots, center, center, BARB_LENGTH_PX, south);
+  context.lineCap = "round";
+  context.lineJoin = "round";
+  for (const [color, width] of [["rgba(11, 18, 32, 0.6)", 3.8], ["#ffffff", 1.5]] as const) {
+    context.strokeStyle = color;
+    context.fillStyle = color;
+    context.lineWidth = width;
+    if (shape.calm) {
+      context.beginPath();
+      context.arc(center, center, 5, 0, Math.PI * 2);
+      context.stroke();
+      continue;
+    }
+    context.beginPath();
+    for (const [x1, y1, x2, y2] of shape.lines) {
+      context.moveTo(x1, y1);
+      context.lineTo(x2, y2);
+    }
+    context.stroke();
+    for (const [x1, y1, x2, y2, x3, y3] of shape.pennants) {
+      context.beginPath();
+      context.moveTo(x1, y1);
+      context.lineTo(x2, y2);
+      context.lineTo(x3, y3);
+      context.closePath();
+      context.fill();
+      context.stroke();
+    }
+  }
+  return context.getImageData(0, 0, canvas.width, canvas.height);
+}
+
+/** Barbules du champ de vent, orientées vers d'où vient le vent. */
+function drawWindBarbs(map: MapLibreMap, field: WindField) {
+  const points = barbPoints(field, BARB_ROW_STEP);
+  const features = points.map((point) => {
+    const south = point.latitude < 0;
+    const icon = barbIconName(point.knots, south);
+    if (!map.hasImage(icon)) {
+      const image = barbImage(point.knots, south);
+      if (image) map.addImage(icon, image, { pixelRatio: 2 });
+    }
+    return {
+      type: "Feature" as const,
+      properties: { icon, direction: point.direction },
+      geometry: { type: "Point" as const, coordinates: [point.longitude, point.latitude] },
+    };
+  });
+  const data = { type: "FeatureCollection" as const, features };
+  const source = map.getSource(BARB_LAYER) as GeoJSONSource | undefined;
+  if (source) {
+    source.setData(data as never);
+  } else {
+    map.addSource(BARB_LAYER, { type: "geojson", data: data as never });
+    map.addLayer(
+      {
+        id: BARB_LAYER,
+        type: "symbol",
+        source: BARB_LAYER,
+        layout: {
+          "icon-image": ["get", "icon"],
+          "icon-rotate": ["get", "direction"],
+          "icon-rotation-alignment": "map",
+          "icon-allow-overlap": true,
+          "icon-ignore-placement": true,
+        },
+      },
+      map.getLayer("basemap-labels") ? "basemap-labels" : undefined,
+    );
+  }
+  map.setLayoutProperty(BARB_LAYER, "visibility", "visible");
+}
+
 function setData(map: MapLibreMap, id: string, data: FeatureCollection) {
   (map.getSource(id) as GeoJSONSource | undefined)?.setData(data as never);
 }
@@ -232,8 +327,18 @@ type Props = {
   onDraftClick: (point: Point, closing: boolean) => void;
   /** Afficher les points d'étape de la route. */
   showRoutePoints: boolean;
-  /** Instant (ISO) du vent à colorer selon l'échelle de Beaufort, ou null pour masquer. */
+  /** Instant (ISO) du vent affiché, ou null pour masquer le vent. */
   windTime: string | null;
+  /** Fond coloré selon l'échelle de Beaufort. */
+  windColors: boolean;
+  /** Barbules : direction et force du vent. */
+  windBarbs: boolean;
+  /** Position du bateau à l'heure de la frise, ou null. */
+  timelineBoat: Point | null;
+  /** Indice de l'isochrone atteinte à l'heure de la frise, ou -1. */
+  timelineIsochrone: number;
+  /** Positions lues dans le jeu (trajet réel du bateau), en mode jeu. */
+  liveTrack: Point[];
   /** Zone mise en évidence depuis la liste des zones, ou null. */
   focusedZoneId: string | null;
   /** Place prise par les panneaux ouverts, à laisser libre lors des cadrages. */
@@ -242,7 +347,7 @@ type Props = {
 };
 
 export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
-  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, windTime, focusedZoneId, insets, onError },
+  { endpoints, raceStart, gameArrival, arrivalRadiusNM, frame, vrState, zones, highlight, draft, gpx, onDraftClick, showRoutePoints, windTime, windColors, windBarbs, timelineBoat, timelineIsochrone, liveTrack, focusedZoneId, insets, onError },
   handle,
 ) {
   const container = useRef<HTMLDivElement>(null);
@@ -295,15 +400,17 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
     }
   }, [showRoutePoints, ready]);
 
-  // Fond coloré selon la force du vent (Beaufort), recalculé pour la zone
-  // affichée à chaque déplacement de la carte.
+  // Vent : fond coloré selon la force (Beaufort) et barbules, recalculés pour
+  // la zone affichée à chaque déplacement de la carte.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
-    if (!windTime) {
-      if (map.getLayer(WIND_LAYER)) map.setLayoutProperty(WIND_LAYER, "visibility", "none");
-      return;
-    }
+    const hide = (id: string) => {
+      if (map.getLayer(id)) map.setLayoutProperty(id, "visibility", "none");
+    };
+    if (!windColors) hide(WIND_LAYER);
+    if (!windBarbs) hide(BARB_LAYER);
+    if (!windTime || (!windColors && !windBarbs)) return;
     let controller: AbortController | undefined;
     let timer: number | undefined;
     const load = () => {
@@ -331,7 +438,9 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         try {
           const response = await fetch(`/api/weather/wind?${params}`, { signal: controller.signal });
           if (!response.ok) return;
-          drawWindField(map, (await response.json()) as WindField, width, height);
+          const field = (await response.json()) as WindField;
+          if (windColors) drawWindField(map, field, width, height);
+          if (windBarbs) drawWindBarbs(map, field);
         } catch {
           // Demande remplacée par une plus récente, ou backend injoignable : on garde l'image actuelle.
         }
@@ -344,7 +453,7 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       window.clearTimeout(timer);
       controller?.abort();
     };
-  }, [windTime, ready]);
+  }, [windTime, windColors, windBarbs, ready]);
 
   const insetsRef = useRef(insets);
   insetsRef.current = insets;
@@ -768,6 +877,43 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
         map.on("mouseleave", "route-points-hit", clearHover);
         map.on("zoomend", () => applyIsochroneDensity(map!));
 
+        // Mode jeu : trajet réel du bateau, en tirets orange par-dessus la route.
+        map.addSource("live-track", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "live-track",
+          type: "line",
+          source: "live-track",
+          layout: { "line-cap": "round" },
+          paint: { "line-color": "#ff9f43", "line-width": 3, "line-dasharray": [1.5, 1.5] },
+        });
+
+        // Frise de temps : isochrone de l'heure du curseur et bateau sur la route.
+        map.addSource("timeline-isochrone", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "timeline-isochrone",
+          type: "line",
+          source: "timeline-isochrone",
+          paint: { "line-color": "#ffffff", "line-width": 2.5, "line-opacity": 0.9 },
+        });
+        map.addSource("timeline-boat", { type: "geojson", data: EMPTY as never });
+        map.addLayer({
+          id: "timeline-boat-halo",
+          type: "circle",
+          source: "timeline-boat",
+          paint: { "circle-radius": 14, "circle-color": "#ffd43b", "circle-opacity": 0.25 },
+        });
+        map.addLayer({
+          id: "timeline-boat",
+          type: "circle",
+          source: "timeline-boat",
+          paint: {
+            "circle-radius": 7,
+            "circle-color": "#ffd43b",
+            "circle-stroke-color": "#0b1a2b",
+            "circle-stroke-width": 3,
+          },
+        });
+
         // Position choisie dans le tableau des détails : au-dessus de tout le reste.
         map.addSource("route-highlight", { type: "geojson", data: EMPTY as never });
         map.addLayer({
@@ -1028,6 +1174,90 @@ export const MapView = forwardRef<MapViewHandle, Props>(function MapView(
       map.easeTo({ center, padding: { top: 0, left, right, bottom }, duration: 400 });
     }
   }, [ready, highlight]);
+
+  // La carte suit la taille de sa zone (panneau du cockpit ouvert ou fermé),
+  // pas seulement celle de la fenêtre.
+  useEffect(() => {
+    const element = container.current;
+    const map = mapRef.current;
+    if (!ready || !element || !map || typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(() => map.resize());
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [ready]);
+
+  // Trajet réel du bateau (mode jeu). Les longitudes sont rendues continues
+  // pour qu'un passage de l'antiméridien ne trace pas un trait à travers le monde.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    if (liveTrack.length < 2) {
+      setData(map, "live-track", EMPTY);
+      return;
+    }
+    const coordinates: number[][] = [];
+    let previous = liveTrack[0].longitude;
+    for (const point of liveTrack) {
+      let longitude = point.longitude;
+      while (longitude - previous > 180) longitude -= 360;
+      while (longitude - previous < -180) longitude += 360;
+      coordinates.push([longitude, point.latitude]);
+      previous = longitude;
+    }
+    setData(map, "live-track", {
+      type: "FeatureCollection",
+      features: [{ type: "Feature", properties: {}, geometry: { type: "LineString", coordinates } }],
+    });
+  }, [ready, liveTrack]);
+
+  // Bateau à l'heure de la frise : repère seul, sans déplacer la carte (la
+  // lecture le met à jour à chaque image).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    setData(
+      map,
+      "timeline-boat",
+      timelineBoat
+        ? {
+            type: "FeatureCollection",
+            features: [
+              {
+                type: "Feature",
+                properties: {},
+                geometry: { type: "Point", coordinates: [timelineBoat.longitude, timelineBoat.latitude] },
+              },
+            ],
+          }
+        : EMPTY,
+    );
+  }, [ready, timelineBoat]);
+
+  // Isochrone de l'heure de la frise, tracée comme les autres (face au but,
+  // coupée là où elle traverserait une terre ou une zone).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    const result = frame?.showRoute ? frame.result : null;
+    const isochrone = result?.isochrones?.[timelineIsochrone];
+    if (!result || !isochrone) {
+      setData(map, "timeline-isochrone", EMPTY);
+      return;
+    }
+    const position = result.position || DEFAULT_DEPARTURE;
+    const destination = result.destination || DEFAULT_DESTINATION;
+    const direction = { x: destination.longitude - position.longitude, y: destination.latitude - position.latitude };
+    const contour = forwardContour(isochrone.contour || [], direction, ISOCHRONE_FACING_ANGLE);
+    const visibleContour = contour.length > 1 ? contour : isochrone.contour || [];
+    const parts = isochrone.contourBreaks
+      ? cutContourAtBreaks(visibleContour, isochrone.contour || [], isochrone.contourBreaks)
+      : splitContour(visibleContour);
+    const coordinates = parts.map((part) => part.map((point) => [point.longitude, point.latitude]));
+    setData(map, "timeline-isochrone", {
+      type: "FeatureCollection",
+      features: coordinates.length ? [{ type: "Feature", properties: {}, geometry: { type: "MultiLineString", coordinates } }] : [],
+    });
+  }, [ready, frame, timelineIsochrone]);
 
   // Clic sur la carte pendant le tracé : ajoute un point, ou ferme la zone en
   // cliquant près du premier point.

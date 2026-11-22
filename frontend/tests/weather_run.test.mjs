@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildWeatherRunModel } from "../src/lib/weather_run.ts";
+import { buildWeatherRunModel, formatUtcHourMinute, nextRunEta, nextRunText } from "../src/lib/weather_run.ts";
 
 const files = [
   "../data/weather/gfs.2026110106.f000.grb2",
@@ -29,4 +29,18 @@ test("buildWeatherRunModel borne la part écoulée à l'horizon", () => {
 test("buildWeatherRunModel refuse un run invalide", () => {
   assert.equal(buildWeatherRunModel("n'importe quoi", files), null);
   assert.equal(buildWeatherRunModel("", files), null);
+});
+
+test("nextRunEta annonce le run suivant et ses heures de publication", () => {
+  const eta = nextRunEta("2026112206");
+  assert.equal(eta.hour, "12");
+  assert.equal(eta.label, "12Z du 22/11");
+  assert.equal(formatUtcHourMinute(eta.firstAt), "15 h 30 UTC");
+  assert.equal(formatUtcHourMinute(eta.completeAt), "16 h 45 UTC");
+  assert.equal(nextRunText(eta, Date.parse("2026-11-22T11:31:00Z")), "12Z vers 15 h 30 UTC");
+  assert.equal(nextRunText(eta, Date.parse("2026-11-22T16:00:00Z")), "12Z imminent");
+  assert.equal(nextRunText(eta, Date.parse("2026-11-22T18:00:00Z")), "12Z en retard");
+  // Passage au jour suivant : le run 18Z mène au 00Z du lendemain.
+  assert.equal(nextRunEta("2026112218").label, "00Z du 23/11");
+  assert.equal(nextRunEta("pas un run"), null);
 });
