@@ -1,9 +1,51 @@
+import { useEffect, useRef } from "react";
 import { PINS } from "./MapView.tsx";
 import { gateRingSvg, type GateRounding } from "./lib/gate_marker.ts";
+import { BEAUFORT } from "./lib/beaufort.ts";
+import { barbShape } from "./lib/wind_barbs.ts";
+
+/** Bornes en nœuds d'une force, pour l'infobulle de l'échelle. */
+function beaufortRange(force: number): string {
+  const from = force === 0 ? 0 : BEAUFORT[force - 1].below;
+  const to = BEAUFORT[force].below;
+  return Number.isFinite(to) ? `${from} à ${to - 1} nœuds` : `${from} nœuds et plus`;
+}
 
 type Props = {
   onClose: () => void;
+  /** Bateau dans l'hémisphère sud : les traits des barbules changent de côté. */
+  south: boolean;
+  /** Augmente quand les barbules s'affichent : la légende défile jusqu'à leur lecture. */
+  focusBarbs: number;
 };
+
+/** Exemples de barbules, du calme à la tempête. */
+const BARB_EXAMPLES = [
+  { knots: 0, label: "calme" },
+  { knots: 5, label: "5 kn" },
+  { knots: 10, label: "10 kn" },
+  { knots: 25, label: "25 kn" },
+  { knots: 50, label: "50 kn" },
+  { knots: 65, label: "65 kn" },
+];
+
+/** Barbule de la carte en miniature : vent d'ouest, hampe vers la gauche. */
+function Barb({ knots, south }: { knots: number; south: boolean }) {
+  const shape = barbShape(knots, 26, 14, 22, south);
+  return (
+    <svg className="legend-barb" viewBox="0 0 32 28" aria-hidden="true">
+      <g transform="rotate(270 26 14)" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" fill="currentColor">
+        {shape.calm && <circle cx="26" cy="14" r="5" fill="none" />}
+        {shape.lines.map(([x1, y1, x2, y2], index) => (
+          <line key={index} x1={x1} y1={y1} x2={x2} y2={y2} />
+        ))}
+        {shape.pennants.map((points, index) => (
+          <polygon key={index} points={points.join(" ")} strokeLinejoin="round" />
+        ))}
+      </g>
+    </svg>
+  );
+}
 
 /** Épingle de la carte en miniature, avec sa lettre ou son icône. */
 function Pin({ pin }: { pin: { color: string; letter?: string; icon?: string } }) {
@@ -60,9 +102,15 @@ function Swatch({ color }: { color: string }) {
 }
 
 /** Légende des repères et des couleurs de la carte. */
-export function MapLegend({ onClose }: Props) {
+export function MapLegend({ onClose, south, focusBarbs }: Props) {
+  const legend = useRef<HTMLElement>(null);
+  const barbsTitle = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    if (!focusBarbs || !legend.current || !barbsTitle.current) return;
+    legend.current.scrollTop = barbsTitle.current.offsetTop - legend.current.offsetTop - 8;
+  }, [focusBarbs]);
   return (
-    <aside id="map-legend" className="map-legend floating-card" aria-labelledby="map-legend-title">
+    <aside ref={legend} id="map-legend" className="map-legend floating-card" aria-labelledby="map-legend-title">
       <div className="map-legend-head">
         <h2 id="map-legend-title">Légende</h2>
         <button type="button" className="close-button" aria-label="Fermer la légende" title="Fermer" onClick={onClose}>
@@ -120,7 +168,31 @@ export function MapLegend({ onClose }: Props) {
         <li>
           <Line color="#f783ac" /> Trace GPX importée
         </li>
+        <li>
+          <span className="legend-boat" aria-hidden="true" /> Bateau à l'heure de la frise, et son isochrone en blanc
+        </li>
       </ul>
+      <h2 id="map-legend-wind">Vent · échelle de Beaufort</h2>
+      <ol className="beaufort-scale" aria-labelledby="map-legend-wind">
+        {BEAUFORT.map((level) => (
+          <li key={level.force} style={{ background: level.color }} title={`Force ${level.force} · ${level.label} · ${beaufortRange(level.force)}`}>
+            {level.force}
+          </li>
+        ))}
+      </ol>
+      <h2 ref={barbsTitle} id="map-legend-barbs">Barbules</h2>
+      <ol className="barb-key" aria-labelledby="map-legend-barbs">
+        {BARB_EXAMPLES.map((example) => (
+          <li key={example.knots}>
+            <Barb knots={example.knots} south={south} />
+            <span>{example.label}</span>
+          </li>
+        ))}
+      </ol>
+      <p className="map-legend-note barb-note">
+        La hampe pointe d'où vient le vent : ici, vent d'ouest. Demi-trait 5 kn, trait 10 kn, fanion 50 kn ; on les additionne.
+        {south ? " Dans l'hémisphère sud, les traits sont sous la hampe." : " Dans l'hémisphère nord, les traits sont au-dessus de la hampe."}
+      </p>
     </aside>
   );
 }

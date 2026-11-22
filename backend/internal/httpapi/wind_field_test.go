@@ -44,12 +44,12 @@ func (latitudeWind) WindAt(_ context.Context, position navigation.Position, _ ti
 	if position.Latitude > 60 {
 		return navigation.Wind{}, fmt.Errorf("hors grille")
 	}
-	return navigation.Wind{Speed: navigation.MetersPerSecond(math.Abs(float64(position.Latitude)))}, nil
+	return navigation.Wind{Speed: navigation.MetersPerSecond(math.Abs(float64(position.Latitude))), Direction: 270.4}, nil
 }
 
 func TestSampleWindFieldSpacesRowsLikeTheMap(t *testing.T) {
 	bounds := windFieldBounds{South: 0, North: 70, West: -10, East: 10}
-	speeds, err := sampleWindField(context.Background(), latitudeWind{}, time.Now(), bounds, 3, 3)
+	speeds, directions, err := sampleWindField(context.Background(), latitudeWind{}, time.Now(), bounds, 3, 3)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,6 +59,10 @@ func TestSampleWindFieldSpacesRowsLikeTheMap(t *testing.T) {
 	// Première ligne au nord (70°, hors grille), dernière au sud (0°).
 	if speeds[0] != -1 || speeds[8] != 0 {
 		t.Fatalf("lignes du nord au sud attendues : %v", speeds)
+	}
+	// Direction d'où vient le vent, arrondie au degré ; -1 là où le vent manque.
+	if len(directions) != 9 || directions[0] != -1 || directions[8] != 270 {
+		t.Fatalf("directions : %v", directions)
 	}
 	// La ligne du milieu est à mi-hauteur en Mercator, pas à 35°.
 	middle := latitudeFromMercatorY(mercatorY(70) / 2)
@@ -82,7 +86,7 @@ func (longitudeWind) WindAt(_ context.Context, position navigation.Position, _ t
 func TestSampleWindFieldCoversAViewAcrossTheAntimeridian(t *testing.T) {
 	// Vue du Pacifique en dézoom complet : de 150° E à 110° W, notée 250.
 	bounds := windFieldBounds{South: -10, North: 10, West: 150, East: 250}
-	speeds, err := sampleWindField(context.Background(), longitudeWind{}, time.Now(), bounds, 3, 2)
+	speeds, _, err := sampleWindField(context.Background(), longitudeWind{}, time.Now(), bounds, 3, 2)
 	if err != nil {
 		t.Fatal(err)
 	}

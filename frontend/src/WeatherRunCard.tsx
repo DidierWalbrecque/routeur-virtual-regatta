@@ -1,4 +1,4 @@
-import type { WeatherRunModel } from "./lib/weather_run.ts";
+import { formatHourMinute, formatUtcHourMinute, type NextRunEta, type WeatherRunModel } from "./lib/weather_run.ts";
 
 const HOURS_PER_DAY = 24;
 // Au-delà de cet horizon la prévision GFS devient indicative (re-routage requis).
@@ -16,24 +16,24 @@ function formatCoveredUntil(iso: string): string {
   return `${day}/${month} ${hour}Z`;
 }
 
-// Timeline « prévision devant vous » : une règle 0 → horizon avec un curseur au
-// présent. À gauche du curseur le passé (hachuré) depuis l'émission du run, à
-// droite la prévision exploitable. La zone au-delà de LOW_CONFIDENCE_HOURS est
-// hachurée en diagonale (prévision indicative), et tout passe en alerte quand la
-// couverture ne couvre pas l'horizon de calcul demandé. Repliée, la carte se
-// réduit à une ligne qui s'ouvre au clic.
+// Détail du run météo, ouvert depuis la puce « Météo » de la barre du cockpit :
+// une règle 0 → horizon avec un curseur au présent. À gauche du curseur le passé
+// (hachuré) depuis l'émission du run, à droite la prévision exploitable. La zone
+// au-delà de LOW_CONFIDENCE_HOURS est hachurée en diagonale (prévision
+// indicative), et tout passe en alerte quand la couverture ne couvre pas
+// l'horizon de calcul demandé.
 export function WeatherRunCard({
   model,
   warning = false,
   nextRun = null,
-  collapsed,
-  onToggle,
+  nextRunEta = null,
+  onClose,
 }: {
   model: WeatherRunModel | null;
   warning?: boolean;
   nextRun?: NextRun | null;
-  collapsed: boolean;
-  onToggle: () => void;
+  nextRunEta?: NextRunEta | null;
+  onClose: () => void;
 }) {
   if (!model) return null;
   const horizon = model.horizonHours;
@@ -42,29 +42,6 @@ export function WeatherRunCard({
   const pastPercent = horizon > 0 ? (age / horizon) * 100 : 0;
   const coveredText = formatCoveredUntil(model.coveredUntil);
   const nextText = nextRun ? `${nextRun.label} en cours ${nextRun.downloaded}/${nextRun.expected}` : "";
-
-  if (collapsed) {
-    return (
-      <button
-        id="weather-run-card"
-        type="button"
-        className="weather-run-card weather-run-chip"
-        aria-expanded="false"
-        title="Afficher le détail des prévisions"
-        onClick={onToggle}
-      >
-        <span className="material-symbols-outlined" aria-hidden="true">
-          cloud
-        </span>
-        <span>
-          <strong>{model.runText.slice(-3)}</strong>
-          {" · "}
-          <span className={warning ? "weather-run-chip-hours is-warning" : "weather-run-chip-hours"}>{`${ahead} h`}</span>
-          {nextRun && <span className="weather-run-chip-next">{` · ${nextRun.label.slice(0, 3)} ${nextRun.downloaded}/${nextRun.expected}`}</span>}
-        </span>
-      </button>
-    );
-  }
 
   const ticks: number[] = [];
   for (let hour = HOURS_PER_DAY; hour < horizon; hour += HOURS_PER_DAY) {
@@ -82,9 +59,9 @@ export function WeatherRunCard({
           <strong>{model.runText}</strong>
         </p>
         <span className="weather-run-age">{`émis il y a ${model.ageHours} h`}</span>
-        <button type="button" className="weather-run-collapse" aria-label="Réduire l'encart météo" title="Réduire" onClick={onToggle}>
+        <button type="button" className="weather-run-collapse" aria-label="Fermer le détail météo" title="Fermer" onClick={onClose}>
           <span className="material-symbols-outlined" aria-hidden="true">
-            expand_more
+            close
           </span>
         </button>
       </div>
@@ -133,6 +110,14 @@ export function WeatherRunCard({
             downloading
           </span>
           {`Run ${nextText}`}
+        </p>
+      )}
+      {!nextText && nextRunEta && (
+        <p className="weather-run-next" title={`Heure locale : ${formatHourMinute(nextRunEta.firstAt)}, complet vers ${formatHourMinute(nextRunEta.completeAt)}`}>
+          <span className="material-symbols-outlined" aria-hidden="true">
+            schedule
+          </span>
+          {`Prochain run ${nextRunEta.hour}Z vers ${formatUtcHourMinute(nextRunEta.firstAt)}, complet vers ${formatUtcHourMinute(nextRunEta.completeAt)}`}
         </p>
       )}
       {showLowConfidence && (
