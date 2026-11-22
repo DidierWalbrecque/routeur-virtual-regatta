@@ -44,17 +44,22 @@ Si Flask est démarré sur `http://localhost:5000`, chaque état est envoyé à 
 
 ## Jouer depuis un autre ordinateur (Tailscale)
 
-Le routeur tourne sur le PC fixe ; le jeu peut être ouvert sur un portable du
-même réseau Tailscale. Le relais Flask n'écoute que sur le PC lui-même :
-l'extension du portable envoie donc directement à l'API Go, par le proxy de
-l'interface (port 5173, ouvert au réseau Tailscale par le pare-feu du PC).
+Tout tourne sur le PC fixe (API Go, interface, relais Flask). Sur un portable
+du même réseau Tailscale, il suffit d'installer l'extension et d'ouvrir le jeu :
+aucun réglage, rien à démarrer.
 
-1. Dans la popup de l'extension du portable, renseigner l'endpoint
-   `http://didier-pc.tail2e09f2.ts.net:5173/api/vr/state` (ou l'adresse
-   Tailscale du PC, `http://100.83.59.61:5173/api/vr/state`), puis
-   **Enregistrer**.
-2. Le manifeste autorise ces deux adresses (`host_permissions`). Pour un autre
-   PC ou une autre adresse, l'ajouter au manifeste puis recharger l'extension.
+- **Envoi automatique** (endpoint vide dans la popup) : l'extension essaie
+  `http://localhost:5000/api/vr/state` (relais Flask de la machine), puis
+  `http://100.83.59.61:5173/api/vr/state` (le PC fixe par Tailscale : le proxy de
+  l'interface transmet à l'API Go). Elle recommence par le dernier routeur qui a
+  répondu, et abandonne un routeur muet au bout de 5 s. La popup indique le
+  dernier envoi : « ce PC », « PC fixe par Tailscale » ou « aucun routeur
+  joignable ».
+- **Routages depuis le portable** : ouvrir `http://100.83.59.61:5173` (ou
+  `http://didier-pc.tail2e09f2.ts.net:5173`) dans le navigateur.
+- **Endpoint imposé** : une URL saisie dans la popup remplace l'envoi
+  automatique ; **Automatique** le rétablit. Une autre adresse doit aussi être
+  ajoutée aux `host_permissions` du manifeste, puis l'extension rechargée.
 
 ## Vérifier ce que reçoit l'application
 
